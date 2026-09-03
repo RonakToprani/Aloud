@@ -21,6 +21,7 @@
     "@types/react": "19.1.10",
     "@types/react-dom": "19.1.7",
     "linkedom": "^0.18.5",
+    "puppeteer-core": "^23.11.1",
     "tsx": "^4.19.2",
     "typescript": "5.7.3"
   }

@@ -430,12 +430,17 @@ export function ReaderView({ bookId }: { bookId: string }) {
   return (
     <>
       <header className={styles.top} data-hidden={chromeExpanded ? undefined : "true"}>
-        <Link className={styles.back} href="/" aria-label="Back to library">
-          <BackIcon />
-        </Link>
-        <div className={styles.crumb}>
-          <span className={styles.crumbTitle}>{book.meta.title}</span>
-          <span className={styles.crumbChapter}>{chapterTitle}</span>
+        <div className={styles.topInner}>
+          <Link className={styles.back} href="/" aria-label="Back to library">
+            <BackIcon />
+          </Link>
+          <div className={styles.crumb}>
+            <span className={styles.crumbTitle}>{book.meta.title}</span>
+            {/* A one-chapter book would otherwise print its title twice. */}
+            {book.meta.chapterTitles.length > 1 && (
+              <span className={styles.crumbChapter}>{chapterTitle}</span>
+            )}
+          </div>
         </div>
       </header>
 

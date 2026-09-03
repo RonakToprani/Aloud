@@ -4,9 +4,9 @@
 .surface {
   position: relative;
   isolation: isolate;
-  max-width: min(62ch, 100%);
+  max-width: var(--column);
   margin: 0 auto;
-  padding: 0 max(24px, env(safe-area-inset-left)) 0 max(24px, env(safe-area-inset-right));
+  padding: 0 var(--column-gutter);
 }
 
 .layer {
@@ -32,6 +32,9 @@
   line-height: var(--reader-leading, 1.72);
   font-weight: 400;
   color: var(--ink);
+  /* The column is a fixed measure so chrome can align to it, while the text
+     itself never runs past a comfortable line length at any size. */
+  max-width: 62ch;
   text-wrap: pretty;
   hanging-punctuation: first last;
   /* Tap-to-read-from-here beats text selection on a reading surface. */

@@ -2,11 +2,7 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: max(14px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 12px
-    max(20px, env(safe-area-inset-left));
+  padding: max(14px, env(safe-area-inset-top)) 0 12px;
   background: linear-gradient(to bottom, var(--canvas) 62%, transparent);
   opacity: 1;
   transition: opacity var(--dur-ui) var(--ease-soft);
@@ -17,12 +13,21 @@
   pointer-events: none;
 }
 
+.topInner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 0 var(--column-gutter);
+}
+
 .back {
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
-  margin-left: -9px;
+  margin-left: -10px;
   border-radius: 12px;
   color: var(--ui-muted);
   transition: color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
@@ -59,7 +64,7 @@
 }
 
 .main {
-  padding: 22px 0 max(190px, calc(180px + env(safe-area-inset-bottom)));
+  padding: 22px 0 max(200px, calc(190px + env(safe-area-inset-bottom)));
   animation: pageIn 420ms var(--ease-soft) both;
 }
 
@@ -121,7 +126,7 @@
 }
 
 .banner {
-  max-width: min(62ch, 100%);
+  max-width: var(--column);
   margin: 0 auto 26px;
   padding: 14px 16px;
   border-radius: 14px;
@@ -140,9 +145,9 @@
 }
 
 .finished {
-  max-width: min(62ch, 100%);
+  max-width: var(--column);
   margin: 40px auto 0;
-  padding: 0 24px;
+  padding: 0 var(--column-gutter);
   display: flex;
   flex-direction: column;
   align-items: center;

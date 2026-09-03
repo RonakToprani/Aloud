@@ -7,7 +7,9 @@
    ============================================================ */
 
 :root {
-  --measure: 34rem;
+  /* Reading column and the chrome that must line up with it. */
+  --column: min(640px, 100%);
+  --column-gutter: max(24px, env(safe-area-inset-left), env(safe-area-inset-right));
 
   --radius-pill: 7px;
   --radius-wash: 5px;
