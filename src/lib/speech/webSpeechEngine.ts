@@ -185,19 +185,17 @@ export class WebSpeechEngine implements SpeechEngine {
     return () => this.listeners.delete(listener);
   }
 
-  /** iOS refuses to synthesise unless the very first speak() happens inside a
-   *  user gesture. Burn a silent one so later programmatic calls work. */
+  /**
+   * iOS requires the first speak() to happen inside a user gesture, which it
+   * always does here: play and tap-a-word both call the player synchronously.
+   *
+   * This deliberately does not queue a silent primer utterance. Doing so put a
+   * pending utterance in the queue that the very next call immediately
+   * cancelled, and cancel() followed by speak() in the same tick is one of the
+   * reliable ways to get silence out of Safari.
+   */
   unlock(): void {
-    if (this.unlocked || !this.supported) return;
     this.unlocked = true;
-    try {
-      const u = new SpeechSynthesisUtterance(" ");
-      u.volume = 0;
-      u.rate = 2;
-      window.speechSynthesis.speak(u);
-    } catch {
-      /* nothing to recover from — the real speak() will surface any problem */
-    }
   }
 
   private resolveVoice(id: string | null): SpeechSynthesisVoice | null {
@@ -260,8 +258,13 @@ export class WebSpeechEngine implements SpeechEngine {
     this.current = null;
     this.intentPaused = false;
     if (!this.supported) return;
+    const synth = window.speechSynthesis;
+    // Only interrupt something that is actually running. Calling cancel() on an
+    // idle synthesiser and then speaking immediately after can leave Safari
+    // reporting speaking === true while producing no audio at all.
+    if (!synth.speaking && !synth.pending && !synth.paused) return;
     try {
-      window.speechSynthesis.cancel();
+      synth.cancel();
     } catch {
       /* ignore */
     }

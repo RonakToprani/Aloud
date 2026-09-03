@@ -36,6 +36,8 @@ const RESUME_VERIFY_MS = 450;
 const PHANTOM_END_MS = 250;
 const PHANTOM_END_FRACTION = 0.15;
 const MAX_RECOVERIES = 3;
+/** If the engine has not started speaking by now, it never will. */
+const START_TIMEOUT_MS = 2500;
 
 /**
  * Owns playback: one sentence per utterance, chained on end.
@@ -54,6 +56,7 @@ export class Player {
   private pausedByCancel = false;
   private recoveries = 0;
   private verifyTimer: ReturnType<typeof setTimeout> | null = null;
+  private startTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
   constructor(private options: PlayerOptions) {
@@ -264,6 +267,7 @@ export class Player {
 
   private stopSpeaking(): void {
     this.clearVerify();
+    this.clearStartTimer();
     this.sync?.stop();
     this.sync = null;
     this.handle?.cancel();
@@ -274,6 +278,11 @@ export class Player {
   private clearVerify(): void {
     if (this.verifyTimer) clearTimeout(this.verifyTimer);
     this.verifyTimer = null;
+  }
+
+  private clearStartTimer(): void {
+    if (this.startTimer) clearTimeout(this.startTimer);
+    this.startTimer = null;
   }
 
   private finish(): void {
@@ -334,11 +343,21 @@ export class Player {
     this.emit({ status: "playing", error: null, syncMode: "pending" });
     this.options.onSentence?.(target.chapterIndex, target.sentenceIndex);
 
+    // A voice the system lists but will not actually speak — Siri's, on iOS —
+    // produces no events at all: no start, no end, no error. Without this the
+    // reader just sees the highlight parked on the first word in silence.
+    this.clearStartTimer();
+    this.startTimer = setTimeout(() => {
+      if (this.destroyed || this.sync !== sync) return;
+      this.recover("silent");
+    }, START_TIMEOUT_MS);
+
     this.handle = this.options.engine.speak(
       { text, voiceId: this.voiceId, rate: this.rate },
       {
         onStart: () => {
           if (this.sync !== sync) return;
+          this.clearStartTimer();
           sync.start();
         },
         onBoundary: (event) => {
@@ -389,16 +408,18 @@ export class Player {
     this.speakCurrent();
   }
 
-  /** Synthesis died mid-sentence — restart it from the current word. */
-  private recover(): void {
+  /** Synthesis died, or never began — restart it from the current word. */
+  private recover(reason: "stalled" | "silent" = "stalled"): void {
     this.stopSpeaking();
     if (this.recoveries >= MAX_RECOVERIES) {
       this.emit({
         status: "paused",
         error: {
-          kind: "synthesis-failed",
+          kind: reason === "silent" ? "no-voices" : "synthesis-failed",
           message:
-            "The voice stopped responding. This happens occasionally on iOS — press play to pick up where you left off.",
+            reason === "silent"
+              ? "This voice produced no sound. On iPhone, Siri voices are reserved by the system and can't be used by websites — open Voice & speed and pick another."
+              : "The voice stopped responding. This happens occasionally on iOS — press play to pick up where you left off.",
         },
       });
       return;

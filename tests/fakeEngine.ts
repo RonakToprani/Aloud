@@ -16,7 +16,9 @@ export type Behaviour =
   /** Synthesis that starts and then never reports anything again. */
   | "dead"
   /** Safari's instant, silent "end" — the utterance never really played. */
-  | "phantom";
+  | "phantom"
+  /** A Siri voice on iOS: accepted, then total silence — no events at all. */
+  | "mute";
 
 export interface SpokenRequest {
   text: string;
@@ -81,6 +83,11 @@ export class FakeEngine implements SpeechEngine {
     const starts: number[] = [];
     let match: RegExpExecArray | null;
     while ((match = WORD_RE.exec(options.text))) starts.push(match.index);
+
+    if (this.behaviour === "mute") {
+      this.speaking = false;
+      return handle;
+    }
 
     this.later(() => {
       if (cancelled) return;

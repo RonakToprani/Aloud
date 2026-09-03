@@ -137,3 +137,29 @@ test("skipping forward steps over blocks with nothing to say", async () => {
   // Sentence 2 is "* * *", so the next spoken sentence is 3.
   assert.equal(lastState(states).sentenceIndex, 3);
 });
+
+test("a voice that is listed but never speaks is reported, not left silent", async () => {
+  // Exactly what a Siri voice does on iOS: the utterance is accepted and then
+  // nothing happens — no start, no end, no error — so the highlight would sit
+  // on the first word forever with no sound.
+  const { engine, player, states } = build();
+  engine.behaviour = "mute";
+  player.play();
+  await settle(12000);
+  player.destroy();
+
+  const failure = states.find((state) => state.error);
+  assert.ok(failure, "the reader must be told the voice made no sound");
+  assert.match(failure!.error!.message, /no sound/i);
+  assert.match(failure!.error!.message, /Siri/i, "and told what to do about it");
+  assert.equal(failure!.status, "paused");
+});
+
+test("a mute voice is retried before giving up", async () => {
+  const { engine, player } = build();
+  engine.behaviour = "mute";
+  player.play();
+  await settle(9000);
+  player.destroy();
+  assert.ok(engine.spoken.length > 1, `should retry before reporting, saw ${engine.spoken.length}`);
+});

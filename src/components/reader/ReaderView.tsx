@@ -154,12 +154,27 @@ export function ReaderView({ bookId }: { bookId: string }) {
     playerRef.current?.setVoice(settings.voiceId);
   }, [settings.voiceId]);
 
-  // Choose a sensible voice the first time, so the reader never has to.
+  // Choose a sensible voice the first time, and repair a stored choice this
+  // device cannot actually speak — a voice carried over from another device,
+  // or one iOS lists but reserves for Siri, which plays silently from a web
+  // page and leaves the highlight parked on the first word.
   useEffect(() => {
-    if (!voicesReady || settings.voiceId || !voices.length) return;
+    if (!voicesReady || !voices.length) return;
+    const stored = settings.voiceId ? voices.find((v) => v.id === settings.voiceId) : undefined;
+    const usable = stored && stored.tier !== "siri";
+    if (settings.voiceId && usable) return;
+
     const preferred = pickDefaultVoice(voices, preferredLang);
-    if (preferred) update({ voiceId: preferred.id });
-  }, [voicesReady, voices, settings.voiceId, preferredLang, update]);
+    if (!preferred || preferred.id === settings.voiceId) return;
+    update({ voiceId: preferred.id });
+    if (settings.voiceId) {
+      showToast(
+        stored
+          ? `${stored.name} can't be used by websites on this device — switched to ${preferred.name}.`
+          : `That voice isn't on this device — switched to ${preferred.name}.`,
+      );
+    }
+  }, [voicesReady, voices, settings.voiceId, preferredLang, update, showToast]);
 
   // Save the exact word when the reader leaves, locks the phone, or pauses.
   useEffect(() => {
