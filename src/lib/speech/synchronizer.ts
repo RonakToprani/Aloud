@@ -19,9 +19,12 @@ export interface SynchronizerOptions {
 
 /** If nothing has fired by now, this engine isn't going to send boundaries. */
 const BOUNDARY_GRACE_MS = 400;
-/** Slack allowed on one word before we stop trusting boundary events. */
-const BOUNDARY_STALL_FACTOR = 3;
-const BOUNDARY_STALL_FLOOR_MS = 1400;
+/** Slack allowed on one word before we stop trusting boundary events.
+ *  Deliberately tight: a frozen highlight is obvious to the reader within
+ *  about half a second, and guessing wrong costs nothing — the next boundary
+ *  event to arrive puts the synchronizer straight back on events. */
+const BOUNDARY_STALL_FACTOR = 2.5;
+const BOUNDARY_STALL_FLOOR_MS = 600;
 /** Slack on the whole sentence before we call the utterance dead. */
 const DEATH_FACTOR = 2.4;
 const DEATH_FLOOR_MS = 5000;
@@ -43,7 +46,16 @@ export class SentenceSynchronizer {
   private readonly durations: number[];
   private readonly estimatedTotal: number;
 
-  private wordEndsAt = 0;
+  /** Model start time of each word, plus a final total. */
+  private readonly cumulative: number[];
+  /** Model time at which this utterance began speaking. */
+  private readonly modelStart: number;
+  /** Real/model clock ratio, learned from the last boundary we trusted. */
+  private scale = 1;
+  private anchorReal = 0;
+  private anchorModel = 0;
+  private lastBoundaryWord: number | null = null;
+  private lastBoundaryElapsed = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
   private stallTimer: ReturnType<typeof setTimeout> | null = null;
@@ -59,6 +71,14 @@ export class SentenceSynchronizer {
     this.lastIndex = Math.max(0, words.length - 1);
     this.current = Math.min(Math.max(0, startWordIndex), this.lastIndex);
     this.estimatedTotal = this.durations.slice(this.current).reduce((sum, ms) => sum + ms, 0);
+
+    this.cumulative = new Array(this.durations.length + 1);
+    this.cumulative[0] = 0;
+    for (let i = 0; i < this.durations.length; i++) {
+      this.cumulative[i + 1] = this.cumulative[i] + this.durations[i];
+    }
+    this.modelStart = this.cumulative[this.current] ?? 0;
+    this.anchorModel = this.modelStart;
   }
 
   get currentWord(): number {
@@ -103,6 +123,8 @@ export class SentenceSynchronizer {
       this.current = Math.min(index, this.lastIndex);
       this.options.onWord(this.current);
     }
+    this.lastBoundaryWord = this.current;
+    this.lastBoundaryElapsed = this.elapsed();
     this.armBoundaryStall();
   }
 
@@ -155,11 +177,34 @@ export class SentenceSynchronizer {
     this.options.onMode?.(mode);
   }
 
+  /** Projected real time at which word `index` begins. */
+  private startOfWord(index: number): number {
+    const model = this.cumulative[Math.min(index, this.cumulative.length - 1)];
+    return this.anchorReal + (model - this.anchorModel) * this.scale;
+  }
+
   private switchToEstimated(): void {
     this.setMode("estimated");
-    // Anchor the clock wherever the highlight already is, so a mid-sentence
-    // switch neither rewinds nor jumps.
-    this.wordEndsAt = this.elapsed() + this.durations[this.current];
+
+    // Anchor on the last boundary we actually saw, and take the ratio between
+    // real and modelled time from it. Assuming instead that the current word
+    // has only just started would hand the voice a head start it keeps — the
+    // highlight would fall further behind with every word.
+    const anchorWord = this.lastBoundaryWord;
+    if (anchorWord !== null) {
+      const modelElapsed = this.cumulative[anchorWord] - this.modelStart;
+      this.scale =
+        modelElapsed > 50 && this.lastBoundaryElapsed > 50
+          ? Math.min(2.5, Math.max(0.5, this.lastBoundaryElapsed / modelElapsed))
+          : 1;
+      this.anchorReal = this.lastBoundaryElapsed;
+      this.anchorModel = this.cumulative[anchorWord];
+    } else {
+      // No boundary ever arrived: the model clock starts with the utterance.
+      this.scale = 1;
+      this.anchorReal = 0;
+      this.anchorModel = this.modelStart;
+    }
     this.tick();
   }
 
@@ -169,16 +214,15 @@ export class SentenceSynchronizer {
 
     const elapsed = this.elapsed();
     let moved = false;
-    while (this.current < this.lastIndex && this.wordEndsAt <= elapsed) {
+    while (this.current < this.lastIndex && this.startOfWord(this.current + 1) <= elapsed) {
       this.current += 1;
-      this.wordEndsAt += this.durations[this.current];
       moved = true;
     }
     if (moved) this.options.onWord(this.current);
 
     // The last word stays lit until the engine actually ends the utterance.
     if (this.current >= this.lastIndex) return;
-    this.timer = setTimeout(this.tick, Math.max(16, this.wordEndsAt - elapsed));
+    this.timer = setTimeout(this.tick, Math.max(16, this.startOfWord(this.current + 1) - elapsed));
   };
 
   private armBoundaryStall(): void {

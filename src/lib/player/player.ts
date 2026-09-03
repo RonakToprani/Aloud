@@ -30,8 +30,11 @@ export interface PlayerOptions {
 /** How long we give a native pause() before deciding Safari ignored it. */
 const PAUSE_VERIFY_MS = 300;
 const RESUME_VERIFY_MS = 450;
-/** An utterance that "ends" this fast never actually spoke. */
-const PHANTOM_END_MS = 90;
+/** An utterance that "ends" this fast never actually spoke. Judged against
+ *  the sentence's own estimate as well as an absolute floor, so a genuinely
+ *  short sentence at 2.5x is never mistaken for a failure. */
+const PHANTOM_END_MS = 250;
+const PHANTOM_END_FRACTION = 0.15;
 const MAX_RECOVERIES = 3;
 
 /**
@@ -336,7 +339,6 @@ export class Player {
       {
         onStart: () => {
           if (this.sync !== sync) return;
-          this.recoveries = 0;
           sync.start();
         },
         onBoundary: (event) => {
@@ -345,13 +347,24 @@ export class Player {
         },
         onEnd: () => {
           if (this.sync !== sync) return;
-          const { actualMs } = sync.end();
+          // end() settles the highlight on the last word, which is right for a
+          // sentence that really played and wrong for one that never did.
+          const wordBeforeEnd = sync.currentWord;
+          const { actualMs, estimatedMs } = sync.end();
           this.sync = null;
           // A multi-word sentence that "finished" instantly never played.
-          if (actualMs < PHANTOM_END_MS && sentence.words.length > 2) {
+          const phantomFloor = Math.min(PHANTOM_END_MS, estimatedMs * PHANTOM_END_FRACTION);
+          if (actualMs < phantomFloor && sentence.words.length > 2) {
+            // Rewind to where the voice actually was, so the retry speaks the
+            // sentence rather than just its final word.
+            this.emit({ wordIndex: wordBeforeEnd });
             this.recover();
             return;
           }
+          // A sentence that really played clears the recovery budget. Doing
+          // this on start instead would let an engine that keeps ending
+          // instantly reset the budget forever and never surface an error.
+          this.recoveries = 0;
           this.advance();
         },
         onError: (error) => {

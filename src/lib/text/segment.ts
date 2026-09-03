@@ -76,12 +76,55 @@ function splitSentencesFallback(text: string): string[] {
   return out;
 }
 
+/** Titles and initials that end in a period without ending a sentence. */
+const ABBREV_TAIL =
+  /(?:^|[\s(\["'‘“])(?:mr|mrs|ms|mx|dr|prof|rev|hon|st|sr|jr|vs|etc|al|e\.g|i\.e|cf|fig|no|vol|ch|pp|approx|dept|est|inc|ltd|co|capt|col|gen|lt|sgt|maj|messrs|mt|ft|ave|blvd|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.$/i;
+/** A lone initial, as in "J. R. R. Tolkien". */
+const INITIAL_TAIL = /(?:^|\s)[A-Z]\.$/;
+
+/**
+ * Intl.Segmenter breaks after "Mrs." because browsers ship ICU without its
+ * abbreviation suppression list. Stitching those breaks back together is what
+ * keeps "Mrs. Dalloway said she would buy the flowers herself." one utterance
+ * rather than two.
+ */
+function mergeFalseBreaks(parts: string[]): string[] {
+  const out: string[] = [];
+  let run = 0;
+
+  for (const part of parts) {
+    const previous = out[out.length - 1];
+    if (previous !== undefined && run < 8 && shouldMerge(previous, part)) {
+      out[out.length - 1] = previous + part;
+      run += 1;
+      continue;
+    }
+    out.push(part);
+    run = 0;
+  }
+  return out;
+}
+
+function shouldMerge(previous: string, next: string): boolean {
+  const left = previous.trimEnd();
+  const right = next.trimStart();
+  if (!left || !right) return false;
+
+  if (ABBREV_TAIL.test(left) || INITIAL_TAIL.test(left)) return true;
+  // A decimal or a numbered list item split across the point.
+  if (/\d\.$/.test(left) && /^\d/.test(right)) return true;
+  // Real sentences don't begin in lower case or with a clause separator.
+  if (/^[\p{Ll},;:)]/u.test(right)) return true;
+  return false;
+}
+
 function splitSentences(text: string): string[] {
   const seg = segmenter("sentence");
-  if (!seg) return splitSentencesFallback(text);
+  if (!seg) return mergeFalseBreaks(splitSentencesFallback(text));
   const parts: string[] = [];
   for (const s of seg.segment(text)) parts.push(s.segment);
-  return parts.length ? parts : splitSentencesFallback(text);
+  if (!parts.length) return mergeFalseBreaks(splitSentencesFallback(text));
+  return mergeFalseBreaks(parts);
 }
 
 const WORD_RE = /[\p{L}\p{N}][\p{L}\p{N}'’‐‑-]*/gu;

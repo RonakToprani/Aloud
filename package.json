@@ -7,18 +7,21 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "jszip": "3.10.1",
     "next": "15.5.4",
     "react": "19.1.1",
-    "react-dom": "19.1.1",
-    "jszip": "3.10.1"
+    "react-dom": "19.1.1"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
     "@types/react": "19.1.10",
     "@types/react-dom": "19.1.7",
+    "linkedom": "^0.18.5",
+    "tsx": "^4.19.2",
     "typescript": "5.7.3"
   }
 }

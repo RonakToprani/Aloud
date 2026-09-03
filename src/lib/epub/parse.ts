@@ -106,6 +106,24 @@ function extractBlocks(root: Element): Block[] {
   return out;
 }
 
+/** EPUB XML is namespaced, and prefixes vary between producers, so every
+ *  lookup goes through localName rather than a qualified tag name. */
+function named(root: Document | Element, localName: string): Element[] {
+  return Array.from(root.querySelectorAll("*")).filter((el) => matchesName(el, localName));
+}
+
+function matchesName(el: Element, localName: string): boolean {
+  if (el.localName === localName) return true;
+  // Some producers, and some XML parsers, keep the prefix on localName.
+  const tag = el.nodeName;
+  const colon = tag.lastIndexOf(":");
+  return (colon >= 0 ? tag.slice(colon + 1) : tag) === localName;
+}
+
+function firstNamed(root: Document | Element, localName: string): Element | null {
+  return named(root, localName)[0] ?? null;
+}
+
 function resolvePath(base: string, relative: string): string {
   const href = relative.split("#")[0];
   if (!href) return "";
@@ -132,11 +150,8 @@ function parseXml(text: string, mime: DOMParserSupportedType = "application/xml"
  *  entries mean the book itself is locked. */
 function detectDrm(encryptionXml: string, spinePaths: Set<string>): boolean {
   const doc = parseXml(encryptionXml);
-  const localName = (el: Element, name: string) => el.localName === name;
 
-  const encrypted = Array.from(doc.getElementsByTagName("*")).filter((el) =>
-    localName(el, "EncryptedData"),
-  );
+  const encrypted = named(doc, "EncryptedData");
   if (!encrypted.length) return false;
 
   const OBFUSCATION = new Set([
@@ -145,13 +160,11 @@ function detectDrm(encryptionXml: string, spinePaths: Set<string>): boolean {
   ]);
 
   for (const node of encrypted) {
-    const descendants = Array.from(node.getElementsByTagName("*"));
-    const algorithm =
-      descendants.find((el) => localName(el, "EncryptionMethod"))?.getAttribute("Algorithm") ?? "";
+    const algorithm = firstNamed(node, "EncryptionMethod")?.getAttribute("Algorithm") ?? "";
     if (OBFUSCATION.has(algorithm)) continue;
 
     const uri = decodeURIComponent(
-      descendants.find((el) => localName(el, "CipherReference"))?.getAttribute("URI") ?? "",
+      firstNamed(node, "CipherReference")?.getAttribute("URI") ?? "",
     );
     if (!uri) continue;
     // A genuinely encrypted spine document (or any other markup) means the
@@ -166,16 +179,9 @@ function detectDrm(encryptionXml: string, spinePaths: Set<string>): boolean {
 function buildTocTitles(doc: Document, basePath: string): Map<string, string> {
   const titles = new Map<string, string>();
 
-  const navPoints = Array.from(doc.getElementsByTagName("*")).filter(
-    (el) => el.localName === "navPoint",
-  );
-  for (const point of navPoints) {
-    const label = Array.from(point.getElementsByTagName("*")).find(
-      (el) => el.localName === "text",
-    );
-    const content = Array.from(point.getElementsByTagName("*")).find(
-      (el) => el.localName === "content",
-    );
+  for (const point of named(doc, "navPoint")) {
+    const label = firstNamed(point, "text");
+    const content = firstNamed(point, "content");
     const src = content?.getAttribute("src");
     const text = clean(label?.textContent ?? "");
     if (src && text) titles.set(resolvePath(basePath, src), text);
@@ -199,8 +205,12 @@ function wordCount(blocks: Block[]): number {
 
 const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+/** Accepts anything JSZip can read, which keeps the parser testable outside
+ *  a browser as well as taking a File straight from the picker. */
+export type EpubSource = Blob | ArrayBuffer | Uint8Array;
+
 export async function parseEpub(
-  file: Blob,
+  file: EpubSource,
   onProgress?: (fraction: number) => void,
 ): Promise<ParsedBook> {
   let zip: JSZip;
@@ -216,16 +226,14 @@ export async function parseEpub(
   if (!containerFile) throw new EpubParseError("This EPUB is missing its container index.");
 
   const container = parseXml(await containerFile.async("text"));
-  const rootPath = Array.from(container.getElementsByTagName("*"))
-    .find((el) => el.localName === "rootfile")
-    ?.getAttribute("full-path");
+  const rootPath = firstNamed(container, "rootfile")?.getAttribute("full-path");
   if (!rootPath) throw new EpubParseError("This EPUB doesn't say where its contents begin.");
 
   const opfFile = zip.file(rootPath);
   if (!opfFile) throw new EpubParseError("This EPUB's contents index is missing.");
   const opf = parseXml(await opfFile.async("text"));
 
-  const all = Array.from(opf.getElementsByTagName("*"));
+  const all = Array.from(opf.querySelectorAll("*"));
   const items = all.filter((el) => el.localName === "item");
   const manifest = new Map<string, { path: string; type: string; properties: string }>();
   for (const item of items) {
@@ -258,7 +266,7 @@ export async function parseEpub(
   const meta = all.find((el) => el.localName === "metadata");
   const metaText = (name: string): string | null => {
     if (!meta) return null;
-    const node = Array.from(meta.getElementsByTagName("*")).find((el) => el.localName === name);
+    const node = firstNamed(meta, name);
     const text = clean(node?.textContent ?? "");
     return text || null;
   };
