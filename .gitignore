@@ -8,3 +8,6 @@ next-env.d.ts
 .env*.local
 tsconfig.tsbuildinfo
 screenshots
+
+# Not shipped: see README on why the Edge Read Aloud path was dropped.
+src/lib/speech/edge/
