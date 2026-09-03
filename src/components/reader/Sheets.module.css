@@ -1,0 +1,345 @@
+/* ---------- Theme swatches ---------- */
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+}
+
+.themeOption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.themeSwatch {
+  width: 100%;
+  height: 52px;
+  border-radius: var(--radius-control);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hairline);
+  transition: border-color var(--dur-ui) var(--ease-soft);
+}
+
+.themeSwatch[data-active="true"] {
+  border: 2px solid var(--accent-strong);
+}
+
+/* Each swatch previews its own theme rather than the one in use. */
+.themeSwatch[data-theme="dark"] {
+  background: oklch(0.235 0.011 250);
+  color: oklch(0.82 0.008 250);
+}
+.themeSwatch[data-theme="warm"] {
+  background: oklch(0.245 0.014 70);
+  color: oklch(0.85 0.022 80);
+}
+.themeSwatch[data-theme="light"] {
+  background: oklch(0.965 0.004 250);
+  color: oklch(0.36 0.008 250);
+}
+.themeSwatch[data-theme="sepia"] {
+  background: oklch(0.935 0.024 85);
+  color: oklch(0.38 0.022 60);
+}
+
+.themeAa {
+  font-family: var(--font-serif);
+  font-size: 17px;
+}
+
+.themeName {
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+
+.themeName[data-active="true"] {
+  color: var(--ui);
+  font-weight: 500;
+}
+
+/* ---------- Highlight choice ---------- */
+
+.highlightGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.highlightCard {
+  border-radius: 14px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  padding: 13px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  text-align: left;
+  transition: border-color var(--dur-ui) var(--ease-soft);
+}
+
+.highlightCard[data-active="true"] {
+  border: 2px solid var(--accent-strong);
+  padding: 12px 11px;
+}
+
+.highlightPreview {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.previewPill {
+  background: var(--word);
+  color: var(--word-ink);
+  border-radius: var(--radius-pill);
+  padding: 1px 5px;
+}
+
+.previewWash {
+  background: var(--wash);
+  color: var(--wash-ink);
+  border-radius: var(--radius-wash);
+  padding: 1px 5px;
+  font-weight: 500;
+}
+
+.highlightName {
+  font-size: 11.5px;
+  color: var(--ui-muted);
+}
+
+.highlightName[data-active="true"] {
+  color: var(--ui);
+  font-weight: 500;
+}
+
+.sizeSmall {
+  font-family: var(--font-serif);
+  font-size: 13px;
+}
+
+.sizeLarge {
+  font-family: var(--font-serif);
+  font-size: 22px;
+}
+
+.serifSample {
+  font-family: var(--font-serif);
+  font-size: 14px;
+}
+
+.sansSample {
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+/* ---------- Chips ---------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 9px 16px;
+  min-height: 40px;
+  border-radius: 999px;
+  background: var(--inset);
+  color: var(--ui-muted);
+  font-size: 13px;
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft);
+}
+
+.chip[data-active="true"] {
+  background: var(--segment);
+  color: var(--ui);
+  font-weight: 500;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ui-muted);
+}
+
+/* ---------- Voices ---------- */
+
+.voiceList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.voiceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.voiceGroupLabel {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+  padding: 6px 2px;
+}
+
+.voiceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: left;
+  color: var(--ui-muted);
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft);
+}
+
+.voiceRow:hover {
+  background: var(--inset);
+}
+
+.voiceRow[data-active="true"] {
+  background: var(--inset);
+  color: var(--ui);
+}
+
+.voiceName {
+  font-size: 14px;
+}
+
+.voiceMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  color: var(--accent-strong);
+}
+
+.badge {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  padding: 3px 6px;
+}
+
+/* ---------- Chapters & bookmarks ---------- */
+
+.chapterList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chapterRow {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-height: 46px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  text-align: left;
+  color: var(--ui-muted);
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft);
+}
+
+.chapterRow:hover {
+  background: var(--inset);
+}
+
+.chapterRow[data-active="true"] {
+  background: var(--inset);
+  color: var(--ui);
+}
+
+.chapterNumber {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ui-muted);
+  width: 22px;
+  flex: none;
+}
+
+.chapterTitle {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.bookmarkRow {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  border-radius: 10px;
+}
+
+.bookmarkRow:hover {
+  background: var(--inset);
+}
+
+.bookmarkJump {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+}
+
+.bookmarkChapter {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.bookmarkPreview {
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bookmarkDelete {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  flex: none;
+  border-radius: 10px;
+  color: var(--ui-muted);
+  transition: color var(--dur-ui) var(--ease-soft);
+}
+
+.bookmarkDelete:hover {
+  color: var(--danger);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 34px 20px 40px;
+  color: var(--ui-muted);
+}
+
+.emptyTitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ui);
+}

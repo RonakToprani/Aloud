@@ -1,0 +1,327 @@
+/* ============================================================
+   Aloud — design tokens
+   Four themes on one lightness ladder: switching theme mid-chapter
+   never changes how bright the page feels. Hue and chroma rotate;
+   lightness does not. Every text token below meets WCAG AA on its
+   own surface (--ui-faint is decoration only: dots, rules, icons).
+   ============================================================ */
+
+:root {
+  --measure: 34rem;
+
+  --radius-pill: 7px;
+  --radius-wash: 5px;
+  --radius-sentence: 9px;
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-sheet: 28px;
+
+  --ease-soft: cubic-bezier(0.32, 0.72, 0.29, 1);
+  --dur-pill: 220ms;
+  --dur-wash: 260ms;
+  --dur-ui: 260ms;
+  --dur-sheet: 420ms;
+
+  --font-ui: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: var(--font-newsreader), Iowan Old Style, Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ---------- Dark — the primary theme ---------- */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: oklch(0.235 0.011 250);
+  --raised: oklch(0.275 0.013 250);
+  --inset: oklch(0.225 0.011 250);
+  --segment: oklch(0.33 0.014 250);
+  --grabber: oklch(0.42 0.012 250);
+
+  --sentence: oklch(0.285 0.016 250);
+  --word: oklch(0.455 0.062 250);
+  --word-ink: oklch(0.97 0.008 250);
+  --wash: oklch(0.325 0.02 250);
+  --wash-ink: oklch(0.93 0.008 250);
+
+  --accent: oklch(0.62 0.075 250);
+  --accent-strong: oklch(0.68 0.075 250);
+
+  --ink: oklch(0.82 0.008 250);
+  --ink-strong: oklch(0.9 0.01 250);
+  --ink-dim: oklch(0.7 0.008 250);
+  --ink-dimmer: oklch(0.62 0.008 250);
+
+  --ui: oklch(0.88 0.008 250);
+  --ui-muted: oklch(0.66 0.01 250);
+  --ui-faint: oklch(0.48 0.012 250);
+
+  --track: oklch(0.31 0.012 250);
+  --slider-track: oklch(0.36 0.012 250);
+  --thumb: oklch(0.9 0.008 250);
+
+  --hairline: oklch(1 0 0 / 0.08);
+  --hairline-soft: oklch(1 0 0 / 0.06);
+  --scrim: oklch(0.16 0.008 250 / 0.55);
+  --chrome: oklch(0.295 0.014 250 / 0.85);
+  --shadow-sheet: 0 -20px 50px oklch(0 0 0 / 0.35);
+  --shadow-lift: 0 12px 34px oklch(0 0 0 / 0.28);
+  --danger: oklch(0.68 0.14 25);
+}
+
+/* ---------- Warm — dark's ladder rotated to amber, for late reading ---------- */
+[data-theme="warm"] {
+  color-scheme: dark;
+  --canvas: oklch(0.245 0.014 70);
+  --raised: oklch(0.285 0.016 70);
+  --inset: oklch(0.235 0.014 70);
+  --segment: oklch(0.34 0.018 70);
+  --grabber: oklch(0.44 0.016 70);
+
+  --sentence: oklch(0.3 0.022 70);
+  --word: oklch(0.465 0.056 65);
+  --word-ink: oklch(0.97 0.02 85);
+  --wash: oklch(0.335 0.032 70);
+  --wash-ink: oklch(0.95 0.026 82);
+
+  --accent: oklch(0.68 0.07 65);
+  --accent-strong: oklch(0.74 0.07 65);
+
+  --ink: oklch(0.85 0.022 80);
+  --ink-strong: oklch(0.91 0.026 80);
+  --ink-dim: oklch(0.71 0.02 80);
+  --ink-dimmer: oklch(0.63 0.018 80);
+
+  --ui: oklch(0.88 0.02 80);
+  --ui-muted: oklch(0.66 0.014 70);
+  --ui-faint: oklch(0.5 0.016 70);
+
+  --track: oklch(0.33 0.018 70);
+  --slider-track: oklch(0.38 0.018 70);
+  --thumb: oklch(0.9 0.02 80);
+
+  --hairline: oklch(1 0 0 / 0.08);
+  --hairline-soft: oklch(1 0 0 / 0.06);
+  --scrim: oklch(0.17 0.012 70 / 0.55);
+  --chrome: oklch(0.305 0.018 70 / 0.85);
+  --shadow-sheet: 0 -20px 50px oklch(0 0 0 / 0.35);
+  --shadow-lift: 0 12px 34px oklch(0 0 0 / 0.28);
+  --danger: oklch(0.68 0.14 30);
+}
+
+/* ---------- Light ---------- */
+[data-theme="light"] {
+  color-scheme: light;
+  --canvas: oklch(0.965 0.004 250);
+  --raised: oklch(0.995 0.002 250);
+  --inset: oklch(0.928 0.006 250);
+  --segment: oklch(0.995 0.002 250);
+  --grabber: oklch(0.82 0.008 250);
+
+  --sentence: oklch(0.925 0.008 250);
+  --word: oklch(0.84 0.055 250);
+  --word-ink: oklch(0.24 0.02 250);
+  --wash: oklch(0.885 0.038 250);
+  --wash-ink: oklch(0.26 0.015 250);
+
+  --accent: oklch(0.55 0.075 250);
+  --accent-strong: oklch(0.5 0.08 250);
+
+  --ink: oklch(0.36 0.008 250);
+  --ink-strong: oklch(0.28 0.008 250);
+  --ink-dim: oklch(0.47 0.008 250);
+  --ink-dimmer: oklch(0.54 0.008 250);
+
+  --ui: oklch(0.32 0.008 250);
+  --ui-muted: oklch(0.54 0.01 250);
+  --ui-faint: oklch(0.68 0.01 250);
+
+  --track: oklch(0.89 0.006 250);
+  --slider-track: oklch(0.87 0.006 250);
+  --thumb: oklch(1 0 0);
+
+  --hairline: oklch(0.2 0.01 250 / 0.12);
+  --hairline-soft: oklch(0.2 0.01 250 / 0.08);
+  --scrim: oklch(0.45 0.01 250 / 0.32);
+  --chrome: oklch(1 0 0 / 0.86);
+  --shadow-sheet: 0 -18px 46px oklch(0.3 0.01 250 / 0.14);
+  --shadow-lift: 0 10px 30px oklch(0.3 0.01 250 / 0.1);
+  --danger: oklch(0.52 0.17 27);
+}
+
+/* ---------- Sepia ---------- */
+[data-theme="sepia"] {
+  color-scheme: light;
+  --canvas: oklch(0.935 0.024 85);
+  --raised: oklch(0.965 0.018 85);
+  --inset: oklch(0.9 0.026 82);
+  --segment: oklch(0.985 0.012 85);
+  --grabber: oklch(0.8 0.024 80);
+
+  --sentence: oklch(0.895 0.03 80);
+  --word: oklch(0.815 0.075 70);
+  --word-ink: oklch(0.26 0.03 55);
+  --wash: oklch(0.858 0.045 78);
+  --wash-ink: oklch(0.28 0.026 58);
+
+  --accent: oklch(0.56 0.07 65);
+  --accent-strong: oklch(0.5 0.075 62);
+
+  --ink: oklch(0.38 0.022 60);
+  --ink-strong: oklch(0.3 0.024 60);
+  --ink-dim: oklch(0.46 0.022 62);
+  --ink-dimmer: oklch(0.52 0.02 65);
+
+  --ui: oklch(0.34 0.022 60);
+  --ui-muted: oklch(0.52 0.02 70);
+  --ui-faint: oklch(0.66 0.022 75);
+
+  --track: oklch(0.86 0.026 80);
+  --slider-track: oklch(0.845 0.026 80);
+  --thumb: oklch(0.99 0.01 85);
+
+  --hairline: oklch(0.25 0.02 60 / 0.14);
+  --hairline-soft: oklch(0.25 0.02 60 / 0.09);
+  --scrim: oklch(0.45 0.02 70 / 0.32);
+  --chrome: oklch(0.97 0.016 85 / 0.88);
+  --shadow-sheet: 0 -18px 46px oklch(0.3 0.02 60 / 0.16);
+  --shadow-lift: 0 10px 30px oklch(0.3 0.02 60 / 0.12);
+  --danger: oklch(0.5 0.17 30);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Theme changes ease rather than flash, even mid-sentence. */
+  transition: background-color var(--dur-ui) var(--ease-soft),
+    color var(--dur-ui) var(--ease-soft);
+  overscroll-behavior-y: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent-strong);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--word);
+  color: var(--word-ink);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Nothing in this app should ever spring or bounce. When the reader has
+   asked for less motion, everything simply cuts. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The three-bar level meter on the collapsed playback capsule. */
+.levelMeter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 11px;
+}
+
+.levelMeter > span {
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent-strong);
+  height: 5px;
+}
+
+.levelMeter > span:nth-child(2) {
+  height: 11px;
+}
+
+.levelMeter > span:nth-child(3) {
+  height: 7px;
+}
+
+.levelMeter[data-animated="true"] > span {
+  animation: levelPulse 1800ms var(--ease-soft) infinite;
+}
+
+.levelMeter[data-animated="true"] > span:nth-child(2) {
+  animation-delay: 240ms;
+}
+
+.levelMeter[data-animated="true"] > span:nth-child(3) {
+  animation-delay: 480ms;
+}
+
+@keyframes levelPulse {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .levelMeter[data-animated="true"] > span {
+    animation: none;
+  }
+}

@@ -1,0 +1,128 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--scrim);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: scrimIn var(--dur-ui) var(--ease-soft) both;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.panel {
+  width: min(460px, 100%);
+  max-height: min(78svh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: var(--raised);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow: var(--shadow-sheet);
+  padding: 10px 24px calc(26px + env(safe-area-inset-bottom));
+  animation: sheetIn var(--dur-sheet) var(--ease-soft) both;
+  outline: none;
+}
+
+.panel[data-tall="true"] {
+  max-height: min(86svh, 760px);
+}
+
+@media (min-width: 720px) {
+  .scrim {
+    align-items: center;
+  }
+  .panel {
+    border-radius: 20px;
+    max-height: min(76svh, 700px);
+    padding-bottom: 26px;
+    animation-name: dialogIn;
+  }
+  .grabber {
+    display: none;
+  }
+}
+
+.grabber {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--grabber);
+  align-self: center;
+  margin-bottom: 14px;
+  flex: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex: none;
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ui);
+  letter-spacing: -0.005em;
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-right: -6px;
+  border-radius: 50%;
+  color: var(--ui-muted);
+  transition: color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
+}
+
+.close:hover {
+  color: var(--ui);
+  background: var(--inset);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+
+@keyframes scrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheetIn {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes dialogIn {
+  from {
+    transform: translateY(8px) scale(0.99);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}

@@ -1,0 +1,171 @@
+import type { BookBody, BookMeta, Bookmark } from "@/lib/types";
+
+const DB_NAME = "aloud";
+const DB_VERSION = 1;
+const BOOKS = "books";
+const BODIES = "bodies";
+const BOOKMARKS = "bookmarks";
+
+export class StorageFullError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StorageFullError";
+  }
+}
+
+export class StorageUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StorageUnavailableError";
+  }
+}
+
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+function openDb(): Promise<IDBDatabase> {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(
+        new StorageUnavailableError(
+          "This browser has no local storage available, which usually means private browsing. Your library can't be saved here.",
+        ),
+      );
+      return;
+    }
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(BOOKS)) db.createObjectStore(BOOKS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(BODIES)) db.createObjectStore(BODIES, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(BOOKMARKS)) {
+        const store = db.createObjectStore(BOOKMARKS, { keyPath: "id" });
+        store.createIndex("bookId", "bookId", { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      reject(
+        new StorageUnavailableError(
+          "This browser wouldn't open local storage, so books can't be saved on this device.",
+        ),
+      );
+    request.onblocked = () =>
+      reject(
+        new StorageUnavailableError(
+          "Another tab of Aloud is upgrading storage. Close the other tabs and reload.",
+        ),
+      );
+  });
+  return dbPromise;
+}
+
+function run<T>(
+  storeNames: string | string[],
+  mode: IDBTransactionMode,
+  body: (tx: IDBTransaction) => IDBRequest<T> | Promise<T>,
+): Promise<T> {
+  return openDb().then(
+    (db) =>
+      new Promise<T>((resolve, reject) => {
+        const tx = db.transaction(storeNames, mode);
+        let result: T;
+        let settled = false;
+
+        const outcome = body(tx);
+        if (outcome instanceof Promise) {
+          outcome.then((value) => {
+            result = value;
+            settled = true;
+          }, reject);
+        } else {
+          outcome.onsuccess = () => {
+            result = outcome.result;
+            settled = true;
+          };
+        }
+
+        tx.oncomplete = () => resolve(settled ? result : (undefined as T));
+        tx.onabort = tx.onerror = () => {
+          const error = tx.error;
+          if (error && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")) {
+            reject(
+              new StorageFullError(
+                "There isn't enough space left on this device to store the book.",
+              ),
+            );
+            return;
+          }
+          reject(error ?? new Error("The storage request failed."));
+        };
+      }),
+  );
+}
+
+export async function listBooks(): Promise<BookMeta[]> {
+  const books = await run<BookMeta[]>(BOOKS, "readonly", (tx) =>
+    tx.objectStore(BOOKS).getAll() as IDBRequest<BookMeta[]>,
+  );
+  return books.sort((a, b) => b.addedAt - a.addedAt);
+}
+
+export function getBookMeta(id: string): Promise<BookMeta | undefined> {
+  return run<BookMeta | undefined>(BOOKS, "readonly", (tx) =>
+    tx.objectStore(BOOKS).get(id) as IDBRequest<BookMeta | undefined>,
+  );
+}
+
+export function getBookBody(id: string): Promise<BookBody | undefined> {
+  return run<BookBody | undefined>(BODIES, "readonly", (tx) =>
+    tx.objectStore(BODIES).get(id) as IDBRequest<BookBody | undefined>,
+  );
+}
+
+export function putBook(meta: BookMeta, body: BookBody): Promise<void> {
+  return run<void>([BOOKS, BODIES], "readwrite", (tx) => {
+    tx.objectStore(BOOKS).put(meta);
+    return tx.objectStore(BODIES).put(body) as unknown as IDBRequest<void>;
+  });
+}
+
+export function deleteBook(id: string): Promise<void> {
+  return run<void>([BOOKS, BODIES], "readwrite", (tx) => {
+    tx.objectStore(BOOKS).delete(id);
+    return tx.objectStore(BODIES).delete(id) as unknown as IDBRequest<void>;
+  });
+}
+
+export function listBookmarks(bookId: string): Promise<Bookmark[]> {
+  return run<Bookmark[]>(BOOKMARKS, "readonly", (tx) => {
+    const index = tx.objectStore(BOOKMARKS).index("bookId");
+    return index.getAll(IDBKeyRange.only(bookId)) as IDBRequest<Bookmark[]>;
+  }).then((marks) =>
+    marks.sort(
+      (a, b) => a.chapterIndex - b.chapterIndex || a.sentenceIndex - b.sentenceIndex,
+    ),
+  );
+}
+
+export function putBookmark(mark: Bookmark): Promise<void> {
+  return run<void>(BOOKMARKS, "readwrite", (tx) =>
+    tx.objectStore(BOOKMARKS).put(mark) as unknown as IDBRequest<void>,
+  );
+}
+
+export function deleteBookmark(id: string): Promise<void> {
+  return run<void>(BOOKMARKS, "readwrite", (tx) =>
+    tx.objectStore(BOOKMARKS).delete(id) as unknown as IDBRequest<void>,
+  );
+}
+
+/** Bytes still available, or null when the browser won't say. */
+export async function storageHeadroom(): Promise<number | null> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) return null;
+  try {
+    const { quota, usage } = await navigator.storage.estimate();
+    if (typeof quota !== "number" || typeof usage !== "number") return null;
+    return Math.max(0, quota - usage);
+  } catch {
+    return null;
+  }
+}

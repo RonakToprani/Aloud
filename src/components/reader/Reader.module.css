@@ -1,0 +1,192 @@
+/* The text is the hero. Everything drawn here sits behind it and never
+   occludes a letterform. */
+
+.surface {
+  position: relative;
+  isolation: isolate;
+  max-width: min(62ch, 100%);
+  margin: 0 auto;
+  padding: 0 max(24px, env(safe-area-inset-left)) 0 max(24px, env(safe-area-inset-right));
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  contain: strict;
+}
+
+.layer > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.flow {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-serif);
+  font-size: var(--reader-size, 19px);
+  line-height: var(--reader-leading, 1.72);
+  font-weight: 400;
+  color: var(--ink);
+  text-wrap: pretty;
+  hanging-punctuation: first last;
+  /* Tap-to-read-from-here beats text selection on a reading surface. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+:global([data-face="sans"]) .flow {
+  font-family: var(--font-ui);
+  font-size: calc(var(--reader-size, 19px) - 1px);
+}
+
+/* Attention gradient: the sentence being read is brightest, and the text
+   ahead of it recedes. Every step still clears AA on its own canvas. */
+.flow > [data-current="true"] {
+  color: var(--ink-strong);
+}
+.flow > [data-current="true"] ~ * {
+  color: var(--ink-dimmer);
+}
+.flow > [data-current="true"] + * {
+  color: var(--ink-dim);
+}
+.flow > * {
+  transition: color var(--dur-ui) var(--ease-soft);
+}
+
+.p,
+.quote,
+.h1,
+.h2,
+.h3 {
+  margin: 0 0 1.05em;
+}
+
+.h1 {
+  font-size: 1.28em;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0.4em 0 1.3em;
+  letter-spacing: -0.005em;
+}
+
+.h2 {
+  font-size: 1.14em;
+  font-weight: 500;
+  margin: 1.6em 0 0.9em;
+}
+
+.h3 {
+  font-size: 1.02em;
+  font-weight: 600;
+  margin: 1.5em 0 0.8em;
+}
+
+.quote {
+  padding-left: 1.1em;
+  border-left: 2px solid var(--hairline);
+  font-style: italic;
+}
+
+.sentence {
+  cursor: pointer;
+}
+
+/* A held sentence keeps a quiet marker in the margin. */
+.flow > [data-bookmarked="true"] {
+  position: relative;
+}
+.flow > [data-bookmarked="true"]::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 0.35em;
+  width: 3px;
+  height: 1.1em;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0.75;
+}
+
+/* ---------- Word treatments ---------- */
+
+.word {
+  transition: color var(--dur-pill) var(--ease-soft),
+    font-weight var(--dur-pill) var(--ease-soft);
+}
+
+:global([data-highlight="pill"]) .word[data-speaking="true"] {
+  color: var(--word-ink);
+}
+
+:global([data-highlight="wash"]) .word[data-speaking="true"] {
+  color: var(--wash-ink);
+  font-weight: 500;
+}
+
+/* ---------- Highlights ---------- */
+
+.sentenceWash {
+  background: var(--sentence);
+  border-radius: var(--radius-sentence);
+  animation: washIn var(--dur-ui) var(--ease-soft) both;
+}
+
+.pill {
+  background: var(--word);
+  border-radius: var(--radius-pill);
+  transition: transform var(--dur-pill) var(--ease-soft),
+    width var(--dur-pill) var(--ease-soft), height var(--dur-pill) var(--ease-soft);
+}
+
+/* Moving to another line is a jump, not a glide — a pill sliding diagonally
+   across the column pulls the eye far more than the move is worth. */
+.pill[data-jump="true"] {
+  transition: none;
+  animation: pillSettle 160ms var(--ease-soft);
+}
+
+.wash {
+  background: var(--wash);
+  border-radius: var(--radius-wash);
+  opacity: 1;
+  transition: opacity var(--dur-wash) var(--ease-soft);
+}
+
+.wash[data-leaving="true"] {
+  opacity: 0;
+}
+
+@keyframes washIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pillSettle {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill,
+  .wash,
+  .sentenceWash,
+  .word {
+    transition: none;
+    animation: none;
+  }
+}

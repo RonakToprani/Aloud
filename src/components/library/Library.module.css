@@ -1,0 +1,341 @@
+.page {
+  min-height: 100svh;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: max(26px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right))
+    calc(60px + env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  animation: pageIn 420ms var(--ease-soft) both;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.wordmark {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+}
+
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.primaryButton,
+.ghostButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft),
+    opacity var(--dur-ui) var(--ease-soft);
+}
+
+.primaryButton {
+  background: var(--segment);
+  color: var(--ui);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.ghostButton {
+  color: var(--ui-muted);
+}
+
+.ghostButton:hover:not(:disabled) {
+  background: var(--inset);
+  color: var(--ui);
+}
+
+.primaryButton:disabled,
+.ghostButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- Shelf ---------- */
+
+.shelf {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 16px;
+  transition: background-color var(--dur-ui) var(--ease-soft);
+}
+
+.item:hover {
+  background: var(--inset);
+}
+
+.itemLink {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title title"
+    "meta meta"
+    "bar bar"
+    "label label";
+  gap: 5px;
+  padding: 18px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.itemTitle {
+  grid-area: title;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--ink-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.itemMeta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.itemAuthor::after {
+  content: "·";
+  margin-left: 8px;
+  color: var(--ui-faint);
+}
+
+.itemProgress {
+  grid-area: bar;
+  margin-top: 7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.itemProgressFill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  opacity: 0.85;
+}
+
+.itemProgressLabel {
+  grid-area: label;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+
+.remove {
+  flex: none;
+  width: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: var(--ui-faint);
+  opacity: 0;
+  transition: color var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft);
+}
+
+.item:hover .remove,
+.remove:focus-visible {
+  opacity: 1;
+  color: var(--ui-muted);
+}
+
+.remove:hover {
+  color: var(--danger);
+}
+
+@media (hover: none) {
+  .remove {
+    opacity: 1;
+    color: var(--ui-muted);
+  }
+}
+
+/* ---------- Empty, progress, errors ---------- */
+
+.empty {
+  margin: 12vh auto 0;
+  max-width: 38ch;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.emptyTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 500;
+  color: var(--ink-strong);
+}
+
+.emptyBody {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ui-muted);
+}
+
+.emptyHint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.placeholder {
+  height: 40vh;
+}
+
+.progressCard,
+.errorCard {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.progressLabel {
+  font-size: 12.5px;
+  color: var(--ui-muted);
+}
+
+.progressTrack {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 320ms var(--ease-soft);
+}
+
+.errorCard strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ui);
+}
+
+.errorCard p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ui-muted);
+}
+
+.errorCard .ghostButton {
+  align-self: flex-start;
+  margin-left: -16px;
+}
+
+/* ---------- Paste ---------- */
+
+.pasteField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pasteLabel {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.pasteInput,
+.pasteArea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--inset);
+  border: 1px solid var(--hairline-soft);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.pasteArea {
+  font-family: var(--font-serif);
+  min-height: 150px;
+}
+
+.pasteInput:focus-visible,
+.pasteArea:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
+/* ---------- Drag & drop ---------- */
+
+.dropVeil {
+  position: fixed;
+  inset: 12px;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  border: 1.5px dashed var(--accent);
+  background: var(--scrim);
+  color: var(--ui);
+  font-size: 14px;
+  pointer-events: none;
+  animation: pageIn 200ms var(--ease-soft) both;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
