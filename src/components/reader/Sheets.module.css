@@ -343,3 +343,40 @@
   font-weight: 500;
   color: var(--ui);
 }
+
+/* Quality tier reads at a glance: the good ones are the point, the rest are
+   only visible once the reader asks to see everything. */
+.badge[data-tier="premium"] {
+  color: var(--accent-strong);
+  border-color: color-mix(in oklab, var(--accent-strong) 40%, transparent);
+}
+
+.badge[data-tier="enhanced"] {
+  color: var(--ui);
+}
+
+.badge[data-tier="siri"],
+.badge[data-tier="novelty"] {
+  opacity: 0.7;
+}
+
+.moreVoices {
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 12px;
+  margin-left: -12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--ui-muted);
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft);
+}
+
+.moreVoices:hover {
+  background: var(--inset);
+  color: var(--ui);
+}
+
+.hint strong {
+  color: var(--ui);
+  font-weight: 500;
+}

@@ -8,18 +8,21 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "test:focus": "node scripts/focus-check.mjs"
   },
   "dependencies": {
     "jszip": "3.10.1",
     "next": "^15.5.25",
     "react": "19.1.1",
-    "react-dom": "19.1.1"
+    "react-dom": "19.1.1",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
     "@types/react": "19.1.10",
     "@types/react-dom": "19.1.7",
+    "@types/ws": "^8.5.13",
     "linkedom": "^0.18.5",
     "puppeteer-core": "^23.11.1",
     "tsx": "^4.19.2",

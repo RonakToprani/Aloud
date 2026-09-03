@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import styles from "./Toast.module.css";
 
 export interface ToastMessage {
@@ -17,11 +17,17 @@ interface Props {
 }
 
 export function Toast({ toast, onDismiss }: Props) {
+  // Keeping the callback in a ref stops a parent re-render from restarting the
+  // dismiss countdown, which would leave an undo offer up long after its window
+  // had actually closed.
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(onDismiss, toast.durationMs ?? 5200);
+    const timer = setTimeout(() => dismissRef.current(), toast.durationMs ?? 5200);
     return () => clearTimeout(timer);
-  }, [toast, onDismiss]);
+  }, [toast]);
 
   if (!toast) return null;
 

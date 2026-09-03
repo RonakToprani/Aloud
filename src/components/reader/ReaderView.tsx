@@ -34,7 +34,7 @@ interface LoadedBook {
 
 export function ReaderView({ bookId }: { bookId: string }) {
   const { settings, update } = useSettings();
-  const { engine, groups, ready: voicesReady, supported, voices } = useSpeechEngine();
+  const { engine, ready: voicesReady, supported, voices, preferredLang } = useSpeechEngine();
 
   const [book, setBook] = useState<LoadedBook | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -157,9 +157,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
   // Choose a sensible voice the first time, so the reader never has to.
   useEffect(() => {
     if (!voicesReady || settings.voiceId || !voices.length) return;
-    const preferred = pickDefaultVoice(voices, navigator.language || "en-US");
+    const preferred = pickDefaultVoice(voices, preferredLang);
     if (preferred) update({ voiceId: preferred.id });
-  }, [voicesReady, voices, settings.voiceId, update]);
+  }, [voicesReady, voices, settings.voiceId, preferredLang, update]);
 
   // Save the exact word when the reader leaves, locks the phone, or pauses.
   useEffect(() => {
@@ -513,7 +513,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
         onRate={(rate) => update({ rate })}
         voiceId={settings.voiceId}
         onVoice={(voiceId) => update({ voiceId })}
-        groups={groups}
+        voices={voices}
+        preferredLang={preferredLang}
         voicesReady={voicesReady}
         sleepMinutes={sleepMinutes}
         sleepRemaining={sleepRemaining}

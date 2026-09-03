@@ -1,11 +1,11 @@
 "use client";
 
 import { Field, Slider } from "@/components/ui/Controls";
-import { CheckIcon } from "@/components/ui/Icons";
 import { Sheet } from "@/components/ui/Sheet";
-import type { VoiceGroup } from "@/lib/hooks/useSpeechEngine";
+import type { EngineVoice } from "@/lib/speech/engine";
 import { RATE_STEPS } from "@/lib/storage/prefs";
 import styles from "./Sheets.module.css";
+import { VoiceList } from "./VoiceList";
 
 interface Props {
   open: boolean;
@@ -14,7 +14,8 @@ interface Props {
   onRate: (rate: number) => void;
   voiceId: string | null;
   onVoice: (voiceId: string) => void;
-  groups: VoiceGroup[];
+  voices: EngineVoice[];
+  preferredLang: string;
   voicesReady: boolean;
   sleepMinutes: number | null;
   sleepRemaining: number | null;
@@ -43,7 +44,8 @@ export function PlaybackSheet({
   onRate,
   voiceId,
   onVoice,
-  groups,
+  voices,
+  preferredLang,
   voicesReady,
   sleepMinutes,
   sleepRemaining,
@@ -97,37 +99,13 @@ export function PlaybackSheet({
       </Field>
 
       <Field label="Voice">
-        {!voicesReady && <p className={styles.hint}>Looking for voices on this device…</p>}
-        {voicesReady && !groups.length && (
-          <p className={styles.hint}>
-            This device reports no speech voices. On iOS they arrive with the first system voice
-            download; on desktop Linux a speech engine such as speech-dispatcher must be installed.
-          </p>
-        )}
-        <div className={styles.voiceList}>
-          {groups.map((group) => (
-            <div key={group.lang} className={styles.voiceGroup}>
-              <div className={styles.voiceGroupLabel}>{group.label}</div>
-              {group.voices.map((voice) => (
-                <button
-                  key={voice.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={voice.id === voiceId}
-                  className={styles.voiceRow}
-                  data-active={voice.id === voiceId ? "true" : undefined}
-                  onClick={() => onVoice(voice.id)}
-                >
-                  <span className={styles.voiceName}>{voice.name}</span>
-                  <span className={styles.voiceMeta}>
-                    {voice.local && <span className={styles.badge}>On device</span>}
-                    {voice.id === voiceId && <CheckIcon size={16} />}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
+        <VoiceList
+          voices={voices}
+          preferredLang={preferredLang}
+          voiceId={voiceId}
+          onVoice={onVoice}
+          ready={voicesReady}
+        />
       </Field>
     </Sheet>
   );

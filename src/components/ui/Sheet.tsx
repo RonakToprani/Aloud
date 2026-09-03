@@ -19,6 +19,13 @@ export function Sheet({ open, title, onClose, children, tall }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
 
+  // Held in a ref so that a parent re-rendering — which happens on every
+  // keystroke in a sheet containing a text field — cannot re-run the effect
+  // below. Re-running it would move focus back to the panel and dismiss the
+  // keyboard on iOS after every letter typed.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     restoreTo.current = document.activeElement as HTMLElement | null;
@@ -28,7 +35,7 @@ export function Sheet({ open, title, onClose, children, tall }: Props) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        closeRef.current();
         return;
       }
       if (event.key !== "Tab" || !panel) return;
@@ -55,7 +62,7 @@ export function Sheet({ open, title, onClose, children, tall }: Props) {
       document.body.style.overflow = previousOverflow;
       restoreTo.current?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const onScrimClick = useCallback(
     (event: React.MouseEvent) => {

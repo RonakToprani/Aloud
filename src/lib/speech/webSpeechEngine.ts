@@ -6,6 +6,7 @@ import type {
   SpeechEngine,
   SpeechError,
   UtteranceHandle,
+  VoiceTier,
 } from "./engine";
 
 /** Apple ships a pile of joke voices that must never outrank a real one. */
@@ -18,16 +19,56 @@ const NOVELTY = new Set(
   ].map((n) => n.toLowerCase()),
 );
 
-function scoreVoice(v: SpeechSynthesisVoice): number {
+/**
+ * Apple puts the quality tier in the voiceURI, not the name — a Premium voice
+ * and one of the robotic Eloquence voices can both be called "Reed". Reading
+ * the URI is the only reliable way to tell them apart, and getting this wrong
+ * is why a phone full of downloaded Premium voices still offers junk first.
+ */
+export function classifyVoice(v: Pick<SpeechSynthesisVoice, "voiceURI" | "name">): VoiceTier {
+  const uri = (v.voiceURI || "").toLowerCase();
   const name = v.name.toLowerCase();
-  let score = 0.5;
-  if (/premium|enhanced|neural|natural/.test(name)) score += 0.3;
-  if (/^google/.test(name)) score += 0.18;
-  if (/siri/.test(name)) score += 0.2;
-  if (v.localService) score += 0.08;
-  if (/compact|eloquence/.test(name)) score -= 0.3;
-  const bare = name.replace(/\s*\(.*\)\s*/g, "").trim();
-  if (NOVELTY.has(bare)) score -= 0.6;
+
+  // Eloquence is the 1980s-sounding synthesiser iOS ships dozens of.
+  if (uri.startsWith("com.apple.eloquence.")) return "novelty";
+  // The old macOS joke voices.
+  if (uri.startsWith("com.apple.speech.synthesis.voice.")) {
+    const bare = name.replace(/\s*\(.*\)\s*/g, "").trim();
+    return NOVELTY.has(bare) ? "novelty" : "compact";
+  }
+  // Siri's own voices are reserved for the system; they are listed on some
+  // versions but cannot actually be used by a web page.
+  if (uri.includes("ttsbundle.siri") || /^siri/.test(name)) return "siri";
+
+  if (uri.includes(".premium.") || /premium/.test(name)) return "premium";
+  if (uri.includes(".enhanced.") || /enhanced|neural|natural/.test(name)) return "enhanced";
+  if (uri.includes(".compact.")) return "compact";
+
+  // Only trust the name once the URI has told us nothing: the novelty list
+  // collides with real people's names, and a Premium "Reed" is not a joke
+  // voice merely because an Eloquence one shares its name.
+  if (NOVELTY.has(name.replace(/\s*\(.*\)\s*/g, "").trim())) return "novelty";
+  return "standard";
+}
+
+const TIER_SCORE: Record<VoiceTier, number> = {
+  premium: 1,
+  enhanced: 0.85,
+  standard: 0.6,
+  compact: 0.35,
+  siri: 0.1,
+  novelty: 0.02,
+};
+
+function scoreVoice(v: SpeechSynthesisVoice, tier: VoiceTier): number {
+  let score = TIER_SCORE[tier];
+  // Chrome's Google voices and Edge's online naturals are a cut above the
+  // generic "standard" bucket they otherwise land in.
+  if (tier === "standard") {
+    if (/^google/.test(v.name.toLowerCase())) score += 0.15;
+    if (/online \(natural\)/.test(v.name.toLowerCase())) score += 0.2;
+  }
+  if (v.localService && tier !== "novelty") score += 0.03;
   return Math.max(0, Math.min(1, score));
 }
 
@@ -35,14 +76,24 @@ function voiceId(v: SpeechSynthesisVoice): string {
   return v.voiceURI || `${v.name}|${v.lang}`;
 }
 
+/** Strip Apple's parenthetical suffixes so the tier badge carries that job. */
+function displayName(v: SpeechSynthesisVoice, tier: VoiceTier): string {
+  if (tier === "premium" || tier === "enhanced") {
+    return v.name.replace(/\s*\((?:premium|enhanced)\)\s*$/i, "").trim() || v.name;
+  }
+  return v.name;
+}
+
 function toEngineVoice(v: SpeechSynthesisVoice): EngineVoice {
+  const tier = classifyVoice(v);
   return {
     id: voiceId(v),
-    name: v.name,
+    name: displayName(v, tier),
     lang: v.lang,
     local: v.localService,
     isDefault: v.default,
-    quality: scoreVoice(v),
+    tier,
+    quality: scoreVoice(v, tier),
   };
 }
 

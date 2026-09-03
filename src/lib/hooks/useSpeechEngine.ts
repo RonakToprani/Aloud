@@ -17,6 +17,8 @@ export interface SpeechEngineState {
   /** False until getVoices() has resolved (or timed out). */
   ready: boolean;
   supported: boolean;
+  /** The language the picker should lead with. */
+  preferredLang: string;
 }
 
 function languageLabel(lang: string): string {
@@ -28,10 +30,32 @@ function languageLabel(lang: string): string {
   }
 }
 
+/** Tiers not worth offering unless the reader asks to see everything: the
+ *  Eloquence robots iOS ships dozens of, and Siri voices the system reserves
+ *  for itself and will not actually speak from a web page. */
+const HIDDEN_TIERS = new Set(["novelty", "siri"]);
+
+export interface VoiceFilter {
+  /** Show every language and every tier, junk included. */
+  showAll?: boolean;
+  preferredLang: string;
+}
+
+export function isUsefulVoice(voice: EngineVoice, { showAll, preferredLang }: VoiceFilter): boolean {
+  if (showAll) return true;
+  if (HIDDEN_TIERS.has(voice.tier)) return false;
+  const base = preferredLang.split("-")[0].toLowerCase();
+  return voice.lang.toLowerCase().startsWith(base);
+}
+
 /** Higher-quality local voices first, then everything else alphabetically. */
-function groupVoices(voices: EngineVoice[], preferredLang: string): VoiceGroup[] {
+export function groupVoices(
+  voices: EngineVoice[],
+  preferredLang: string,
+  showAll = false,
+): VoiceGroup[] {
   const byLang = new Map<string, EngineVoice[]>();
-  for (const voice of voices) {
+  for (const voice of voices.filter((v) => isUsefulVoice(v, { showAll, preferredLang }))) {
     const key = voice.lang || "und";
     const list = byLang.get(key) ?? [];
     list.push(voice);
@@ -79,15 +103,18 @@ export function useSpeechEngine(): SpeechEngineState {
     typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
   const groups = useMemo(() => groupVoices(voices, preferredLang), [voices, preferredLang]);
 
-  return { engine, voices, groups, ready, supported: engine.supported };
+  return { engine, voices, groups, ready, supported: engine.supported, preferredLang };
 }
 
 /** The voice we pick when the reader hasn't chosen one. */
 export function pickDefaultVoice(voices: EngineVoice[], preferredLang: string): EngineVoice | null {
   if (!voices.length) return null;
   const base = preferredLang.split("-")[0].toLowerCase();
-  const candidates = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
-  const pool = candidates.length ? candidates : voices;
+  // Never open a book in a joke voice, and never in one the system won't speak.
+  const usable = voices.filter((v) => !HIDDEN_TIERS.has(v.tier));
+  const pool0 = usable.length ? usable : voices;
+  const candidates = pool0.filter((v) => v.lang.toLowerCase().startsWith(base));
+  const pool = candidates.length ? candidates : pool0;
   return [...pool].sort(
     (a, b) =>
       b.quality - a.quality ||

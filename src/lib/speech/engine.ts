@@ -5,6 +5,22 @@
  *  set `providesWordTimings = true`; nothing above this file knows which one
  *  is in play. */
 
+/** How good a voice actually sounds, which on Apple platforms can only be
+ *  read from the voiceURI rather than the name. */
+export type VoiceTier =
+  /** Apple Premium — the best on-device voices, downloaded by the reader. */
+  | "premium"
+  /** Apple Enhanced, or a vendor's neural/natural voice. */
+  | "enhanced"
+  /** Everything else usable: Google, Microsoft, most desktop voices. */
+  | "standard"
+  /** Apple's small always-installed voices. Intelligible, obviously synthetic. */
+  | "compact"
+  /** Listed on some systems but reserved for Siri; unusable from a web page. */
+  | "siri"
+  /** Eloquence and the old joke voices. Never a sensible default. */
+  | "novelty";
+
 export interface EngineVoice {
   /** Stable across reloads on the same device. */
   id: string;
@@ -13,7 +29,8 @@ export interface EngineVoice {
   /** Installed on the device rather than streamed from a server. */
   local: boolean;
   isDefault: boolean;
-  /** 0..1 heuristic used only for ordering the picker. */
+  tier: VoiceTier;
+  /** 0..1, derived from the tier; used only for ordering the picker. */
   quality: number;
 }
 
