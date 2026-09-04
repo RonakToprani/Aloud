@@ -1,0 +1,15 @@
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--mark, 30px) * 0.3);
+  line-height: 1;
+}
+
+.word {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  /* Optically matched to the mark's height rather than set in a fixed size. */
+  font-size: calc(var(--mark, 30px) * 1.03);
+  letter-spacing: -0.015em;
+  color: var(--ink-strong);
+}

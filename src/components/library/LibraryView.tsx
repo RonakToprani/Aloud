@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sheet } from "@/components/ui/Sheet";
 import { PlusIcon, TrashIcon } from "@/components/ui/Icons";
+import { Logo } from "@/components/ui/Logo";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
 import {
   describeImportError,
@@ -182,7 +183,9 @@ export function LibraryView() {
       onDrop={onDrop}
     >
       <header className={styles.head}>
-        <h1 className={styles.wordmark}>Aloud</h1>
+        <h1 className={styles.wordmark}>
+          <Logo size={28} />
+        </h1>
         <div className={styles.headActions}>
           <button
             type="button"

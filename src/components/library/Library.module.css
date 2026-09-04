@@ -20,11 +20,10 @@
 
 .wordmark {
   margin: 0;
-  font-family: var(--font-serif);
-  font-size: 25px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--ink-strong);
+  display: flex;
+  align-items: center;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .headActions {
