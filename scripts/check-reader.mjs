@@ -9,7 +9,7 @@ import { mkdir } from 'node:fs/promises';
 
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
-const OUT = process.argv[2] || '/Volumes/DevSSD/work/shots/merged';
+const OUT = process.argv[2] || 'screenshots/reader';
 
 await mkdir(OUT, { recursive: true });
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox'] });

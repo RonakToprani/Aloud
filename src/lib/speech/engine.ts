@@ -30,6 +30,10 @@ export interface EngineVoice {
   local: boolean;
   isDefault: boolean;
   tier: VoiceTier;
+  /** What the provider says this voice is built for, when it says anything —
+   *  Microsoft tags its cloud voices "Novel", "News", "Conversation" and so
+   *  on. Empty for on-device voices, which carry no such metadata. */
+  traits?: string[];
   /** 0..1, derived from the tier; used only for ordering the picker. */
   quality: number;
 }

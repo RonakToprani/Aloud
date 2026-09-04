@@ -10,7 +10,7 @@ import { mkdir } from 'node:fs/promises';
 
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
-const OUT = process.argv[2] || '/Volumes/DevSSD/work/shots/library';
+const OUT = process.argv[2] || 'screenshots/library';
 
 const BOOKS = [
   { title: 'Mrs Dalloway', author: 'Virginia Woolf', words: 63000, chapters: 8, cover: ['#2f3b52', '#6d7f9c'], progress: 0.34 },

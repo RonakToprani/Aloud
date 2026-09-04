@@ -44,16 +44,27 @@ function displayName(voice: EdgeVoice): string {
   return bare.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
 }
 
+/** Voices Microsoft tags for long-form narration. In a reading app these are
+ *  the ones actually worth reaching for, so they also rank above the
+ *  conversational voices rather than merely being labelled. */
+const NARRATION_TRAITS = new Set(["novel", "audiobook", "narration"]);
+
+function isNarrationVoice(traits: string[]): boolean {
+  return traits.some((trait) => NARRATION_TRAITS.has(trait.toLowerCase()));
+}
+
 function toEngineVoice(voice: EdgeVoice): EngineVoice {
   const name = displayName(voice);
+  const traits = voice.VoiceTag?.ContentCategories ?? [];
   return {
+    traits,
     id: `edge:${voice.ShortName}`,
     name,
     lang: voice.Locale,
     local: false,
     isDefault: false,
     tier: "enhanced",
-    quality: 0.85,
+    quality: isNarrationVoice(traits) ? 0.95 : 0.85,
   };
 }
 

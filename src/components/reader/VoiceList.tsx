@@ -14,6 +14,17 @@ interface Props {
   ready: boolean;
 }
 
+/** Provider metadata worth surfacing. A voice Microsoft built for narrating
+ *  novels is the one to pick in a reading app, so it says so; everything else
+ *  says nothing rather than inventing a label. */
+const NARRATION_TRAITS = new Set(["novel", "audiobook", "narration"]);
+
+function traitLabel(voice: EngineVoice): string | null {
+  const traits = voice.traits ?? [];
+  if (traits.some((t) => NARRATION_TRAITS.has(t.toLowerCase()))) return "Recommended";
+  return null;
+}
+
 /** Only tiers worth calling out; "standard" needs no badge. */
 const TIER_LABEL: Partial<Record<VoiceTier, string>> = {
   premium: "Premium",
@@ -54,6 +65,10 @@ export function VoiceList({ voices, preferredLang, voiceId, onVoice, ready }: Pr
     if (ALWAYS.includes(tier)) return true;
     return (tierCounts[tier] ?? 0) <= visible.length / 2;
   };
+
+  // "Recommended" earns its place only while it still singles voices out.
+  const recommendedCount = visible.filter((voice) => traitLabel(voice)).length;
+  const showTrait = recommendedCount > 0 && recommendedCount <= visible.length / 2;
 
   const best = groups[0]?.voices[0];
   const noGoodVoices = ready && voices.length > 0 && (!best || best.quality < 0.5);
@@ -98,6 +113,11 @@ export function VoiceList({ voices, preferredLang, voiceId, onVoice, ready }: Pr
               >
                 <span className={styles.voiceName}>{voice.name}</span>
                 <span className={styles.voiceMeta}>
+                  {showTrait && traitLabel(voice) && (
+                    <span className={styles.badge} data-tier="premium">
+                      {traitLabel(voice)}
+                    </span>
+                  )}
                   {distinguishes(voice.tier) && (
                     <span className={styles.badge} data-tier={voice.tier}>
                       {TIER_LABEL[voice.tier]}
