@@ -1,10 +1,9 @@
 /**
  * Measures the silence between sentences when a cloud voice is selected.
  *
- * The engine creates its <audio> elements with `new Audio()`, so they are
- * never in the document and their media events cannot be observed from the
- * outside. Wrapping the constructor before the app boots is the only way to
- * get at them.
+ * Cloud audio is scheduled through Web Audio, so the timing lives on the
+ * buffer sources rather than on any element. Wrapping createBufferSource
+ * before the app boots is the only way to observe it.
  *
  *   node scripts/measure-gap.mjs [voiceId]
  */
@@ -24,16 +23,23 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 page.on('pageerror', (e) => console.error('page error:', e.message));
 
+// Cloud audio plays through Web Audio, so the buffer sources are what carry
+// the timing; the only <audio> element left is the silent session holder.
 await page.evaluateOnNewDocument(() => {
   window.__timeline = [];
-  const Orig = window.Audio;
-  window.Audio = function (...args) {
-    const el = new Orig(...args);
-    el.addEventListener('play', () => window.__timeline.push({ t: performance.now(), type: 'play', src: el.currentSrc.slice(-8) }));
-    el.addEventListener('ended', () => window.__timeline.push({ t: performance.now(), type: 'ended', src: el.currentSrc.slice(-8) }));
-    return el;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  const originalCreate = Ctx.prototype.createBufferSource;
+  Ctx.prototype.createBufferSource = function createBufferSource() {
+    const node = originalCreate.call(this);
+    const originalStart = node.start.bind(node);
+    node.start = (...args) => {
+      window.__timeline.push({ t: performance.now(), type: 'play' });
+      return originalStart(...args);
+    };
+    node.addEventListener('ended', () => window.__timeline.push({ t: performance.now(), type: 'ended' }));
+    return node;
   };
-  window.Audio.prototype = Orig.prototype;
 });
 
 await page.setViewport({ width: 390, height: 844 });
@@ -76,7 +82,7 @@ await new Promise((r) => setTimeout(r, 30000));
 const timeline = await page.evaluate(() => window.__timeline);
 await browser.close();
 
-// Real sentence audio only: the silent unlock clips play at t≈0 and never end.
+// Pair each natural end with the start that follows it.
 const gaps = [];
 let lastEnded = null;
 for (const event of timeline) {

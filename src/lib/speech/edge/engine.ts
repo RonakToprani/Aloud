@@ -57,17 +57,27 @@ function toEngineVoice(voice: EdgeVoice): EngineVoice {
   };
 }
 
-function base64ToBlob(base64: string, mime: string): Blob {
+function base64ToBytes(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
+  return bytes.buffer;
 }
 
 interface SynthesisResult {
   words: RawTimedWord[];
-  objectUrl: string;
+  /** Raw MP3; decoding happens once, ahead of time, into an AudioBuffer. */
+  bytes: ArrayBuffer;
 }
+
+/** A sentence decoded and able to start on the next audio tick. */
+interface DecodedSentence {
+  buffer: AudioBuffer;
+  words: RawTimedWord[];
+}
+
+/** How many decoded sentences to keep for a skip backwards. */
+const DECODED_CACHE_LIMIT = 8;
 
 class EdgeApiError extends Error {}
 
@@ -90,8 +100,7 @@ async function requestSynthesis(
     throw new EdgeApiError("The cloud voice service refused the request.");
   }
   const payload = (await response.json()) as { audio: string; words: RawTimedWord[] };
-  const blob = base64ToBlob(payload.audio, "audio/mpeg");
-  return { words: payload.words, objectUrl: URL.createObjectURL(blob) };
+  return { words: payload.words, bytes: base64ToBytes(payload.audio) };
 }
 
 function edgeShortName(voiceId: string | null | undefined): string | null {
@@ -102,62 +111,105 @@ function cacheKey(voice: string, text: string, rate: number): string {
   return `${voice} ${rate} ${text}`;
 }
 
-/** How long to wait for an element to buffer before playing it anyway. */
-const PRIME_TIMEOUT_MS = 4000;
-/** HTMLMediaElement.HAVE_CURRENT_DATA */
-const HAVE_CURRENT_DATA = 2;
+/** Silence long enough to loop, used only to hold the audio session open. */
+function silentWavUrl(seconds = 2): string {
+  const rate = 8000;
+  const frames = rate * seconds;
+  const size = 44 + frames;
+  const buffer = new ArrayBuffer(size);
+  const view = new DataView(buffer);
+  const ascii = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, size - 8, true);
+  ascii(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  ascii(36, "data");
+  view.setUint32(40, frames, true);
+  new Uint8Array(buffer, 44).fill(128); // 8-bit silence sits at the midpoint
+  return URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
+}
 
 /**
- * One sentence, decoded into an <audio> element and ready to play.
+ * Where cloud audio comes out.
  *
- * Downloading a sentence early is only half the job: assigning `src` and
- * playing costs a load and a decode, and doing that at the sentence boundary
- * is what turned the round trip into an audible gap. A primed track has
- * already paid both, so starting it is just play().
+ * Playback moved off <audio> elements because iOS Safari ignores `preload`: an
+ * element does not fetch or decode until play() is called, so priming one
+ * ahead of time — which measured beautifully in desktop Chrome — bought
+ * nothing at all on an iPhone, and every sentence still paid its decode at the
+ * boundary. decodeAudioData does the decode when asked, into memory, and a
+ * buffer source then starts on the next audio tick.
+ *
+ * A silent looping element runs alongside purely to hold the media session, so
+ * lock-screen controls and background playback keep working.
  */
-interface PrimedTrack {
-  key: string;
-  el: HTMLAudioElement;
-  objectUrl: string;
-  words: RawTimedWord[];
-  /** Resolves once the element can play without stalling. */
-  ready: Promise<void>;
-}
+class CloudAudioOutput {
+  private ctx: AudioContext | null = null;
+  private sessionHolder: HTMLAudioElement | null = null;
+  private silenceUrl: string | null = null;
 
-function primeElement(el: HTMLAudioElement, key: string, result: SynthesisResult): PrimedTrack {
-  el.src = result.objectUrl;
-  el.load();
-
-  const ready = new Promise<void>((resolve) => {
-    if (el.readyState >= HAVE_CURRENT_DATA) {
-      resolve();
-      return;
-    }
-    const done = () => {
-      el.removeEventListener("canplaythrough", done);
-      el.removeEventListener("loadeddata", done);
-      clearTimeout(timer);
-      resolve();
-    };
-    // The blob is already local, so this normally settles on the first tick;
-    // the timeout only covers a decode that never reports readiness.
-    const timer = setTimeout(done, PRIME_TIMEOUT_MS);
-    el.addEventListener("canplaythrough", done, { once: true });
-    el.addEventListener("loadeddata", done, { once: true });
-  });
-
-  return { key, el, objectUrl: result.objectUrl, words: result.words, ready };
-}
-
-function discardTrack(track: PrimedTrack): void {
-  try {
-    track.el.pause();
-    track.el.removeAttribute("src");
-    track.el.load();
-  } catch {
-    /* the element is being torn down anyway */
+  get context(): AudioContext | null {
+    return this.ensureContext();
   }
-  URL.revokeObjectURL(track.objectUrl);
+
+  /** Creating a context needs no gesture, and decodeAudioData works while it
+   *  is still suspended — which is what lets a sentence be decoded before the
+   *  reader has pressed play. */
+  private ensureContext(): AudioContext | null {
+    if (this.ctx) return this.ctx;
+    if (typeof window === "undefined") return null;
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    try {
+      this.ctx = new Ctor();
+    } catch {
+      return null;
+    }
+    return this.ctx;
+  }
+
+  /** Must run inside a user gesture. */
+  activate(): void {
+    const ctx = this.ensureContext();
+    void ctx?.resume().catch(() => {});
+    if (!this.sessionHolder) {
+      this.silenceUrl = silentWavUrl();
+      const el = new Audio(this.silenceUrl);
+      el.loop = true;
+      this.sessionHolder = el;
+    }
+    void this.sessionHolder.play().catch(() => {});
+  }
+
+  setSessionActive(active: boolean): void {
+    if (!this.sessionHolder) return;
+    if (active) void this.sessionHolder.play().catch(() => {});
+    else this.sessionHolder.pause();
+  }
+
+  async decode(bytes: ArrayBuffer): Promise<AudioBuffer> {
+    const ctx = this.ensureContext();
+    if (!ctx) throw new Error("This browser has no Web Audio support.");
+    return ctx.decodeAudioData(bytes);
+  }
+
+  shutdown(): void {
+    this.sessionHolder?.pause();
+    this.sessionHolder = null;
+    if (this.silenceUrl) URL.revokeObjectURL(this.silenceUrl);
+    this.silenceUrl = null;
+    void this.ctx?.close().catch(() => {});
+    this.ctx = null;
+  }
 }
 
 class EdgeUtterance implements UtteranceHandle {
@@ -167,54 +219,95 @@ class EdgeUtterance implements UtteranceHandle {
   private rafId: number | null = null;
   private words: RawTimedWord[] = [];
   private nextWordIndex = 0;
-  private track: PrimedTrack | null = null;
+
+  private buffer: AudioBuffer | null = null;
+  private source: AudioBufferSourceNode | null = null;
+  /** Context time that the buffer's zero offset corresponds to. */
+  private originTime = 0;
+  private pausedAt: number | null = null;
+  private stoppingDeliberately = false;
 
   constructor(
     private readonly callbacks: SpeakCallbacks,
-    /** Hands back a track that is already decoded, fetching one if needed. */
-    private readonly acquire: (signal: AbortSignal) => Promise<PrimedTrack>,
-    private readonly release: (el: HTMLAudioElement) => void,
+    private readonly output: CloudAudioOutput,
+    private readonly acquire: (signal: AbortSignal) => Promise<DecodedSentence>,
   ) {}
 
   get done(): boolean {
     return this.finished || this.cancelled;
   }
 
+  get playing(): boolean {
+    return !!this.source && this.pausedAt === null && !this.done;
+  }
+
+  get paused(): boolean {
+    return this.pausedAt !== null && !this.done;
+  }
+
   async start(): Promise<void> {
     try {
-      const track = await this.acquire(this.controller.signal);
-      if (this.cancelled) {
-        discardTrack(track);
+      const sentence = await this.acquire(this.controller.signal);
+      if (this.cancelled) return;
+      this.buffer = sentence.buffer;
+      this.words = sentence.words;
+
+      const ctx = this.output.context;
+      if (!ctx) {
+        this.fail("synthesis-failed", "This browser can't play cloud audio.");
         return;
       }
-      this.track = track;
-      this.words = track.words;
-      const el = track.el;
-
-      el.onplay = () => {
-        if (this.cancelled) return;
-        this.callbacks.onStart?.();
-        this.scheduleBoundaries();
-      };
-      el.onended = () => this.finish();
-      el.onerror = () => {
-        if (this.cancelled || this.finished) return;
-        this.finished = true;
-        this.stopBoundaries();
-        this.callbacks.onError?.({
-          kind: "synthesis-failed",
-          message: "Playback of the cloud voice failed.",
-        });
-      };
-
-      await track.ready;
+      // Resumed here as well as on activate: iOS suspends the context whenever
+      // the page loses focus, and a suspended context plays nothing.
+      if (ctx.state === "suspended") await ctx.resume().catch(() => {});
       if (this.cancelled) return;
-      await el.play();
+
+      this.playFrom(0);
+      this.output.setSessionActive(true);
+      this.callbacks.onStart?.();
+      this.scheduleBoundaries();
     } catch (error) {
       if (this.cancelled) return;
       if (error instanceof DOMException && error.name === "AbortError") return;
       this.fail("synthesis-failed", "The cloud voice service didn't respond.");
     }
+  }
+
+  private playFrom(offsetSeconds: number): void {
+    const ctx = this.output.context;
+    if (!ctx || !this.buffer) return;
+    const source = ctx.createBufferSource();
+    source.buffer = this.buffer;
+    source.connect(ctx.destination);
+    source.onended = () => {
+      if (this.stoppingDeliberately) return;
+      this.finish();
+    };
+    source.start(0, offsetSeconds);
+    this.source = source;
+    this.originTime = ctx.currentTime - offsetSeconds;
+    this.pausedAt = null;
+  }
+
+  private stopSource(): void {
+    if (!this.source) return;
+    this.stoppingDeliberately = true;
+    try {
+      this.source.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.source.disconnect();
+    this.source = null;
+    this.stoppingDeliberately = false;
+  }
+
+  /** Seconds into the sentence. */
+  private elapsed(): number {
+    if (this.pausedAt !== null) return this.pausedAt;
+    const ctx = this.output.context;
+    if (!ctx) return 0;
+    return Math.max(0, ctx.currentTime - this.originTime);
   }
 
   private fail(kind: SpeechErrorKind, message: string): void {
@@ -228,19 +321,16 @@ class EdgeUtterance implements UtteranceHandle {
     if (this.cancelled || this.finished) return;
     this.finished = true;
     this.stopBoundaries();
-    // Free the element straight away so the sentence after next can be primed
-    // onto it while the next one plays.
-    if (this.track) this.release(this.track.el);
     this.callbacks.onEnd?.();
   }
 
-  /** Walks the word list against currentTime; boundary events have no native
-   *  equivalent on an <audio> element, so this is the only clock. */
+  /** Walks the word list against the audio clock; there is no native boundary
+   *  event, so this is the only timing source. */
   private scheduleBoundaries(): void {
     this.nextWordIndex = 0;
     const tick = () => {
-      if (this.cancelled || this.finished || !this.track) return;
-      const nowMs = this.track.el.currentTime * 1000;
+      if (this.cancelled || this.finished) return;
+      const nowMs = this.elapsed() * 1000;
       while (this.nextWordIndex < this.words.length && this.words[this.nextWordIndex].offsetMs <= nowMs) {
         const word = this.words[this.nextWordIndex];
         const event: BoundaryEvent = {
@@ -261,24 +351,21 @@ class EdgeUtterance implements UtteranceHandle {
     this.rafId = null;
   }
 
-  get element(): HTMLAudioElement | null {
-    return this.track?.el ?? null;
-  }
-
   pause(): void {
-    if (this.cancelled || this.finished) return;
-    try {
-      this.track?.el.pause();
-    } catch {
-      /* ignore */
-    }
+    if (this.cancelled || this.finished || this.pausedAt !== null) return;
+    // A buffer source cannot be paused, so remember the offset and stop it;
+    // resume starts a fresh source from there.
+    const at = this.elapsed();
+    this.stopSource();
+    this.pausedAt = at;
+    this.output.setSessionActive(false);
   }
 
   resume(): void {
-    if (this.cancelled || this.finished) return;
-    this.track?.el.play().catch(() => {
-      /* the player's own resume-verify timer will notice and re-speak */
-    });
+    if (this.cancelled || this.finished || this.pausedAt === null) return;
+    const offset = this.pausedAt;
+    this.output.setSessionActive(true);
+    this.playFrom(offset);
   }
 
   cancel(): void {
@@ -286,15 +373,7 @@ class EdgeUtterance implements UtteranceHandle {
     this.cancelled = true;
     this.controller.abort();
     this.stopBoundaries();
-    if (this.track) {
-      const el = this.track.el;
-      el.onplay = null;
-      el.onended = null;
-      el.onerror = null;
-      discardTrack(this.track);
-      this.release(el);
-      this.track = null;
-    }
+    this.stopSource();
   }
 }
 
@@ -307,7 +386,7 @@ export interface EdgeSpeechEngineOptions {
 interface PendingPrefetch {
   key: string;
   controller: AbortController;
-  promise: Promise<SynthesisResult>;
+  promise: Promise<DecodedSentence>;
 }
 
 /**
@@ -323,10 +402,9 @@ export class EdgeSpeechEngine implements SpeechEngine {
   private voices: EngineVoice[] = [];
   private readonly listeners = new Set<(voices: EngineVoice[]) => void>();
   private readyPromise: Promise<void> | null = null;
-  /** Two elements: one plays while the next sentence decodes onto the other. */
-  private pool: HTMLAudioElement[] = [];
-  private busy: HTMLAudioElement | null = null;
-  private primed: PrimedTrack | null = null;
+  private readonly output = new CloudAudioOutput();
+  /** Sentences already decoded and able to start on the next audio tick. */
+  private readonly decoded = new Map<string, DecodedSentence>();
   private current: EdgeUtterance | null = null;
   private pending: PendingPrefetch | null = null;
 
@@ -367,27 +445,19 @@ export class EdgeSpeechEngine implements SpeechEngine {
   }
 
   unlock(): void {
-    if (!this.supported || this.pool.length) return;
-    // Both elements have to be activated inside the gesture; an element that
-    // never played during a user interaction cannot be started programmatically
-    // later on iOS, and the whole point of the second one is that it starts
-    // without one.
-    this.pool = [new Audio(SILENT_WAV), new Audio(SILENT_WAV)];
-    for (const el of this.pool) {
-      el.preload = "auto";
-      el.play().catch(() => {});
+    if (!this.supported) return;
+    this.output.activate();
+  }
+
+  /** Decoded audio is a few hundred KB a sentence, so only a short tail of
+   *  already-heard sentences is worth keeping. */
+  private rememberDecoded(key: string, sentence: DecodedSentence): void {
+    this.decoded.set(key, sentence);
+    while (this.decoded.size > DECODED_CACHE_LIMIT) {
+      const oldest = this.decoded.keys().next().value;
+      if (oldest === undefined) break;
+      this.decoded.delete(oldest);
     }
-  }
-
-  private idleElement(): HTMLAudioElement {
-    if (!this.pool.length) this.unlock();
-    return this.pool.find((el) => el !== this.busy) ?? this.pool[0];
-  }
-
-  private releasePrimed(): void {
-    if (!this.primed) return;
-    discardTrack(this.primed);
-    this.primed = null;
   }
 
   /**
@@ -405,21 +475,21 @@ export class EdgeSpeechEngine implements SpeechEngine {
     this.clearPending();
 
     const controller = new AbortController();
-    const promise = requestSynthesis(options.text, shortName, options.rate, controller.signal);
+    // Decoding is the half that actually costs time at the sentence boundary,
+    // and it is the half an <audio> element refuses to do early on iOS. Doing
+    // it here leaves speak() with nothing to do but schedule the buffer.
+    const promise = requestSynthesis(options.text, shortName, options.rate, controller.signal).then(
+      async (result): Promise<DecodedSentence> => ({
+        buffer: await this.output.decode(result.bytes),
+        words: result.words,
+      }),
+    );
     this.pending = { key, controller, promise };
 
-    // Decoding is the half that actually costs time at the boundary, so the
-    // audio is loaded into the spare element as soon as the bytes land rather
-    // than being left as a blob for speak() to mount later.
     promise
-      .then((result) => {
-        if (this.pending?.key !== key) {
-          URL.revokeObjectURL(result.objectUrl);
-          return;
-        }
-        this.pending = null;
-        this.releasePrimed();
-        this.primed = primeElement(this.idleElement(), key, result);
+      .then((sentence) => {
+        if (this.pending?.key === key) this.pending = null;
+        this.rememberDecoded(key, sentence);
       })
       .catch(() => {
         // A failed prefetch just means speak() fetches it itself.
@@ -432,12 +502,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
     const stale = this.pending;
     this.pending = null;
     stale.controller.abort();
-    stale.promise.then((result) => URL.revokeObjectURL(result.objectUrl)).catch(() => {});
-  }
-
-  /** Whether the sentence about to be spoken is already decoded and waiting. */
-  private hasPrimed(key: string): boolean {
-    return this.primed?.key === key;
+    stale.promise.catch(() => {});
   }
 
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle {
@@ -450,37 +515,29 @@ export class EdgeSpeechEngine implements SpeechEngine {
       queueMicrotask(() => callbacks.onError?.(error));
       return { cancel() {}, done: true };
     }
-    if (!this.pool.length) this.unlock();
-
     const key = cacheKey(shortName, options.text, options.rate);
 
-    const acquire = async (signal: AbortSignal): Promise<PrimedTrack> => {
-      // The fast path: the sentence was primed while the previous one played,
-      // so there is nothing left to download, mount or decode.
-      if (this.hasPrimed(key)) {
-        const track = this.primed!;
-        this.primed = null;
-        this.busy = track.el;
-        return track;
-      }
+    const acquire = async (signal: AbortSignal): Promise<DecodedSentence> => {
+      // The fast path: decoded while the previous sentence was still playing,
+      // so there is nothing to download and nothing to decode.
+      const ready = this.decoded.get(key);
+      if (ready) return ready;
 
-      // Otherwise take an in-flight prefetch if it matches, or fetch now.
-      let result: SynthesisResult;
       if (this.pending?.key === key) {
         const inFlight = this.pending;
         this.pending = null;
-        result = await inFlight.promise;
-      } else {
-        result = await requestSynthesis(options.text, shortName, options.rate, signal);
+        return inFlight.promise;
       }
-      const el = this.idleElement();
-      this.busy = el;
-      return primeElement(el, key, result);
+      const result = await requestSynthesis(options.text, shortName, options.rate, signal);
+      const sentence: DecodedSentence = {
+        buffer: await this.output.decode(result.bytes),
+        words: result.words,
+      };
+      this.rememberDecoded(key, sentence);
+      return sentence;
     };
 
-    const utterance = new EdgeUtterance(callbacks, acquire, (el) => {
-      if (this.busy === el) this.busy = null;
-    });
+    const utterance = new EdgeUtterance(callbacks, this.output, acquire);
     this.current = utterance;
     void utterance.start();
     return utterance;
@@ -508,21 +565,18 @@ export class EdgeSpeechEngine implements SpeechEngine {
   }
 
   isSpeaking(): boolean {
-    const el = this.current?.element;
-    return !!this.current && !this.current.done && !!el && !el.paused;
+    return !!this.current?.playing;
   }
 
   isPaused(): boolean {
-    const el = this.current?.element;
-    return !!this.current && !this.current.done && !!el && el.paused;
+    return !!this.current?.paused;
   }
 
   destroy(): void {
     this.cancel();
     this.clearPending();
-    this.releasePrimed();
+    this.decoded.clear();
     this.listeners.clear();
-    this.pool = [];
-    this.busy = null;
+    this.output.shutdown();
   }
 }
