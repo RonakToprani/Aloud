@@ -157,6 +157,8 @@ class CloudAudioOutput {
   /** When available, the graph feeds the element instead of the speakers
    *  directly, so iOS sees ordinary media playback. */
   private streamDest: MediaStreamAudioDestinationNode | null = null;
+  /** Keeps the stream fed between sentences — see startSilentFeed. */
+  private silentFeed: AudioBufferSourceNode | null = null;
   private readonly onVisible = () => {
     if (document.visibilityState === "visible") void this.resumeContext();
   };
@@ -225,7 +227,12 @@ class CloudAudioOutput {
           this.streamDest = null;
         }
       }
-      if (!this.streamDest) {
+      if (this.streamDest) {
+        // A MediaStream element is live: `loop` means nothing to it, and the
+        // stream must never be allowed to run dry.
+        el.loop = false;
+        this.startSilentFeed(ctx, this.streamDest);
+      } else {
         // Fall back to silence that merely holds the session; the graph then
         // plays out of the context directly.
         this.silenceUrl = silentWavUrl();
@@ -248,6 +255,27 @@ class CloudAudioOutput {
     void this.sessionHolder.play().catch(() => {});
   }
 
+  /**
+   * A MediaStream that stops receiving samples does not fall silent — the
+   * pipeline holds or repeats whatever it had last, which is heard as the end
+   * of the last word stuttering after a pause. Feeding it a looping buffer of
+   * silence for the life of the context keeps it running dry-free.
+   */
+  private startSilentFeed(ctx: AudioContext, dest: AudioNode): void {
+    if (this.silentFeed) return;
+    try {
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.5), ctx.sampleRate);
+      const feed = ctx.createBufferSource();
+      feed.buffer = buffer; // already all zeroes
+      feed.loop = true;
+      feed.connect(dest);
+      feed.start();
+      this.silentFeed = feed;
+    } catch {
+      /* without it the stutter returns, but playback still works */
+    }
+  }
+
   /** iOS suspends the context whenever the page loses focus, and a suspended
    *  context schedules sources that never make a sound. */
   async resumeContext(): Promise<void> {
@@ -262,6 +290,13 @@ class CloudAudioOutput {
   }
 
   shutdown(): void {
+    try {
+      this.silentFeed?.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.silentFeed?.disconnect();
+    this.silentFeed = null;
     this.streamDest?.disconnect();
     this.streamDest = null;
     if (typeof document !== "undefined") {
@@ -286,6 +321,7 @@ class EdgeUtterance implements UtteranceHandle {
 
   private buffer: AudioBuffer | null = null;
   private source: AudioBufferSourceNode | null = null;
+  private gain: GainNode | null = null;
   /** Context time that the buffer's zero offset corresponds to. */
   private originTime = 0;
   private pausedAt: number | null = null;
@@ -345,30 +381,60 @@ class EdgeUtterance implements UtteranceHandle {
     if (!ctx || !this.buffer) return;
     const source = ctx.createBufferSource();
     source.buffer = this.buffer;
-    source.connect(this.output.destination ?? ctx.destination);
+    // A gain stage purely so playback can be cut without a click: stopping a
+    // buffer source mid-waveform is a step discontinuity, and it is audible.
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(1, ctx.currentTime);
+    source.connect(gain);
+    gain.connect(this.output.destination ?? ctx.destination);
     source.onended = () => this.finish();
     source.start(0, offsetSeconds);
     this.source = source;
+    this.gain = gain;
     this.originTime = ctx.currentTime - offsetSeconds;
     this.pausedAt = null;
   }
 
+  private static readonly FADE_SECONDS = 0.025;
+
   private stopSource(): void {
     const source = this.source;
+    const gain = this.gain;
     if (!source) return;
     this.source = null;
+    this.gain = null;
     // Detach the handler before stopping rather than guarding it with a flag:
     // 'ended' is delivered asynchronously, so any flag set around stop() is
     // already back to its old value by the time the event arrives. That made
     // every pause look like a sentence finishing naturally, and the player
     // dutifully advanced and carried on playing.
     source.onended = null;
+
+    const ctx = this.output.context;
+    const fade = EdgeUtterance.FADE_SECONDS;
     try {
-      source.stop();
+      if (ctx && gain) {
+        const now = ctx.currentTime;
+        gain.gain.setValueAtTime(gain.gain.value, now);
+        gain.gain.linearRampToValueAtTime(0, now + fade);
+        source.stop(now + fade + 0.01);
+      } else {
+        source.stop();
+      }
     } catch {
       /* already stopped */
     }
-    source.disconnect();
+    // Disconnect only once the fade has actually played out.
+    const cleanup = () => {
+      try {
+        source.disconnect();
+        gain?.disconnect();
+      } catch {
+        /* already detached */
+      }
+    };
+    if (ctx && gain) setTimeout(cleanup, (fade + 0.05) * 1000);
+    else cleanup();
   }
 
   /** Seconds into the sentence. */

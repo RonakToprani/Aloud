@@ -35,6 +35,15 @@ await page.evaluateOnNewDocument(() => {
     };
   }, 10);
   window.__sourceStarts = 0;
+  window.__loopingSources = 0;
+  window.__audioEls = [];
+  const OrigAudio = window.Audio;
+  window.Audio = function AudioShim(...args) {
+    const el = new OrigAudio(...args);
+    window.__audioEls.push(el);
+    return el;
+  };
+  window.Audio.prototype = OrigAudio.prototype;
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (Ctx) {
     const originalCreate = Ctx.prototype.createBufferSource;
@@ -42,7 +51,10 @@ await page.evaluateOnNewDocument(() => {
       const node = originalCreate.call(this);
       const originalStart = node.start.bind(node);
       node.start = (...args) => {
-        window.__sourceStarts += 1;
+        // A looping source is the silence that keeps the stream fed; only
+        // one-shot sources are sentences.
+        if (node.loop) window.__loopingSources += 1;
+        else window.__sourceStarts += 1;
         return originalStart(...args);
       };
       return node;
@@ -151,7 +163,11 @@ const transport = await page.evaluate(async () => {
   const stateWhilePaused = navigator.mediaSession.playbackState;
   window.__handlers.play?.();
   await new Promise((r) => setTimeout(r, 2500));
+  const el = (window.__audioEls || []).find((a) => a.srcObject) || (window.__audioEls || [])[0];
   return {
+    streamBacked: Boolean(el && el.srcObject),
+    elementStillPlaying: Boolean(el && !el.paused),
+    silenceFeeding: (window.__loopingSources ?? 0) > 0,
     hadHandlers: Boolean(window.__handlers.play && window.__handlers.pause),
     stateWhilePaused,
     stateAfterPlay: navigator.mediaSession.playbackState,
@@ -195,11 +211,17 @@ console.log('  state while paused  :', transport.stateWhilePaused);
 console.log('  state after play    :', transport.stateAfterPlay);
 console.log('  audio resumed       :', transport.startedAgain);
 console.log('  notification kept   :', transport.metadataStillThere);
+console.log('  element carries graph:', transport.streamBacked);
+console.log('  element plays through pause:', transport.elementStillPlaying);
+console.log('  stream fed with silence:', transport.silenceFeeding);
 
 if (!transport.hadHandlers) failures.push('no media session handlers were registered');
 if (transport.stateWhilePaused !== 'paused') failures.push(`playbackState should be paused, got ${transport.stateWhilePaused}`);
 if (!transport.startedAgain) failures.push('pressing play on the notification did not restart audio');
 if (!transport.metadataStillThere) failures.push('the notification lost its metadata after a pause');
+if (!transport.streamBacked) failures.push('audio is not routed through the media element');
+if (!transport.elementStillPlaying) failures.push('the element stopped, which drops the iOS audio session');
+if (!transport.silenceFeeding) failures.push('nothing is feeding the stream — the last buffer will stutter');
 
 console.log(failures.length ? '\nFAIL\n  - ' + failures.join('\n  - ') : '\nPASS');
 process.exit(failures.length ? 1 : 0);
