@@ -47,13 +47,16 @@
     opacity var(--dur-ui) var(--ease-soft);
 }
 
+/* The one filled action on the page. --segment sits at the same lightness as
+   --raised in the light and sepia themes, so a tinted button there is
+   invisible against a card. */
 .primaryButton {
-  background: var(--segment);
-  color: var(--ui);
+  background: var(--accent-strong);
+  color: var(--on-accent);
 }
 
 .primaryButton:hover:not(:disabled) {
-  background: var(--raised);
+  background: var(--accent);
 }
 
 .ghostButton {
@@ -71,128 +74,228 @@
   cursor: default;
 }
 
-/* ---------- Shelf ---------- */
+/* ---------- Section headings ---------- */
 
-.shelf {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.sectionLabel {
+  margin: 0 0 14px;
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
 }
 
-.item {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-  border-radius: 16px;
-  transition: background-color var(--dur-ui) var(--ease-soft);
+/* ---------- Continue reading ---------- */
+
+.continue {
+  margin-bottom: 8px;
 }
 
-.item:hover {
-  background: var(--inset);
-}
-
-.itemLink {
-  flex: 1;
-  min-width: 0;
+.continueCard {
   display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "title title"
-    "meta meta"
-    "bar bar"
-    "label label";
-  gap: 5px;
-  padding: 18px;
+  grid-template-columns: 96px 1fr;
+  gap: 18px;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--raised);
+  border: 1px solid var(--hairline-soft);
   text-decoration: none;
   color: inherit;
+  transition: background-color var(--dur-ui) var(--ease-soft), transform var(--dur-ui) var(--ease-soft);
 }
 
-.itemTitle {
-  grid-area: title;
+.continueCard:hover {
+  background: var(--segment);
+}
+
+.continueCover {
+  width: 96px;
+}
+
+.continueBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.continueTitle {
   font-family: var(--font-serif);
-  font-size: 18px;
-  line-height: 1.35;
+  font-size: 19px;
+  line-height: 1.3;
   color: var(--ink-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.itemMeta {
-  grid-area: meta;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.continueAuthor {
+  margin-top: 3px;
   font-size: 12px;
   color: var(--ui-muted);
 }
 
-.itemAuthor::after {
-  content: "·";
-  margin-left: 8px;
-  color: var(--ui-faint);
+.continueWhere {
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--ui-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.itemProgress {
-  grid-area: bar;
-  margin-top: 7px;
+.continueBar {
+  margin-top: auto;
   height: 2px;
   border-radius: 2px;
   background: var(--track);
   overflow: hidden;
 }
 
-.itemProgressFill {
+.continueBarFill {
   display: block;
   height: 100%;
   background: var(--accent);
   transform-origin: left center;
-  opacity: 0.85;
 }
 
-.itemProgressLabel {
-  grid-area: label;
+.continueFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.resume {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 15px;
+  border-radius: 11px;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color var(--dur-ui) var(--ease-soft);
+}
+
+.continueCard:hover .resume {
+  background: var(--accent);
+}
+
+.continueLeft {
+  font-size: 11.5px;
+  color: var(--ui-muted);
+}
+
+/* ---------- Shelf ---------- */
+
+.shelf {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 26px 18px;
+}
+
+.tile {
+  position: relative;
+  min-width: 0;
+}
+
+.tileLink {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.tileLink > :global(*):first-child {
+  transition: transform var(--dur-ui) var(--ease-soft);
+}
+
+.tileLink:hover > :global(*):first-child {
+  transform: translateY(-3px);
+}
+
+.tileTitle {
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  line-height: 1.35;
+  color: var(--ink-strong);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tileMeta {
   font-size: 11px;
   color: var(--ui-muted);
+  margin-top: -4px;
+}
+
+.tileBar {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.tileBarFill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
 }
 
 .remove {
-  flex: none;
-  width: 48px;
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  border-radius: 16px;
-  color: var(--ui-faint);
+  border-radius: 50%;
+  color: oklch(0.97 0 0);
+  background: oklch(0.2 0.01 250 / 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   opacity: 0;
-  transition: color var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft);
+  transition: opacity var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
 }
 
-.item:hover .remove,
+.tile:hover .remove,
 .remove:focus-visible {
   opacity: 1;
-  color: var(--ui-muted);
 }
 
 .remove:hover {
-  color: var(--danger);
+  background: var(--danger);
 }
 
+/* Without hover there is nothing to reveal the control, so keep it visible
+   but quiet. */
 @media (hover: none) {
   .remove {
-    opacity: 1;
-    color: var(--ui-muted);
+    opacity: 0.85;
   }
 }
 
 /* ---------- Empty, progress, errors ---------- */
 
+.emptyMark {
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+
 .empty {
-  margin: 12vh auto 0;
+  margin: 11vh auto 0;
   max-width: 38ch;
   text-align: center;
   display: flex;

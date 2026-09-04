@@ -1,0 +1,103 @@
+.cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--inset);
+  /* A cover is an object on a shelf: a hairline and a soft drop, nothing more. */
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.16),
+    0 8px 20px oklch(0 0 0 / 0.14);
+  isolation: isolate;
+}
+
+/* A faint inner edge stops pale covers dissolving into a light canvas. */
+.cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px oklch(0.5 0 0 / 0.16);
+  pointer-events: none;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ---------- Drawn cover, for books with no art of their own ---------- */
+
+.drawn {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 12% 11% 12% 15%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  color: oklch(0.95 0.012 var(--h));
+  /* Chroma stays very low on purpose. A hue per title tells books apart on the
+     shelf, but at full saturation six of them turn the library into a paint
+     chart — these should read as cloth bindings, not playlist art. */
+  background:
+    radial-gradient(115% 70% at 22% 4%, oklch(0.365 0.032 var(--h)) 0%, transparent 58%),
+    linear-gradient(168deg, oklch(0.315 0.026 var(--h)) 0%, oklch(0.245 0.02 var(--h)) 100%);
+}
+
+/* A spine, so a drawn cover still reads as a physical book. */
+.drawn::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7%;
+  background: linear-gradient(
+    to right,
+    oklch(0.2 0.018 var(--h)) 0%,
+    oklch(0.28 0.022 var(--h)) 62%,
+    oklch(0.22 0.018 var(--h)) 100%
+  );
+}
+
+.drawnRule {
+  width: 26%;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.5;
+  margin-bottom: 0.35em;
+  flex: none;
+}
+
+.drawnTitle {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: clamp(11px, 13cqw, 19px);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.drawnAuthor {
+  font-size: clamp(8px, 7cqw, 11px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+  margin-top: auto;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Container queries let one cover component size its own type at any width. */
+.cover {
+  container-type: inline-size;
+}

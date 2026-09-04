@@ -14,6 +14,7 @@ import {
 } from "@/lib/library/import";
 import { deleteBook, listBooks, putBook, getBookBody } from "@/lib/storage/db";
 import { clearPosition, loadPosition } from "@/lib/storage/prefs";
+import { BookCover } from "./BookCover";
 import type { BookBody, BookMeta } from "@/lib/types";
 import styles from "./Library.module.css";
 
@@ -27,12 +28,34 @@ const STAGE_LABEL: Record<ImportProgress["stage"], string> = {
   saving: "Saving to this device",
 };
 
-function progressOf(meta: BookMeta): number {
+interface Reading {
+  fraction: number;
+  updatedAt: number;
+  chapterIndex: number;
+  minutesLeft: number;
+}
+
+function readingOf(meta: BookMeta): Reading {
   const position = loadPosition(meta.id);
-  if (!position || !meta.sentenceCount) return 0;
+  if (!position || !meta.sentenceCount) {
+    return { fraction: 0, updatedAt: 0, chapterIndex: 0, minutesLeft: meta.wordCount / 165 };
+  }
   let before = 0;
   for (let i = 0; i < position.chapterIndex; i++) before += meta.chapterSentenceCounts[i] ?? 0;
-  return Math.min(1, (before + position.sentenceIndex) / meta.sentenceCount);
+  const fraction = Math.min(1, (before + position.sentenceIndex) / meta.sentenceCount);
+  return {
+    fraction,
+    updatedAt: position.updatedAt ?? 0,
+    chapterIndex: position.chapterIndex,
+    minutesLeft: (meta.wordCount * (1 - fraction)) / 165,
+  };
+}
+
+function formatLeft(minutes: number): string {
+  if (minutes < 1) return "almost done";
+  if (minutes < 60) return `${Math.round(minutes)} min left`;
+  const hours = minutes / 60;
+  return hours < 10 ? `${hours.toFixed(1).replace(/\.0$/, "")} hr left` : `${Math.round(hours)} hr left`;
 }
 
 function readingTime(meta: BookMeta): string {
@@ -173,6 +196,14 @@ export function LibraryView() {
 
   const busy = progress !== null;
 
+  // The most recently opened book that is neither untouched nor finished gets
+  // pulled out of the shelf and given the top of the page.
+  const entries = (books ?? []).map((meta) => ({ meta, reading: readingOf(meta) }));
+  const continuing = entries
+    .filter((e) => e.reading.updatedAt > 0 && e.reading.fraction > 0 && e.reading.fraction <= 0.995)
+    .sort((a, b) => b.reading.updatedAt - a.reading.updatedAt)[0];
+  const shelf = continuing ? entries.filter((e) => e.meta.id !== continuing.meta.id) : entries;
+
   return (
     <main
       className={styles.page}
@@ -251,6 +282,7 @@ export function LibraryView() {
         <div className={styles.placeholder} aria-hidden="true" />
       ) : books.length === 0 ? (
         <div className={styles.empty}>
+          <Logo size={44} markOnly className={styles.emptyMark} />
           <p className={styles.emptyTitle}>Nothing on the shelf yet</p>
           <p className={styles.emptyBody}>
             Add an EPUB and Aloud will read it to you, lighting up each word as it goes. Plain text
@@ -267,47 +299,80 @@ export function LibraryView() {
           <p className={styles.emptyHint}>Or drop a file anywhere on this page.</p>
         </div>
       ) : (
-        <ul className={styles.shelf}>
-          {books.map((meta) => {
-            const fraction = progressOf(meta);
-            return (
-              <li key={meta.id} className={styles.item}>
-                <Link href={`/read/${meta.id}`} className={styles.itemLink}>
-                  <span className={styles.itemTitle}>{meta.title}</span>
-                  <span className={styles.itemMeta}>
-                    {meta.author && <span className={styles.itemAuthor}>{meta.author}</span>}
-                    <span>
-                      {meta.chapterTitles.length === 1
-                        ? readingTime(meta)
-                        : `${meta.chapterTitles.length} chapters · ${readingTime(meta)}`}
-                    </span>
+        <>
+          {continuing && (
+            <section className={styles.continue} aria-labelledby="continue-heading">
+              <h2 id="continue-heading" className={styles.sectionLabel}>
+                Continue reading
+              </h2>
+              <Link href={`/read/${continuing.meta.id}`} className={styles.continueCard}>
+                <BookCover meta={continuing.meta} size="lg" className={styles.continueCover} />
+                <span className={styles.continueBody}>
+                  <span className={styles.continueTitle}>{continuing.meta.title}</span>
+                  {continuing.meta.author && (
+                    <span className={styles.continueAuthor}>{continuing.meta.author}</span>
+                  )}
+                  <span className={styles.continueWhere}>
+                    {continuing.meta.chapterTitles.length > 1
+                      ? continuing.meta.chapterTitles[continuing.reading.chapterIndex]
+                      : formatLeft(continuing.reading.minutesLeft)}
                   </span>
-                  <span className={styles.itemProgress}>
+                  <span className={styles.continueBar}>
                     <span
-                      className={styles.itemProgressFill}
-                      style={{ transform: `scaleX(${fraction})` }}
+                      className={styles.continueBarFill}
+                      style={{ transform: `scaleX(${continuing.reading.fraction})` }}
                     />
                   </span>
-                  <span className={styles.itemProgressLabel}>
-                    {fraction > 0.995
-                      ? "Finished"
-                      : fraction > 0
-                        ? `${Math.round(fraction * 100)}% read`
-                        : "Not started"}
+                  <span className={styles.continueFoot}>
+                    <span className={styles.resume}>Resume</span>
+                    <span className={styles.continueLeft}>
+                      {formatLeft(continuing.reading.minutesLeft)}
+                    </span>
                   </span>
-                </Link>
-                <button
-                  type="button"
-                  className={styles.remove}
-                  onClick={() => void onDelete(meta)}
-                  aria-label={`Remove ${meta.title}`}
-                >
-                  <TrashIcon />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                </span>
+              </Link>
+            </section>
+          )}
+
+          <section aria-labelledby="shelf-heading">
+            <h2 id="shelf-heading" className={styles.sectionLabel}>
+              {continuing ? "Everything else" : "Your books"}
+            </h2>
+            <ul className={styles.shelf}>
+              {shelf.map(({ meta, reading }) => (
+                <li key={meta.id} className={styles.tile}>
+                  <Link href={`/read/${meta.id}`} className={styles.tileLink}>
+                    <BookCover meta={meta} />
+                    <span className={styles.tileTitle}>{meta.title}</span>
+                    <span className={styles.tileMeta}>
+                      {reading.fraction > 0.995
+                        ? "Finished"
+                        : reading.fraction > 0
+                          ? `${Math.round(reading.fraction * 100)}%`
+                          : formatLeft(reading.minutesLeft)}
+                    </span>
+                    {reading.fraction > 0 && reading.fraction <= 0.995 && (
+                      <span className={styles.tileBar}>
+                        <span
+                          className={styles.tileBarFill}
+                          style={{ transform: `scaleX(${reading.fraction})` }}
+                        />
+                      </span>
+                    )}
+                  </Link>
+                  <button
+                    type="button"
+                    className={styles.remove}
+                    onClick={() => void onDelete(meta)}
+                    aria-label={`Remove ${meta.title}`}
+                  >
+                    <TrashIcon size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </>
       )}
 
       <Sheet open={pasteOpen} title="Paste text" onClose={() => setPasteOpen(false)}>
