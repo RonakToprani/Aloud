@@ -31,10 +31,21 @@ await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
 await page.goto(BASE, { waitUntil: 'networkidle0' });
 
 await page.evaluate(async (books) => {
+  // Create the stores here rather than waiting for the app to do it. Opening
+  // the database first — at any version — makes it exist without them, and the
+  // app's own open then sees a current version and never runs its upgrade.
   const db = await new Promise((res, rej) => {
-    const r = indexedDB.open('aloud', 1);
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
+    const request = indexedDB.open('aloud', 1);
+    request.onupgradeneeded = () => {
+      const d = request.result;
+      if (!d.objectStoreNames.contains('books')) d.createObjectStore('books', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('bodies')) d.createObjectStore('bodies', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('bookmarks')) {
+        d.createObjectStore('bookmarks', { keyPath: 'id' }).createIndex('bookId', 'bookId', { unique: false });
+      }
+    };
+    request.onsuccess = () => res(request.result);
+    request.onerror = () => rej(request.error);
   });
 
   async function makeCover([from, to]) {

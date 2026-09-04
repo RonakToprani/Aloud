@@ -52,6 +52,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
 
   const playerRef = useRef<Player | null>(null);
@@ -195,6 +196,18 @@ export function ReaderView({ bookId }: { bookId: string }) {
       document.removeEventListener("visibilitychange", persist);
     };
   }, [bookId]);
+
+  // The lock screen shows this, so it outlives any one sentence.
+  useEffect(() => {
+    const cover = book?.meta.cover;
+    if (!cover) {
+      setCoverUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(cover);
+    setCoverUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [book?.meta.cover]);
 
   const playing = playerState.status === "playing";
   useWakeLock(playing);
@@ -400,13 +413,23 @@ export function ReaderView({ bookId }: { bookId: string }) {
     return set;
   }, [bookmarks, playerState.chapterIndex]);
 
+  // Whole-book figures: a lock screen counting out the current sentence would
+  // be useless, so this reports the book the way an audiobook would.
+  const bookDurationSeconds = meta ? (meta.wordCount / (BASE_WPM * settings.rate)) * 60 : 0;
+  const bookPositionSeconds =
+    minutesLeft === null ? 0 : Math.max(0, bookDurationSeconds - minutesLeft * 60);
+
   useMediaSession(
     meta
       ? {
-          title: meta.chapterTitles[playerState.chapterIndex] ?? meta.title,
+          title: meta.title,
           artist: meta.author ?? "Aloud",
-          album: meta.title,
+          album: meta.chapterTitles[playerState.chapterIndex] ?? "",
+          artwork: coverUrl,
           playing,
+          durationSeconds: bookDurationSeconds,
+          positionSeconds: bookPositionSeconds,
+          playbackRate: settings.rate,
           onPlay: () => playerRef.current?.play(),
           onPause: () => playerRef.current?.pause(),
           onNext,
