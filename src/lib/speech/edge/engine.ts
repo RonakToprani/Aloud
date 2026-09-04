@@ -154,6 +154,15 @@ class CloudAudioOutput {
   private ctx: AudioContext | null = null;
   private sessionHolder: HTMLAudioElement | null = null;
   private silenceUrl: string | null = null;
+  private readonly onVisible = () => {
+    if (document.visibilityState === "visible") void this.resumeContext();
+  };
+
+  constructor() {
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.onVisible);
+    }
+  }
 
   get context(): AudioContext | null {
     return this.ensureContext();
@@ -190,10 +199,23 @@ class CloudAudioOutput {
     void this.sessionHolder.play().catch(() => {});
   }
 
-  setSessionActive(active: boolean): void {
+  /**
+   * Holds the audio session for as long as a book is open — including while
+   * paused. Letting the silent element stop tears down the iOS now-playing
+   * entry, and its play button then has nothing left to talk to, which looks
+   * from the lock screen exactly like playback refusing to start.
+   * Paused-ness is communicated through mediaSession.playbackState instead.
+   */
+  keepSessionAlive(): void {
     if (!this.sessionHolder) return;
-    if (active) void this.sessionHolder.play().catch(() => {});
-    else this.sessionHolder.pause();
+    void this.sessionHolder.play().catch(() => {});
+  }
+
+  /** iOS suspends the context whenever the page loses focus, and a suspended
+   *  context schedules sources that never make a sound. */
+  async resumeContext(): Promise<void> {
+    const ctx = this.ensureContext();
+    if (ctx && ctx.state !== "running") await ctx.resume().catch(() => {});
   }
 
   async decode(bytes: ArrayBuffer): Promise<AudioBuffer> {
@@ -203,6 +225,9 @@ class CloudAudioOutput {
   }
 
   shutdown(): void {
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisible);
+    }
     this.sessionHolder?.pause();
     this.sessionHolder = null;
     if (this.silenceUrl) URL.revokeObjectURL(this.silenceUrl);
@@ -225,7 +250,6 @@ class EdgeUtterance implements UtteranceHandle {
   /** Context time that the buffer's zero offset corresponds to. */
   private originTime = 0;
   private pausedAt: number | null = null;
-  private stoppingDeliberately = false;
 
   constructor(
     private readonly callbacks: SpeakCallbacks,
@@ -238,7 +262,11 @@ class EdgeUtterance implements UtteranceHandle {
   }
 
   get playing(): boolean {
-    return !!this.source && this.pausedAt === null && !this.done;
+    if (!this.source || this.pausedAt !== null || this.done) return false;
+    // A source attached to a suspended context is not playing, however much
+    // it looks like it is; reporting otherwise hides the failure from the
+    // player's own recovery path.
+    return this.output.context?.state === "running";
   }
 
   get paused(): boolean {
@@ -263,7 +291,7 @@ class EdgeUtterance implements UtteranceHandle {
       if (this.cancelled) return;
 
       this.playFrom(0);
-      this.output.setSessionActive(true);
+      this.output.keepSessionAlive();
       this.callbacks.onStart?.();
       this.scheduleBoundaries();
     } catch (error) {
@@ -279,10 +307,7 @@ class EdgeUtterance implements UtteranceHandle {
     const source = ctx.createBufferSource();
     source.buffer = this.buffer;
     source.connect(ctx.destination);
-    source.onended = () => {
-      if (this.stoppingDeliberately) return;
-      this.finish();
-    };
+    source.onended = () => this.finish();
     source.start(0, offsetSeconds);
     this.source = source;
     this.originTime = ctx.currentTime - offsetSeconds;
@@ -290,16 +315,21 @@ class EdgeUtterance implements UtteranceHandle {
   }
 
   private stopSource(): void {
-    if (!this.source) return;
-    this.stoppingDeliberately = true;
+    const source = this.source;
+    if (!source) return;
+    this.source = null;
+    // Detach the handler before stopping rather than guarding it with a flag:
+    // 'ended' is delivered asynchronously, so any flag set around stop() is
+    // already back to its old value by the time the event arrives. That made
+    // every pause look like a sentence finishing naturally, and the player
+    // dutifully advanced and carried on playing.
+    source.onended = null;
     try {
-      this.source.stop();
+      source.stop();
     } catch {
       /* already stopped */
     }
-    this.source.disconnect();
-    this.source = null;
-    this.stoppingDeliberately = false;
+    source.disconnect();
   }
 
   /** Seconds into the sentence. */
@@ -358,14 +388,17 @@ class EdgeUtterance implements UtteranceHandle {
     const at = this.elapsed();
     this.stopSource();
     this.pausedAt = at;
-    this.output.setSessionActive(false);
+    // The session holder deliberately keeps running here.
   }
 
   resume(): void {
     if (this.cancelled || this.finished || this.pausedAt === null) return;
     const offset = this.pausedAt;
-    this.output.setSessionActive(true);
-    this.playFrom(offset);
+    this.output.keepSessionAlive();
+    void this.output.resumeContext().then(() => {
+      if (this.cancelled || this.finished || this.pausedAt === null) return;
+      this.playFrom(offset);
+    });
   }
 
   cancel(): void {

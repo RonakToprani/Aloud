@@ -19,9 +19,35 @@ const failures = [];
 page.on('pageerror', (e) => failures.push(`page error: ${e.message}`));
 page.on('console', (m) => { if (m.type() === 'error') failures.push(`console: ${m.text().slice(0, 300)}`); });
 
-// Record what the page hands to setPositionState; it cannot be read back.
+// Capture the transport handlers so the lock-screen buttons can actually be
+// pressed from here; there is no way to read them back off mediaSession.
+// Also record what the page hands to setPositionState, for the same reason.
 await page.evaluateOnNewDocument(() => {
+  window.__handlers = {};
   window.__position = null;
+  const armHandlers = setInterval(() => {
+    if (!navigator.mediaSession?.setActionHandler) return;
+    clearInterval(armHandlers);
+    const original = navigator.mediaSession.setActionHandler.bind(navigator.mediaSession);
+    navigator.mediaSession.setActionHandler = (action, handler) => {
+      window.__handlers[action] = handler;
+      return original(action, handler);
+    };
+  }, 10);
+  window.__sourceStarts = 0;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (Ctx) {
+    const originalCreate = Ctx.prototype.createBufferSource;
+    Ctx.prototype.createBufferSource = function createBufferSource() {
+      const node = originalCreate.call(this);
+      const originalStart = node.start.bind(node);
+      node.start = (...args) => {
+        window.__sourceStarts += 1;
+        return originalStart(...args);
+      };
+      return node;
+    };
+  }
   const wait = setInterval(() => {
     if (!navigator.mediaSession?.setPositionState) return;
     clearInterval(wait);
@@ -82,7 +108,10 @@ await page.evaluate(async () => {
     chapters: ['The Window', 'Time Passes', 'The Lighthouse'].map((title, i) => ({
       id: `c${i}`,
       title,
-      blocks: [{ kind: 'p', text: 'Mrs. Dalloway said she would buy the flowers herself. For Lucy had her work cut out for her.' }],
+      blocks: Array.from({ length: 12 }, () => ({
+        kind: 'p',
+        text: 'Mrs. Dalloway said she would buy the flowers herself, for Lucy had her work cut out for her, and the doors would be taken off their hinges before the morning was over.',
+      })),
     })),
   });
   await new Promise((res) => { tx.oncomplete = res; });
@@ -113,6 +142,24 @@ await new Promise((r) => setTimeout(r, 700));
 await page.evaluate(() => document.querySelector('button[aria-label="Play"]')?.click());
 await new Promise((r) => setTimeout(r, 4000));
 
+// Press pause and then play the way the lock screen would, and check that
+// audio actually starts again rather than the session quietly dying.
+const transport = await page.evaluate(async () => {
+  const sourcesBefore = window.__sourceStarts ?? 0;
+  window.__handlers.pause?.();
+  await new Promise((r) => setTimeout(r, 1200));
+  const stateWhilePaused = navigator.mediaSession.playbackState;
+  window.__handlers.play?.();
+  await new Promise((r) => setTimeout(r, 2500));
+  return {
+    hadHandlers: Boolean(window.__handlers.play && window.__handlers.pause),
+    stateWhilePaused,
+    stateAfterPlay: navigator.mediaSession.playbackState,
+    startedAgain: (window.__sourceStarts ?? 0) > sourcesBefore,
+    metadataStillThere: Boolean(navigator.mediaSession.metadata),
+  };
+});
+
 const result = await page.evaluate(() => {
   const m = navigator.mediaSession?.metadata;
   return {
@@ -141,6 +188,18 @@ if (result.title !== 'Mrs Dalloway') failures.push(`title should be the book, go
 if (result.artwork !== 'blob:') failures.push('artwork should be the book cover');
 if (!result.position) failures.push('no position state was published');
 else if (result.position.duration < 3600) failures.push(`duration looks like a sentence, not a book: ${result.position.duration}s`);
+
+console.log('\nlock-screen transport:');
+console.log('  handlers registered :', transport.hadHandlers);
+console.log('  state while paused  :', transport.stateWhilePaused);
+console.log('  state after play    :', transport.stateAfterPlay);
+console.log('  audio resumed       :', transport.startedAgain);
+console.log('  notification kept   :', transport.metadataStillThere);
+
+if (!transport.hadHandlers) failures.push('no media session handlers were registered');
+if (transport.stateWhilePaused !== 'paused') failures.push(`playbackState should be paused, got ${transport.stateWhilePaused}`);
+if (!transport.startedAgain) failures.push('pressing play on the notification did not restart audio');
+if (!transport.metadataStillThere) failures.push('the notification lost its metadata after a pause');
 
 console.log(failures.length ? '\nFAIL\n  - ' + failures.join('\n  - ') : '\nPASS');
 process.exit(failures.length ? 1 : 0);
