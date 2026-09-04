@@ -154,6 +154,9 @@ class CloudAudioOutput {
   private ctx: AudioContext | null = null;
   private sessionHolder: HTMLAudioElement | null = null;
   private silenceUrl: string | null = null;
+  /** When available, the graph feeds the element instead of the speakers
+   *  directly, so iOS sees ordinary media playback. */
+  private streamDest: MediaStreamAudioDestinationNode | null = null;
   private readonly onVisible = () => {
     if (document.visibilityState === "visible") void this.resumeContext();
   };
@@ -186,17 +189,51 @@ class CloudAudioOutput {
     return this.ctx;
   }
 
+  /**
+   * Where buffer sources should connect.
+   *
+   * Routing through a MediaStreamAudioDestinationNode attached to an <audio>
+   * element makes the element the thing iOS sees playing, which is the only
+   * kind of playback it allows to continue once the screen locks. A bare
+   * AudioContext is suspended on lock, which is why locking stopped playback
+   * and why the notification's play button had nothing it could restart.
+   */
+  get destination(): AudioNode | null {
+    const ctx = this.ensureContext();
+    if (!ctx) return null;
+    return this.streamDest ?? ctx.destination;
+  }
+
   /** Must run inside a user gesture. */
   activate(): void {
     const ctx = this.ensureContext();
     void ctx?.resume().catch(() => {});
-    if (!this.sessionHolder) {
-      this.silenceUrl = silentWavUrl();
-      const el = new Audio(this.silenceUrl);
+
+    if (!this.sessionHolder && ctx) {
+      const el = new Audio();
       el.loop = true;
+      const canStream =
+        typeof MediaStream !== "undefined" &&
+        "srcObject" in HTMLMediaElement.prototype &&
+        typeof ctx.createMediaStreamDestination === "function";
+
+      if (canStream) {
+        try {
+          this.streamDest = ctx.createMediaStreamDestination();
+          el.srcObject = this.streamDest.stream;
+        } catch {
+          this.streamDest = null;
+        }
+      }
+      if (!this.streamDest) {
+        // Fall back to silence that merely holds the session; the graph then
+        // plays out of the context directly.
+        this.silenceUrl = silentWavUrl();
+        el.src = this.silenceUrl;
+      }
       this.sessionHolder = el;
     }
-    void this.sessionHolder.play().catch(() => {});
+    void this.sessionHolder?.play().catch(() => {});
   }
 
   /**
@@ -225,6 +262,8 @@ class CloudAudioOutput {
   }
 
   shutdown(): void {
+    this.streamDest?.disconnect();
+    this.streamDest = null;
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.onVisible);
     }
@@ -306,7 +345,7 @@ class EdgeUtterance implements UtteranceHandle {
     if (!ctx || !this.buffer) return;
     const source = ctx.createBufferSource();
     source.buffer = this.buffer;
-    source.connect(ctx.destination);
+    source.connect(this.output.destination ?? ctx.destination);
     source.onended = () => this.finish();
     source.start(0, offsetSeconds);
     this.source = source;
