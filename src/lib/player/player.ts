@@ -100,6 +100,12 @@ export class Player {
       error: null,
     });
     this.options.onSentence?.(chapterIndex, bounded);
+
+    // Warm the sentence under the cursor while nothing is playing, so pressing
+    // play is instant instead of paying a network round trip in silence. While
+    // playing this is left alone: the lookahead slot belongs to the *next*
+    // sentence, and stealing it would reintroduce the gap it exists to remove.
+    if (this.state.status !== "playing") this.prefetchAt(chapterIndex, bounded);
   }
 
   /** Seek and play in one gesture — what tapping a word does. */
@@ -402,9 +408,23 @@ export class Player {
   private prefetchNext(chapterIndex: number, sentenceIndex: number): void {
     const next = this.resolveSentence(chapterIndex, sentenceIndex + 1, 1);
     if (!next) return;
-    const sentence = this.chapter(next.chapterIndex)?.sentences[next.sentenceIndex];
+    this.prefetchAt(next.chapterIndex, next.sentenceIndex);
+  }
+
+  /** Ask the engine to have this exact sentence ready to play. */
+  private prefetchAt(chapterIndex: number, sentenceIndex: number): void {
+    const target = this.resolveSentence(chapterIndex, sentenceIndex, 1);
+    if (!target) return;
+    const sentence = this.chapter(target.chapterIndex)?.sentences[target.sentenceIndex];
     if (!sentence?.speakable.trim()) return;
-    this.options.engine.prefetch?.({ text: sentence.speakable, voiceId: this.voiceId, rate: this.rate });
+    const startWord = Math.min(this.state.wordIndex, Math.max(0, sentence.words.length - 1));
+    const offset =
+      target.sentenceIndex === this.state.sentenceIndex && target.chapterIndex === this.state.chapterIndex
+        ? (sentence.words[startWord]?.start ?? 0)
+        : 0;
+    const text = sentence.speakable.slice(offset);
+    if (!text.trim()) return;
+    this.options.engine.prefetch?.({ text, voiceId: this.voiceId, rate: this.rate });
   }
 
   private advance(): void {

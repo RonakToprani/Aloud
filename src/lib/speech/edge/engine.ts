@@ -102,6 +102,64 @@ function cacheKey(voice: string, text: string, rate: number): string {
   return `${voice} ${rate} ${text}`;
 }
 
+/** How long to wait for an element to buffer before playing it anyway. */
+const PRIME_TIMEOUT_MS = 4000;
+/** HTMLMediaElement.HAVE_CURRENT_DATA */
+const HAVE_CURRENT_DATA = 2;
+
+/**
+ * One sentence, decoded into an <audio> element and ready to play.
+ *
+ * Downloading a sentence early is only half the job: assigning `src` and
+ * playing costs a load and a decode, and doing that at the sentence boundary
+ * is what turned the round trip into an audible gap. A primed track has
+ * already paid both, so starting it is just play().
+ */
+interface PrimedTrack {
+  key: string;
+  el: HTMLAudioElement;
+  objectUrl: string;
+  words: RawTimedWord[];
+  /** Resolves once the element can play without stalling. */
+  ready: Promise<void>;
+}
+
+function primeElement(el: HTMLAudioElement, key: string, result: SynthesisResult): PrimedTrack {
+  el.src = result.objectUrl;
+  el.load();
+
+  const ready = new Promise<void>((resolve) => {
+    if (el.readyState >= HAVE_CURRENT_DATA) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      el.removeEventListener("canplaythrough", done);
+      el.removeEventListener("loadeddata", done);
+      clearTimeout(timer);
+      resolve();
+    };
+    // The blob is already local, so this normally settles on the first tick;
+    // the timeout only covers a decode that never reports readiness.
+    const timer = setTimeout(done, PRIME_TIMEOUT_MS);
+    el.addEventListener("canplaythrough", done, { once: true });
+    el.addEventListener("loadeddata", done, { once: true });
+  });
+
+  return { key, el, objectUrl: result.objectUrl, words: result.words, ready };
+}
+
+function discardTrack(track: PrimedTrack): void {
+  try {
+    track.el.pause();
+    track.el.removeAttribute("src");
+    track.el.load();
+  } catch {
+    /* the element is being torn down anyway */
+  }
+  URL.revokeObjectURL(track.objectUrl);
+}
+
 class EdgeUtterance implements UtteranceHandle {
   private cancelled = false;
   private finished = false;
@@ -109,16 +167,13 @@ class EdgeUtterance implements UtteranceHandle {
   private rafId: number | null = null;
   private words: RawTimedWord[] = [];
   private nextWordIndex = 0;
-  private objectUrl: string | null = null;
+  private track: PrimedTrack | null = null;
 
   constructor(
-    private readonly options: SpeakOptions,
-    private readonly voiceShortName: string,
     private readonly callbacks: SpeakCallbacks,
-    private readonly audio: HTMLAudioElement,
-    /** Already in flight (or resolved) if the player prefetched this
-     *  sentence while the previous one was still playing. */
-    private readonly prefetched: Promise<SynthesisResult> | null,
+    /** Hands back a track that is already decoded, fetching one if needed. */
+    private readonly acquire: (signal: AbortSignal) => Promise<PrimedTrack>,
+    private readonly release: (el: HTMLAudioElement) => void,
   ) {}
 
   get done(): boolean {
@@ -127,29 +182,22 @@ class EdgeUtterance implements UtteranceHandle {
 
   async start(): Promise<void> {
     try {
-      // A prefetch that failed (aborted, or the request itself errored) falls
-      // through to a fresh fetch rather than failing the sentence outright —
-      // the lookahead is an optimization, not a dependency.
-      const result = this.prefetched
-        ? await this.prefetched.catch(() =>
-            requestSynthesis(this.options.text, this.voiceShortName, this.options.rate, this.controller.signal),
-          )
-        : await requestSynthesis(this.options.text, this.voiceShortName, this.options.rate, this.controller.signal);
-
+      const track = await this.acquire(this.controller.signal);
       if (this.cancelled) {
-        URL.revokeObjectURL(result.objectUrl);
+        discardTrack(track);
         return;
       }
-      this.words = result.words;
-      this.objectUrl = result.objectUrl;
+      this.track = track;
+      this.words = track.words;
+      const el = track.el;
 
-      this.audio.onplay = () => {
+      el.onplay = () => {
         if (this.cancelled) return;
         this.callbacks.onStart?.();
         this.scheduleBoundaries();
       };
-      this.audio.onended = () => this.finish();
-      this.audio.onerror = () => {
+      el.onended = () => this.finish();
+      el.onerror = () => {
         if (this.cancelled || this.finished) return;
         this.finished = true;
         this.stopBoundaries();
@@ -159,8 +207,9 @@ class EdgeUtterance implements UtteranceHandle {
         });
       };
 
-      this.audio.src = this.objectUrl;
-      await this.audio.play();
+      await track.ready;
+      if (this.cancelled) return;
+      await el.play();
     } catch (error) {
       if (this.cancelled) return;
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -179,16 +228,19 @@ class EdgeUtterance implements UtteranceHandle {
     if (this.cancelled || this.finished) return;
     this.finished = true;
     this.stopBoundaries();
+    // Free the element straight away so the sentence after next can be primed
+    // onto it while the next one plays.
+    if (this.track) this.release(this.track.el);
     this.callbacks.onEnd?.();
   }
 
-  /** Walks the word list against audio.currentTime; boundary events have no
-   *  native equivalent on an <audio> element, so this is the only clock. */
+  /** Walks the word list against currentTime; boundary events have no native
+   *  equivalent on an <audio> element, so this is the only clock. */
   private scheduleBoundaries(): void {
     this.nextWordIndex = 0;
     const tick = () => {
-      if (this.cancelled || this.finished) return;
-      const nowMs = this.audio.currentTime * 1000;
+      if (this.cancelled || this.finished || !this.track) return;
+      const nowMs = this.track.el.currentTime * 1000;
       while (this.nextWordIndex < this.words.length && this.words[this.nextWordIndex].offsetMs <= nowMs) {
         const word = this.words[this.nextWordIndex];
         const event: BoundaryEvent = {
@@ -209,10 +261,14 @@ class EdgeUtterance implements UtteranceHandle {
     this.rafId = null;
   }
 
+  get element(): HTMLAudioElement | null {
+    return this.track?.el ?? null;
+  }
+
   pause(): void {
     if (this.cancelled || this.finished) return;
     try {
-      this.audio.pause();
+      this.track?.el.pause();
     } catch {
       /* ignore */
     }
@@ -220,7 +276,7 @@ class EdgeUtterance implements UtteranceHandle {
 
   resume(): void {
     if (this.cancelled || this.finished) return;
-    this.audio.play().catch(() => {
+    this.track?.el.play().catch(() => {
       /* the player's own resume-verify timer will notice and re-speak */
     });
   }
@@ -230,17 +286,14 @@ class EdgeUtterance implements UtteranceHandle {
     this.cancelled = true;
     this.controller.abort();
     this.stopBoundaries();
-    this.audio.onplay = null;
-    this.audio.onended = null;
-    this.audio.onerror = null;
-    try {
-      this.audio.pause();
-    } catch {
-      /* ignore */
-    }
-    if (this.objectUrl) {
-      URL.revokeObjectURL(this.objectUrl);
-      this.objectUrl = null;
+    if (this.track) {
+      const el = this.track.el;
+      el.onplay = null;
+      el.onended = null;
+      el.onerror = null;
+      discardTrack(this.track);
+      this.release(el);
+      this.track = null;
     }
   }
 }
@@ -270,7 +323,10 @@ export class EdgeSpeechEngine implements SpeechEngine {
   private voices: EngineVoice[] = [];
   private readonly listeners = new Set<(voices: EngineVoice[]) => void>();
   private readyPromise: Promise<void> | null = null;
-  private audioEl: HTMLAudioElement | null = null;
+  /** Two elements: one plays while the next sentence decodes onto the other. */
+  private pool: HTMLAudioElement[] = [];
+  private busy: HTMLAudioElement | null = null;
+  private primed: PrimedTrack | null = null;
   private current: EdgeUtterance | null = null;
   private pending: PendingPrefetch | null = null;
 
@@ -311,10 +367,27 @@ export class EdgeSpeechEngine implements SpeechEngine {
   }
 
   unlock(): void {
-    if (!this.supported || this.audioEl) return;
-    const audio = new Audio(SILENT_WAV);
-    audio.play().catch(() => {});
-    this.audioEl = audio;
+    if (!this.supported || this.pool.length) return;
+    // Both elements have to be activated inside the gesture; an element that
+    // never played during a user interaction cannot be started programmatically
+    // later on iOS, and the whole point of the second one is that it starts
+    // without one.
+    this.pool = [new Audio(SILENT_WAV), new Audio(SILENT_WAV)];
+    for (const el of this.pool) {
+      el.preload = "auto";
+      el.play().catch(() => {});
+    }
+  }
+
+  private idleElement(): HTMLAudioElement {
+    if (!this.pool.length) this.unlock();
+    return this.pool.find((el) => el !== this.busy) ?? this.pool[0];
+  }
+
+  private releasePrimed(): void {
+    if (!this.primed) return;
+    discardTrack(this.primed);
+    this.primed = null;
   }
 
   /**
@@ -333,10 +406,25 @@ export class EdgeSpeechEngine implements SpeechEngine {
 
     const controller = new AbortController();
     const promise = requestSynthesis(options.text, shortName, options.rate, controller.signal);
-    // A prefetch that fails just means speak() falls back to fetching it
-    // itself later; nothing here is waiting on this promise directly.
-    promise.catch(() => {});
     this.pending = { key, controller, promise };
+
+    // Decoding is the half that actually costs time at the boundary, so the
+    // audio is loaded into the spare element as soon as the bytes land rather
+    // than being left as a blob for speak() to mount later.
+    promise
+      .then((result) => {
+        if (this.pending?.key !== key) {
+          URL.revokeObjectURL(result.objectUrl);
+          return;
+        }
+        this.pending = null;
+        this.releasePrimed();
+        this.primed = primeElement(this.idleElement(), key, result);
+      })
+      .catch(() => {
+        // A failed prefetch just means speak() fetches it itself.
+        if (this.pending?.key === key) this.pending = null;
+      });
   }
 
   private clearPending(): void {
@@ -345,6 +433,11 @@ export class EdgeSpeechEngine implements SpeechEngine {
     this.pending = null;
     stale.controller.abort();
     stale.promise.then((result) => URL.revokeObjectURL(result.objectUrl)).catch(() => {});
+  }
+
+  /** Whether the sentence about to be spoken is already decoded and waiting. */
+  private hasPrimed(key: string): boolean {
+    return this.primed?.key === key;
   }
 
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle {
@@ -357,16 +450,37 @@ export class EdgeSpeechEngine implements SpeechEngine {
       queueMicrotask(() => callbacks.onError?.(error));
       return { cancel() {}, done: true };
     }
-    if (!this.audioEl) this.unlock();
+    if (!this.pool.length) this.unlock();
 
-    let prefetched: Promise<SynthesisResult> | null = null;
     const key = cacheKey(shortName, options.text, options.rate);
-    if (this.pending?.key === key) {
-      prefetched = this.pending.promise;
-      this.pending = null;
-    }
 
-    const utterance = new EdgeUtterance(options, shortName, callbacks, this.audioEl!, prefetched);
+    const acquire = async (signal: AbortSignal): Promise<PrimedTrack> => {
+      // The fast path: the sentence was primed while the previous one played,
+      // so there is nothing left to download, mount or decode.
+      if (this.hasPrimed(key)) {
+        const track = this.primed!;
+        this.primed = null;
+        this.busy = track.el;
+        return track;
+      }
+
+      // Otherwise take an in-flight prefetch if it matches, or fetch now.
+      let result: SynthesisResult;
+      if (this.pending?.key === key) {
+        const inFlight = this.pending;
+        this.pending = null;
+        result = await inFlight.promise;
+      } else {
+        result = await requestSynthesis(options.text, shortName, options.rate, signal);
+      }
+      const el = this.idleElement();
+      this.busy = el;
+      return primeElement(el, key, result);
+    };
+
+    const utterance = new EdgeUtterance(callbacks, acquire, (el) => {
+      if (this.busy === el) this.busy = null;
+    });
     this.current = utterance;
     void utterance.start();
     return utterance;
@@ -394,17 +508,21 @@ export class EdgeSpeechEngine implements SpeechEngine {
   }
 
   isSpeaking(): boolean {
-    return !!this.current && !this.current.done && !!this.audioEl && !this.audioEl.paused;
+    const el = this.current?.element;
+    return !!this.current && !this.current.done && !!el && !el.paused;
   }
 
   isPaused(): boolean {
-    return !!this.current && !this.current.done && !!this.audioEl && this.audioEl.paused;
+    const el = this.current?.element;
+    return !!this.current && !this.current.done && !!el && el.paused;
   }
 
   destroy(): void {
     this.cancel();
     this.clearPending();
+    this.releasePrimed();
     this.listeners.clear();
-    this.audioEl = null;
+    this.pool = [];
+    this.busy = null;
   }
 }
