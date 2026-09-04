@@ -30,6 +30,105 @@ export class EdgeSynthesisError extends Error {
 const TIMEOUT_MS = 20_000;
 const OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
 
+/**
+ * Connection pooling: the reader prefetches the next sentence while the
+ * current one plays, so a connection this call opens is almost always sitting
+ * idle again well before the next sentence needs one. Reusing it skips the
+ * WebSocket handshake — the dominant cost we measured, roughly as long as
+ * synthesis itself — for every sentence after the first. Kept small since
+ * only one turn can run on a connection at a time; anything beyond what's
+ * idle just opens fresh, exactly like before pooling existed.
+ */
+const MAX_POOL_SIZE = 3;
+/** Long enough to outlast a slow sentence, short enough not to sit on a
+ *  connection the far end has quietly dropped. */
+const IDLE_TIMEOUT_MS = 45_000;
+
+const idlePool: WebSocket[] = [];
+const idleTimers = new Map<WebSocket, ReturnType<typeof setTimeout>>();
+
+function dropFromPool(socket: WebSocket): void {
+  const index = idlePool.indexOf(socket);
+  if (index !== -1) idlePool.splice(index, 1);
+  const timer = idleTimers.get(socket);
+  if (timer) {
+    clearTimeout(timer);
+    idleTimers.delete(socket);
+  }
+}
+
+function takeIdleConnection(): WebSocket | null {
+  while (idlePool.length) {
+    const socket = idlePool[idlePool.length - 1];
+    dropFromPool(socket);
+    if (socket.readyState === WebSocket.OPEN) return socket;
+    // Closed or closing while idle — keep looking rather than handing back
+    // a connection that can't actually take a turn.
+  }
+  return null;
+}
+
+function releaseConnection(socket: WebSocket): void {
+  if (socket.readyState !== WebSocket.OPEN) return;
+  if (idlePool.length >= MAX_POOL_SIZE) {
+    try {
+      socket.close();
+    } catch {
+      /* already closing */
+    }
+    return;
+  }
+  idlePool.push(socket);
+  socket.once("close", () => dropFromPool(socket));
+  idleTimers.set(
+    socket,
+    setTimeout(() => {
+      dropFromPool(socket);
+      try {
+        socket.close();
+      } catch {
+        /* already closing */
+      }
+    }, IDLE_TIMEOUT_MS),
+  );
+}
+
+function openConnection(): Promise<WebSocket> {
+  return new Promise<WebSocket>((resolve, reject) => {
+    const socket = new WebSocket(synthesisUrl(), { headers: edgeHeaders() });
+    const onOpen = () => {
+      detach();
+      resolve(socket);
+    };
+    const onError = (error: Error) => {
+      detach();
+      reject(new EdgeSynthesisError(error.message));
+    };
+    const onUnexpected = (_request: unknown, response: { statusCode?: number }) => {
+      detach();
+      reject(
+        new EdgeSynthesisError(
+          `The voice service refused the request (HTTP ${response.statusCode}).`,
+          response.statusCode,
+        ),
+      );
+    };
+    function detach(): void {
+      socket.off("open", onOpen);
+      socket.off("error", onError);
+      socket.off("unexpected-response", onUnexpected);
+    }
+    socket.on("open", onOpen);
+    socket.on("error", onError);
+    socket.on("unexpected-response", onUnexpected);
+  });
+}
+
+function acquireConnection(): Promise<WebSocket> {
+  const idle = takeIdleConnection();
+  return idle ? Promise.resolve(idle) : openConnection();
+}
+
 interface RawBoundary {
   Offset: number;
   Duration: number;
@@ -80,24 +179,66 @@ function mapToCharIndices(text: string, boundaries: RawBoundary[]): TimedWord[] 
   return words;
 }
 
+function sendTurn(socket: WebSocket, text: string, voice: string, rate: number): void {
+  const config = {
+    context: {
+      synthesis: {
+        audio: {
+          metadataoptions: { sentenceBoundaryEnabled: "false", wordBoundaryEnabled: "true" },
+          outputFormat: OUTPUT_FORMAT,
+        },
+      },
+    },
+  };
+  socket.send(
+    `X-Timestamp:${new Date().toISOString()}\r\n` +
+      `Content-Type:application/json; charset=utf-8\r\n` +
+      `Path:speech.config\r\n\r\n` +
+      JSON.stringify(config),
+  );
+
+  const ssml =
+    `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>` +
+    `<voice name='${voice}'>` +
+    `<prosody pitch='+0Hz' rate='${ratePercent(rate)}' volume='+0%'>${escapeSsml(text)}</prosody>` +
+    `</voice></speak>`;
+
+  socket.send(
+    `X-RequestId:${randomUUID().replace(/-/g, "")}\r\n` +
+      `Content-Type:application/ssml+xml\r\n` +
+      `X-Timestamp:${new Date().toISOString()}Z\r\n` +
+      `Path:ssml\r\n\r\n` +
+      ssml,
+  );
+}
+
 export function synthesize(text: string, voice: string, rate: number): Promise<Synthesis> {
   return new Promise<Synthesis>((resolve, reject) => {
-    const socket = new WebSocket(synthesisUrl(), { headers: edgeHeaders() });
+    let socket: WebSocket | undefined;
+    let settled = false;
     const chunks: Buffer[] = [];
     const boundaries: RawBoundary[] = [];
-    let settled = false;
 
     const finish = (error: Error | null, result?: Synthesis) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try {
-        socket.close();
-      } catch {
-        /* already closing */
+      if (socket) {
+        socket.off("error", onError);
+        socket.off("close", onClose);
+        socket.off("message", onMessage);
       }
-      if (error) reject(error);
-      else resolve(result!);
+      if (error) {
+        try {
+          socket?.close();
+        } catch {
+          /* already closing */
+        }
+        reject(error);
+      } else if (socket) {
+        releaseConnection(socket);
+        resolve(result!);
+      }
     };
 
     const timer = setTimeout(
@@ -105,53 +246,10 @@ export function synthesize(text: string, voice: string, rate: number): Promise<S
       TIMEOUT_MS,
     );
 
-    socket.on("unexpected-response", (_request, response) => {
-      finish(
-        new EdgeSynthesisError(
-          `The voice service refused the request (HTTP ${response.statusCode}).`,
-          response.statusCode,
-        ),
-      );
-    });
+    const onError = (error: Error) => finish(new EdgeSynthesisError(error.message));
+    const onClose = () => finish(new EdgeSynthesisError("The voice service closed the connection early."));
 
-    socket.on("error", (error: Error) => {
-      finish(new EdgeSynthesisError(error.message));
-    });
-
-    socket.on("open", () => {
-      const config = {
-        context: {
-          synthesis: {
-            audio: {
-              metadataoptions: { sentenceBoundaryEnabled: "false", wordBoundaryEnabled: "true" },
-              outputFormat: OUTPUT_FORMAT,
-            },
-          },
-        },
-      };
-      socket.send(
-        `X-Timestamp:${new Date().toISOString()}\r\n` +
-          `Content-Type:application/json; charset=utf-8\r\n` +
-          `Path:speech.config\r\n\r\n` +
-          JSON.stringify(config),
-      );
-
-      const ssml =
-        `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>` +
-        `<voice name='${voice}'>` +
-        `<prosody pitch='+0Hz' rate='${ratePercent(rate)}' volume='+0%'>${escapeSsml(text)}</prosody>` +
-        `</voice></speak>`;
-
-      socket.send(
-        `X-RequestId:${randomUUID().replace(/-/g, "")}\r\n` +
-          `Content-Type:application/ssml+xml\r\n` +
-          `X-Timestamp:${new Date().toISOString()}Z\r\n` +
-          `Path:ssml\r\n\r\n` +
-          ssml,
-      );
-    });
-
-    socket.on("message", (data: Buffer, isBinary: boolean) => {
+    const onMessage = (data: Buffer, isBinary: boolean) => {
       if (isBinary) {
         // Two-byte big-endian header length, then the header, then audio.
         if (data.length < 2) return;
@@ -182,10 +280,24 @@ export function synthesize(text: string, voice: string, rate: number): Promise<S
         }
         finish(null, { audio, words: mapToCharIndices(text, boundaries) });
       }
-    });
+    };
 
-    socket.on("close", () => {
-      finish(new EdgeSynthesisError("The voice service closed the connection early."));
-    });
+    acquireConnection()
+      .then((connection) => {
+        if (settled) {
+          // The timeout already fired while a fresh connection was still
+          // connecting; it's still good, just not needed for this call.
+          releaseConnection(connection);
+          return;
+        }
+        socket = connection;
+        socket.on("error", onError);
+        socket.on("close", onClose);
+        socket.on("message", onMessage);
+        sendTurn(socket, text, voice, rate);
+      })
+      .catch((error: unknown) => {
+        finish(error instanceof EdgeSynthesisError ? error : new EdgeSynthesisError(String(error)));
+      });
   });
 }
