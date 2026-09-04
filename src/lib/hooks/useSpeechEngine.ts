@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { EngineVoice, SpeechEngine } from "@/lib/speech/engine";
-import { getSpeechEngine } from "@/lib/speech/webSpeechEngine";
+import { getSpeechEngine } from "@/lib/speech/multiEngine";
 
 export interface VoiceGroup {
   lang: string;
