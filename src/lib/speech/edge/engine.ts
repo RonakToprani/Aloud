@@ -28,11 +28,24 @@ interface RawTimedWord {
   durationMs: number;
 }
 
+/**
+ * ShortNames are structured — "en-US-AriaNeural", "en-US-AvaMultilingualNeural"
+ * — so they make a far cleaner label than the FriendlyName, which repeats
+ * "Microsoft … Online (Natural)" on every row and wraps to two lines in the
+ * picker. The vendor and the technology are not what anyone is choosing
+ * between; the voice is.
+ */
+function displayName(voice: EdgeVoice): string {
+  const bare = (voice.ShortName.split("-").pop() ?? "").replace(/Neural$/, "");
+  if (!bare) {
+    return voice.FriendlyName.replace(/\s*-\s*[^-]+\([^)]+\)\s*$/, "").trim() || voice.FriendlyName;
+  }
+  // "AvaMultilingual" -> "Ava Multilingual"
+  return bare.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+}
+
 function toEngineVoice(voice: EdgeVoice): EngineVoice {
-  // FriendlyNames read like "Microsoft Aria Online (Natural) - English
-  // (United States)"; the picker already groups by language, so the
-  // trailing " - <language> (<region>)" is dropped as redundant.
-  const name = voice.FriendlyName.replace(/\s*-\s*[^-]+\([^)]+\)\s*$/, "").trim() || voice.FriendlyName;
+  const name = displayName(voice);
   return {
     id: `edge:${voice.ShortName}`,
     name,

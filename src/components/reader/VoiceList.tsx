@@ -38,6 +38,23 @@ export function VoiceList({ voices, preferredLang, voiceId, onVoice, ready }: Pr
     [voices, preferredLang],
   );
 
+  // A badge on every row carries no information. Badges mark the exception:
+  // a tier is only worth labelling when it is a minority of what is on screen.
+  // With sixty cloud voices listed, "Enhanced" is the norm and says nothing;
+  // the two compact device voices among them are what a reader wants flagged.
+  const visible = groups.flatMap((group) => group.voices);
+  const tierCounts = visible.reduce<Record<string, number>>((counts, voice) => {
+    counts[voice.tier] = (counts[voice.tier] ?? 0) + 1;
+    return counts;
+  }, {});
+  /** Warnings always show; quality tiers only when they set a voice apart. */
+  const ALWAYS: VoiceTier[] = ["siri", "novelty"];
+  const distinguishes = (tier: VoiceTier) => {
+    if (!TIER_LABEL[tier]) return false;
+    if (ALWAYS.includes(tier)) return true;
+    return (tierCounts[tier] ?? 0) <= visible.length / 2;
+  };
+
   const best = groups[0]?.voices[0];
   const noGoodVoices = ready && voices.length > 0 && (!best || best.quality < 0.5);
 
@@ -81,7 +98,7 @@ export function VoiceList({ voices, preferredLang, voiceId, onVoice, ready }: Pr
               >
                 <span className={styles.voiceName}>{voice.name}</span>
                 <span className={styles.voiceMeta}>
-                  {TIER_LABEL[voice.tier] && (
+                  {distinguishes(voice.tier) && (
                     <span className={styles.badge} data-tier={voice.tier}>
                       {TIER_LABEL[voice.tier]}
                     </span>
