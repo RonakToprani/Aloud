@@ -51,6 +51,10 @@ export class MultiSpeechEngine implements SpeechEngine {
     this.edgeEngine.unlock();
   }
 
+  prefetch(options: SpeakOptions): void {
+    if (options.voiceId?.startsWith(EDGE_PREFIX)) this.edgeEngine.prefetch(options);
+  }
+
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle {
     if (options.voiceId?.startsWith(EDGE_PREFIX)) {
       return this.edgeEngine.speak(options, callbacks);

@@ -51,6 +51,44 @@ function base64ToBlob(base64: string, mime: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+interface SynthesisResult {
+  words: RawTimedWord[];
+  objectUrl: string;
+}
+
+class EdgeApiError extends Error {}
+
+/** The actual network round trip: our proxy, then Microsoft's synthesis
+ *  socket. Shared by `speak()` and `prefetch()` so a sentence fetched ahead
+ *  of time and one fetched on demand go through the exact same path. */
+async function requestSynthesis(
+  text: string,
+  voice: string,
+  rate: number,
+  signal: AbortSignal,
+): Promise<SynthesisResult> {
+  const response = await fetch("/api/speech/edge/synthesize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({ text, voice, rate }),
+  });
+  if (!response.ok) {
+    throw new EdgeApiError("The cloud voice service refused the request.");
+  }
+  const payload = (await response.json()) as { audio: string; words: RawTimedWord[] };
+  const blob = base64ToBlob(payload.audio, "audio/mpeg");
+  return { words: payload.words, objectUrl: URL.createObjectURL(blob) };
+}
+
+function edgeShortName(voiceId: string | null | undefined): string | null {
+  return voiceId?.startsWith("edge:") ? voiceId.slice(5) : null;
+}
+
+function cacheKey(voice: string, text: string, rate: number): string {
+  return `${voice} ${rate} ${text}`;
+}
+
 class EdgeUtterance implements UtteranceHandle {
   private cancelled = false;
   private finished = false;
@@ -65,6 +103,9 @@ class EdgeUtterance implements UtteranceHandle {
     private readonly voiceShortName: string,
     private readonly callbacks: SpeakCallbacks,
     private readonly audio: HTMLAudioElement,
+    /** Already in flight (or resolved) if the player prefetched this
+     *  sentence while the previous one was still playing. */
+    private readonly prefetched: Promise<SynthesisResult> | null,
   ) {}
 
   get done(): boolean {
@@ -73,28 +114,21 @@ class EdgeUtterance implements UtteranceHandle {
 
   async start(): Promise<void> {
     try {
-      const response = await fetch("/api/speech/edge/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: this.controller.signal,
-        body: JSON.stringify({
-          text: this.options.text,
-          voice: this.voiceShortName,
-          rate: this.options.rate,
-        }),
-      });
-      if (this.cancelled) return;
-      if (!response.ok) {
-        this.fail("synthesis-failed", "The cloud voice service refused the request.");
+      // A prefetch that failed (aborted, or the request itself errored) falls
+      // through to a fresh fetch rather than failing the sentence outright —
+      // the lookahead is an optimization, not a dependency.
+      const result = this.prefetched
+        ? await this.prefetched.catch(() =>
+            requestSynthesis(this.options.text, this.voiceShortName, this.options.rate, this.controller.signal),
+          )
+        : await requestSynthesis(this.options.text, this.voiceShortName, this.options.rate, this.controller.signal);
+
+      if (this.cancelled) {
+        URL.revokeObjectURL(result.objectUrl);
         return;
       }
-
-      const payload = (await response.json()) as { audio: string; words: RawTimedWord[] };
-      if (this.cancelled) return;
-      this.words = payload.words;
-
-      const blob = base64ToBlob(payload.audio, "audio/mpeg");
-      this.objectUrl = URL.createObjectURL(blob);
+      this.words = result.words;
+      this.objectUrl = result.objectUrl;
 
       this.audio.onplay = () => {
         if (this.cancelled) return;
@@ -204,6 +238,12 @@ export interface EdgeSpeechEngineOptions {
   localePrefix?: string;
 }
 
+interface PendingPrefetch {
+  key: string;
+  controller: AbortController;
+  promise: Promise<SynthesisResult>;
+}
+
 /**
  * Speaks through Microsoft Edge's cloud "Read Aloud" voices instead of
  * whatever is installed on the device. Synthesis happens on our own server
@@ -219,6 +259,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
   private readyPromise: Promise<void> | null = null;
   private audioEl: HTMLAudioElement | null = null;
   private current: EdgeUtterance | null = null;
+  private pending: PendingPrefetch | null = null;
 
   constructor(private readonly options: EdgeSpeechEngineOptions = {}) {}
 
@@ -263,8 +304,38 @@ export class EdgeSpeechEngine implements SpeechEngine {
     this.audioEl = audio;
   }
 
+  /**
+   * Starts fetching a sentence's audio without playing it, so that by the
+   * time the player actually asks to speak it (once the current sentence
+   * ends), it's already downloaded. Without this, every sentence boundary
+   * pays the full round trip to Microsoft as silence.
+   */
+  prefetch(options: SpeakOptions): void {
+    const shortName = edgeShortName(options.voiceId);
+    if (!this.supported || !shortName || !options.text.trim()) return;
+
+    const key = cacheKey(shortName, options.text, options.rate);
+    if (this.pending?.key === key) return;
+    this.clearPending();
+
+    const controller = new AbortController();
+    const promise = requestSynthesis(options.text, shortName, options.rate, controller.signal);
+    // A prefetch that fails just means speak() falls back to fetching it
+    // itself later; nothing here is waiting on this promise directly.
+    promise.catch(() => {});
+    this.pending = { key, controller, promise };
+  }
+
+  private clearPending(): void {
+    if (!this.pending) return;
+    const stale = this.pending;
+    this.pending = null;
+    stale.controller.abort();
+    stale.promise.then((result) => URL.revokeObjectURL(result.objectUrl)).catch(() => {});
+  }
+
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle {
-    const shortName = options.voiceId?.startsWith("edge:") ? options.voiceId.slice(5) : null;
+    const shortName = edgeShortName(options.voiceId);
     if (!this.supported || !shortName) {
       const error: SpeechError = {
         kind: "no-voices",
@@ -275,7 +346,14 @@ export class EdgeSpeechEngine implements SpeechEngine {
     }
     if (!this.audioEl) this.unlock();
 
-    const utterance = new EdgeUtterance(options, shortName, callbacks, this.audioEl!);
+    let prefetched: Promise<SynthesisResult> | null = null;
+    const key = cacheKey(shortName, options.text, options.rate);
+    if (this.pending?.key === key) {
+      prefetched = this.pending.promise;
+      this.pending = null;
+    }
+
+    const utterance = new EdgeUtterance(options, shortName, callbacks, this.audioEl!, prefetched);
     this.current = utterance;
     void utterance.start();
     return utterance;
@@ -289,6 +367,14 @@ export class EdgeSpeechEngine implements SpeechEngine {
     this.current?.resume();
   }
 
+  /**
+   * The player calls this at the start of every sentence, including a normal
+   * advance to the next one — not just on an actual seek or stop — so this
+   * must leave a matching prefetch alone. A mismatched one is already
+   * replaced (and revoked) the moment a new `prefetch()` call comes in, so
+   * nothing here needs to preemptively guess whether this cancel means
+   * "moving on" or "abandoning ship."
+   */
   cancel(): void {
     this.current?.cancel();
     this.current = null;
@@ -304,6 +390,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
 
   destroy(): void {
     this.cancel();
+    this.clearPending();
     this.listeners.clear();
     this.audioEl = null;
   }

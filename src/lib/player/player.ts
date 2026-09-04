@@ -392,6 +392,19 @@ export class Player {
         },
       },
     );
+
+    this.prefetchNext(target.chapterIndex, target.sentenceIndex);
+  }
+
+  /** Lets an engine with real synthesis latency (a network voice) start
+   *  fetching the next sentence while this one is still playing, so the
+   *  round trip doesn't show up as a gap between sentences. */
+  private prefetchNext(chapterIndex: number, sentenceIndex: number): void {
+    const next = this.resolveSentence(chapterIndex, sentenceIndex + 1, 1);
+    if (!next) return;
+    const sentence = this.chapter(next.chapterIndex)?.sentences[next.sentenceIndex];
+    if (!sentence?.speakable.trim()) return;
+    this.options.engine.prefetch?.({ text: sentence.speakable, voiceId: this.voiceId, rate: this.rate });
   }
 
   private advance(): void {

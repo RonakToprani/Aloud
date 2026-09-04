@@ -89,6 +89,12 @@ export interface SpeechEngine {
   /** Must be called from inside a user gesture on iOS before the first speak. */
   unlock(): void;
 
+  /** Optional lookahead: start preparing a sentence that isn't playing yet,
+   *  so a later `speak()` call for it doesn't pay for synthesis latency. Only
+   *  worth implementing for an engine whose speak() has a real round trip;
+   *  on-device engines have nothing to gain from it. */
+  prefetch?(options: SpeakOptions): void;
+
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle;
   pause(): void;
   resume(): void;
