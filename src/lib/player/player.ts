@@ -399,6 +399,7 @@ export class Player {
       },
     );
 
+    this.offerPassage(target.chapterIndex, target.sentenceIndex);
     this.prefetchNext(target.chapterIndex, target.sentenceIndex);
   }
 
@@ -409,6 +410,33 @@ export class Player {
     const next = this.resolveSentence(chapterIndex, sentenceIndex + 1, 1);
     if (!next) return;
     this.prefetchAt(next.chapterIndex, next.sentenceIndex);
+  }
+
+  /** How many sentences ahead to offer for joint synthesis. The engine takes
+   *  as many as fit whatever length it wants to synthesise at once. */
+  private static readonly PASSAGE_LOOKAHEAD = 12;
+
+  /** Hand the engine the sentences about to be read, so one that can
+   *  synthesise a paragraph together does so rather than reading each sentence
+   *  in isolation. */
+  private offerPassage(chapterIndex: number, sentenceIndex: number): void {
+    if (!this.options.engine.prepare) return;
+    const texts: string[] = [];
+    let cursor: { chapterIndex: number; sentenceIndex: number } | null = {
+      chapterIndex,
+      sentenceIndex,
+    };
+    while (cursor && texts.length < Player.PASSAGE_LOOKAHEAD) {
+      const sentence = this.chapter(cursor.chapterIndex)?.sentences[cursor.sentenceIndex];
+      if (!sentence) break;
+      texts.push(sentence.speakable);
+      // Passages never span a chapter: the voice should land at a chapter end.
+      const next = this.resolveSentence(cursor.chapterIndex, cursor.sentenceIndex + 1, 1);
+      cursor = next && next.chapterIndex === chapterIndex ? next : null;
+    }
+    if (texts.length) {
+      this.options.engine.prepare(texts, { voiceId: this.voiceId, rate: this.rate });
+    }
   }
 
   /** Ask the engine to have this exact sentence ready to play. */

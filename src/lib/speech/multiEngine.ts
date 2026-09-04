@@ -51,6 +51,12 @@ export class MultiSpeechEngine implements SpeechEngine {
     this.edgeEngine.unlock();
   }
 
+  prepare(texts: string[], options: Omit<SpeakOptions, "text">): void {
+    // Only the cloud engine can synthesise sentences together; the device
+    // voices speak whatever they are handed, one utterance at a time.
+    if (options.voiceId?.startsWith(EDGE_PREFIX)) this.edgeEngine.prepare(texts, options);
+  }
+
   prefetch(options: SpeakOptions): void {
     if (options.voiceId?.startsWith(EDGE_PREFIX)) this.edgeEngine.prefetch(options);
   }

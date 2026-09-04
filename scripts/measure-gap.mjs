@@ -13,7 +13,11 @@ const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Conte
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
 const VOICE = process.argv[2] || 'edge:en-GB-SoniaNeural';
 
-const PASSAGE = `Mrs. Dalloway said she would buy the flowers herself. For Lucy had her work cut out for her. The doors would be taken off their hinges. Rumpelmayer's men were coming. And then, thought Clarissa Dalloway, what a morning.`;
+const PASSAGE = `Mrs. Dalloway said she would buy the flowers herself. For Lucy had her work cut out for her. The doors would be taken off their hinges; Rumpelmayer's men were coming. And then, thought Clarissa Dalloway, what a morning, fresh as if issued to children on a beach.
+
+What a lark! What a plunge! For so it had always seemed to her when, with a little squeak of the hinges, which she could hear now, she had burst open the French windows and plunged at Bourton into the open air. How fresh, how calm, stiller than this of course, the air was in the early morning.
+
+Like the flap of a wave; the kiss of a wave; chill and sharp and yet solemn, feeling as she did, standing there at the open window, that something awful was about to happen. She was looking at the flowers, at the trees with the smoke winding off them, and at the rooks rising and falling.`;
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -29,15 +33,36 @@ await page.evaluateOnNewDocument(() => {
   window.__timeline = [];
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return;
+  // Record every synthesis request so the timeline shows when work started
+  // relative to when the audio needed it.
+  const originalFetch = window.fetch;
+  window.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input?.url ?? '';
+    if (url.includes('/api/speech/edge/synthesize')) {
+      let chars = 0;
+      try { chars = JSON.parse(init.body).text.length; } catch {}
+      const started = performance.now();
+      window.__timeline.push({ t: started, type: 'request', chars });
+      const response = await originalFetch(input, init);
+      window.__timeline.push({ t: performance.now(), type: 'response', chars, took: Math.round(performance.now() - started) });
+      return response;
+    }
+    return originalFetch(input, init);
+  };
+
   const originalCreate = Ctx.prototype.createBufferSource;
   Ctx.prototype.createBufferSource = function createBufferSource() {
     const node = originalCreate.call(this);
     const originalStart = node.start.bind(node);
     node.start = (...args) => {
-      window.__timeline.push({ t: performance.now(), type: 'play' });
+      // The looping source is the silence that keeps the MediaStream fed, not
+      // a sentence; counting it would invent transitions that never happened.
+      if (!node.loop) window.__timeline.push({ t: performance.now(), type: 'play' });
       return originalStart(...args);
     };
-    node.addEventListener('ended', () => window.__timeline.push({ t: performance.now(), type: 'ended' }));
+    node.addEventListener('ended', () => {
+      if (!node.loop) window.__timeline.push({ t: performance.now(), type: 'ended' });
+    });
     return node;
   };
 });
@@ -77,9 +102,10 @@ await new Promise((r) => setTimeout(r, 800));
 
 await page.evaluate(() => window.__timeline.splice(0));
 await page.evaluate(() => document.querySelector('button[aria-label="Play"]')?.click());
-await new Promise((r) => setTimeout(r, 30000));
+await new Promise((r) => setTimeout(r, 60000));
 
 const timeline = await page.evaluate(() => window.__timeline);
+const starts = timeline.filter((e) => e.type === 'play').length;
 await browser.close();
 
 // Pair each natural end with the start that follows it.
@@ -93,11 +119,21 @@ for (const event of timeline) {
   }
 }
 
+console.log('audio sources started:', starts,
+  '(one per passage when sentences are synthesised together, one per sentence otherwise)');
 if (!gaps.length) {
-  console.error('FAIL: no sentence transitions observed — did playback start?');
-  console.error(JSON.stringify(timeline.slice(0, 10), null, 2));
-  process.exit(1);
+  console.log('no source restarts between sentences at all — playback ran continuously');
+  process.exit(0);
 }
+const t0 = timeline.length ? timeline[0].t : 0;
+console.log('\ntimeline (ms from first event):');
+for (const e of timeline) {
+  const at = String(Math.round(e.t - t0)).padStart(6);
+  if (e.type === 'request') console.log(`  ${at}  request  ${e.chars} chars`);
+  else if (e.type === 'response') console.log(`  ${at}  arrived  ${e.chars} chars in ${e.took}ms`);
+  else console.log(`  ${at}  ${e.type}`);
+}
+
 const sorted = [...gaps].sort((a, b) => a - b);
 console.log('gaps between sentences (ms):', gaps.join(', '));
 console.log('median:', sorted[Math.floor(sorted.length / 2)], 'ms   max:', sorted[sorted.length - 1], 'ms');
