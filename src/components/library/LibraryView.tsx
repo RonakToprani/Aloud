@@ -636,7 +636,9 @@ export function LibraryView() {
               you added it from. Add the same {missingBook.source === "paste" ? "text" : "file"}{" "}
               here and you&rsquo;ll carry on
               {readingOf(missingBook).fraction > 0
-                ? ` in ${missingBook.chapterTitles[readingOf(missingBook).chapterIndex] ?? "the same chapter"}`
+                ? missingBook.chapterTitles.length > 1
+                  ? ` in ${missingBook.chapterTitles[readingOf(missingBook).chapterIndex] ?? "the same chapter"}`
+                  : " where you left off"
                 : " from the start"}
               .
             </p>
