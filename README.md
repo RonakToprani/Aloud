@@ -79,7 +79,11 @@ for the home-screen app on iOS) turns it into a real account. What is stored:
 1. Create a project and run `supabase/migrations/20260904000000_init.sql` in
    the SQL editor (or `supabase db push`).
 2. Authentication › Providers: enable **Email** and **Anonymous sign-ins**.
-   Apple and Google are optional and use the same redirect.
+   Google and Apple are optional: each needs its own OAuth credentials there
+   (Google: an OAuth client in Google Cloud Console with the redirect URI
+   `https://<project-ref>.supabase.co/auth/v1/callback`; Apple: a Services
+   ID, key and team ID from the Apple Developer account). Then list the
+   enabled ones in `NEXT_PUBLIC_AUTH_PROVIDERS` so their buttons appear.
 3. Optional, needs a custom SMTP provider (free-tier projects can't edit the
    template otherwise): set the Magic Link email template to
    `supabase/templates/magic_link.html`, which includes `{{ .Token }}`, and

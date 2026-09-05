@@ -13,6 +13,17 @@ const RESEND_SECONDS = 45;
  *  template includes it, which needs a custom SMTP provider. Until then the
  *  screen must not ask for something the email doesn't carry. */
 const EMAIL_HAS_CODE = process.env.NEXT_PUBLIC_SUPABASE_EMAIL_CODE === "true";
+/** OAuth providers switched on in the Supabase project, e.g. "google,apple".
+ *  A button for a provider that isn't configured can only fail, so none are
+ *  shown until they are. */
+const PROVIDERS = new Set(
+  (process.env.NEXT_PUBLIC_AUTH_PROVIDERS ?? "")
+    .split(",")
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean),
+);
+const SHOW_APPLE = PROVIDERS.has("apple");
+const SHOW_GOOGLE = PROVIDERS.has("google");
 
 function validEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
@@ -208,18 +219,26 @@ export function SignInView() {
             {error && <p className={styles.error} role="alert">{error}</p>}
           </form>
 
-          <div className={styles.divider}>or</div>
+          {(SHOW_APPLE || SHOW_GOOGLE) && (
+            <>
+              <div className={styles.divider}>or</div>
 
-          <div className={styles.providers}>
-            <button type="button" className={styles.outlined} onClick={() => void oauth("apple")}>
-              <AppleIcon size={16} />
-              Continue with Apple
-            </button>
-            <button type="button" className={styles.outlined} onClick={() => void oauth("google")}>
-              <GoogleIcon size={16} />
-              Continue with Google
-            </button>
-          </div>
+              <div className={styles.providers}>
+                {SHOW_APPLE && (
+                  <button type="button" className={styles.outlined} onClick={() => void oauth("apple")}>
+                    <AppleIcon size={16} />
+                    Continue with Apple
+                  </button>
+                )}
+                {SHOW_GOOGLE && (
+                  <button type="button" className={styles.outlined} onClick={() => void oauth("google")}>
+                    <GoogleIcon size={16} />
+                    Continue with Google
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
