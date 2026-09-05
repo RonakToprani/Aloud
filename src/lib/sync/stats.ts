@@ -82,6 +82,11 @@ export function useReadingStats(): ReadingStats {
     };
     void refresh();
     const timer = setInterval(() => void refresh(), REFRESH_MS);
+    // A first visit's own account is created a moment after the page loads,
+    // and it counts: read again once the session exists.
+    const auth = getSupabase()?.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") void refresh();
+    });
     const unsubscribe = subscribeListeningCount((listeningNow) => {
       if (alive) setStats((s) => (s.listeningNow === listeningNow ? s : { ...s, listeningNow }));
     });
@@ -89,6 +94,7 @@ export function useReadingStats(): ReadingStats {
       alive = false;
       clearInterval(timer);
       unsubscribe();
+      auth?.data.subscription.unsubscribe();
     };
   }, []);
 
