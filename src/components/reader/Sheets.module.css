@@ -60,6 +60,49 @@
   font-weight: 500;
 }
 
+/* ---------- Accent ---------- */
+
+.accentGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/* Each swatch shows its accent on the current canvas, so the choice is
+   judged against the page it will actually sit on. */
+.accentSwatch {
+  width: 100%;
+  height: 46px;
+  border-radius: var(--radius-control);
+  display: grid;
+  place-items: center;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  transition: border-color var(--dur-ui) var(--ease-soft);
+}
+
+.accentSwatch[data-active="true"] {
+  border: 2px solid var(--accent-strong);
+}
+
+/* Resolved here rather than through --accent, which is computed on the root
+   with the root's hue; the swatch carries its own --accent-hue. */
+.accentDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: oklch(var(--accent-l) 0.075 var(--accent-hue));
+}
+
+.accentSpecimen {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
 /* ---------- Highlight choice ---------- */
 
 .highlightGrid {

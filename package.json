@@ -12,6 +12,7 @@
     "test:focus": "node scripts/focus-check.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.115.0",
     "jszip": "3.10.1",
     "next": "^15.5.25",
     "react": "19.1.1",

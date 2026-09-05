@@ -3,6 +3,7 @@ import type { Position } from "@/lib/types";
 export type ThemeName = "dark" | "warm" | "light" | "sepia";
 export type HighlightStyle = "pill" | "wash";
 export type ReadingFace = "serif" | "sans";
+export type AccentName = "slate" | "violet" | "moss";
 
 export interface Settings {
   theme: ThemeName;
@@ -13,6 +14,10 @@ export interface Settings {
   lineHeight: number;
   rate: number;
   voiceId: string | null;
+  /** A hue rotation for the highlight and controls. Slate follows the theme. */
+  accent: AccentName;
+  /** When these settings last changed, so two devices can agree which copy wins. */
+  updatedAt: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,6 +28,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lineHeight: 1.72,
   rate: 1,
   voiceId: null,
+  accent: "slate",
+  updatedAt: 0,
 };
 
 export const FONT_SIZE_RANGE = { min: 16, max: 26, step: 1 };
@@ -80,7 +87,25 @@ export function loadSettings(): Settings {
     ),
     rate: clamp(Number(stored.rate) || DEFAULT_SETTINGS.rate, 0.5, 2.5),
     voiceId: typeof stored.voiceId === "string" ? stored.voiceId : null,
+    accent: (["slate", "violet", "moss"] as const).includes(stored.accent as AccentName)
+      ? (stored.accent as AccentName)
+      : DEFAULT_SETTINGS.accent,
+    updatedAt: Number(stored.updatedAt) || 0,
   };
+}
+
+/** The keys a reader actually chooses; `updatedAt` is bookkeeping. */
+export function settingsEqual(a: Settings, b: Settings): boolean {
+  return (
+    a.theme === b.theme &&
+    a.highlight === b.highlight &&
+    a.face === b.face &&
+    a.fontSize === b.fontSize &&
+    a.lineHeight === b.lineHeight &&
+    a.rate === b.rate &&
+    a.voiceId === b.voiceId &&
+    a.accent === b.accent
+  );
 }
 
 export function saveSettings(settings: Settings): void {

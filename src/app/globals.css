@@ -1,15 +1,17 @@
 /* ============================================================
    Aloud — design tokens
-   Four themes on one lightness ladder: switching theme mid-chapter
-   never changes how bright the page feels. Hue and chroma rotate;
-   lightness does not. Every text token below meets WCAG AA on its
-   own surface (--ui-faint is decoration only: dots, rules, icons).
+   Every theme is the same ladder of lightness and chroma with a different
+   hue. Themes rotate --canvas-hue (and the ink chroma); the accent setting
+   rotates --accent-hue. Nothing else varies, which is what lets 4 themes ×
+   3 accents × 2 highlight styles stay one product rather than 24. Every
+   text token meets WCAG AA on its own surface (--ui-faint is decoration
+   only: dots, rules, icons).
    ============================================================ */
 
 :root {
   /* Reading column and the chrome that must line up with it. */
-  --column: min(640px, 100%);
-  --column-gutter: max(24px, env(safe-area-inset-left), env(safe-area-inset-right));
+  --column: min(600px, 100%);
+  --column-gutter: max(28px, env(safe-area-inset-left), env(safe-area-inset-right));
 
   --radius-pill: 7px;
   --radius-wash: 5px;
@@ -22,169 +24,180 @@
   --dur-pill: 220ms;
   --dur-wash: 260ms;
   --dur-ui: 260ms;
-  --dur-sheet: 420ms;
+  --dur-sheet: 300ms;
 
   --font-ui: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-serif: var(--font-newsreader), Iowan Old Style, Georgia, serif;
+  --font-display: var(--font-instrument-serif), var(--font-newsreader), Georgia, serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* ---------- Dark — the primary theme ---------- */
+/* ---------- Dark — the primary theme, and the ladder Warm shares ---------- */
 :root,
-[data-theme="dark"] {
+[data-theme="dark"],
+[data-theme="warm"] {
   color-scheme: dark;
-  --canvas: oklch(0.235 0.011 250);
-  --raised: oklch(0.275 0.013 250);
-  --inset: oklch(0.225 0.011 250);
-  --segment: oklch(0.33 0.014 250);
-  --grabber: oklch(0.42 0.012 250);
+  --canvas-hue: 250;
+  --ink-hue: 250;
+  --accent-hue: 250;
+  --theme-accent-hue: 250;
+  --accent-l: 0.62;
+  --canvas-chroma: 0.011;
+  --ink-chroma: 0.008;
 
-  --sentence: oklch(0.285 0.016 250);
-  --word: oklch(0.455 0.062 250);
-  --word-ink: oklch(0.97 0.008 250);
-  --wash: oklch(0.325 0.02 250);
-  --wash-ink: oklch(0.93 0.008 250);
+  --canvas: oklch(0.235 var(--canvas-chroma) var(--canvas-hue));
+  --surface: oklch(0.222 0.01 var(--canvas-hue));
+  --raised: oklch(0.275 0.013 var(--canvas-hue));
+  --sunken: oklch(0.2 0.008 var(--canvas-hue));
+  --inset: oklch(0.225 var(--canvas-chroma) var(--canvas-hue));
+  --segment: oklch(0.33 0.014 var(--canvas-hue));
+  --grabber: oklch(0.42 0.012 var(--canvas-hue));
+  --control-border: oklch(0.34 0.014 var(--canvas-hue));
 
-  --accent: oklch(0.62 0.075 250);
-  --accent-strong: oklch(0.68 0.075 250);
-  --on-accent: oklch(0.19 0.02 250);
+  --sentence: oklch(0.285 0.016 var(--accent-hue));
+  --word: oklch(0.455 0.062 var(--accent-hue));
+  --word-ink: oklch(0.97 0.008 var(--accent-hue));
+  --wash: oklch(0.325 0.02 var(--accent-hue));
+  --wash-ink: oklch(0.93 0.008 var(--accent-hue));
 
-  --ink: oklch(0.82 0.008 250);
-  --ink-strong: oklch(0.9 0.01 250);
-  --ink-dim: oklch(0.7 0.008 250);
-  --ink-dimmer: oklch(0.62 0.008 250);
+  --accent: oklch(0.62 0.075 var(--accent-hue));
+  --accent-strong: oklch(0.68 0.075 var(--accent-hue));
+  --on-accent: oklch(0.2 0.02 var(--accent-hue));
 
-  --ui: oklch(0.88 0.008 250);
-  --ui-muted: oklch(0.66 0.01 250);
-  --ui-faint: oklch(0.48 0.012 250);
+  --ink: oklch(0.82 var(--ink-chroma) var(--ink-hue));
+  --ink-strong: oklch(0.9 0.01 var(--ink-hue));
+  --ink-dim: oklch(0.7 var(--ink-chroma) var(--ink-hue));
+  --ink-dimmer: oklch(0.62 var(--ink-chroma) var(--ink-hue));
+  --ink-faint: oklch(0.5 0.012 var(--ink-hue));
 
-  --track: oklch(0.31 0.012 250);
-  --slider-track: oklch(0.36 0.012 250);
-  --thumb: oklch(0.9 0.008 250);
+  --ui: oklch(0.88 var(--ink-chroma) var(--ink-hue));
+  --ui-muted: oklch(0.66 0.01 var(--ink-hue));
+  --ui-faint: oklch(0.48 0.012 var(--ink-hue));
+
+  --track: oklch(0.31 0.012 var(--canvas-hue));
+  --slider-track: oklch(0.36 0.012 var(--canvas-hue));
+  --thumb: oklch(0.9 0.008 var(--ink-hue));
 
   --hairline: oklch(1 0 0 / 0.08);
   --hairline-soft: oklch(1 0 0 / 0.06);
-  --scrim: oklch(0.16 0.008 250 / 0.55);
-  --chrome: oklch(0.295 0.014 250 / 0.85);
+  --scrim: oklch(0.16 0.008 var(--canvas-hue) / 0.55);
+  --chrome: oklch(0.295 0.014 var(--canvas-hue) / 0.85);
   --shadow-sheet: 0 -20px 50px oklch(0 0 0 / 0.35);
   --shadow-lift: 0 12px 34px oklch(0 0 0 / 0.28);
   --danger: oklch(0.68 0.14 25);
 }
 
-/* ---------- Warm — dark's ladder rotated to amber, for late reading ---------- */
+/* Warm is dark's ladder rotated to amber, for late reading. Only hue and a
+   little ink chroma change, so switching mid-chapter never changes how
+   bright the page feels. */
 [data-theme="warm"] {
-  color-scheme: dark;
-  --canvas: oklch(0.245 0.014 70);
-  --raised: oklch(0.285 0.016 70);
-  --inset: oklch(0.235 0.014 70);
-  --segment: oklch(0.34 0.018 70);
-  --grabber: oklch(0.44 0.016 70);
-
-  --sentence: oklch(0.3 0.022 70);
-  --word: oklch(0.465 0.056 65);
-  --word-ink: oklch(0.97 0.02 85);
-  --wash: oklch(0.335 0.032 70);
-  --wash-ink: oklch(0.95 0.026 82);
-
-  --accent: oklch(0.68 0.07 65);
-  --accent-strong: oklch(0.74 0.07 65);
-  --on-accent: oklch(0.2 0.024 65);
-
-  --ink: oklch(0.85 0.022 80);
-  --ink-strong: oklch(0.91 0.026 80);
-  --ink-dim: oklch(0.71 0.02 80);
-  --ink-dimmer: oklch(0.63 0.018 80);
-
-  --ui: oklch(0.88 0.02 80);
-  --ui-muted: oklch(0.66 0.014 70);
-  --ui-faint: oklch(0.5 0.016 70);
-
-  --track: oklch(0.33 0.018 70);
-  --slider-track: oklch(0.38 0.018 70);
-  --thumb: oklch(0.9 0.02 80);
-
-  --hairline: oklch(1 0 0 / 0.08);
-  --hairline-soft: oklch(1 0 0 / 0.06);
-  --scrim: oklch(0.17 0.012 70 / 0.55);
-  --chrome: oklch(0.305 0.018 70 / 0.85);
-  --shadow-sheet: 0 -20px 50px oklch(0 0 0 / 0.35);
-  --shadow-lift: 0 12px 34px oklch(0 0 0 / 0.28);
+  --canvas-hue: 70;
+  --ink-hue: 80;
+  --accent-hue: 65;
+  --theme-accent-hue: 65;
+  --accent-l: 0.68;
+  --canvas-chroma: 0.014;
+  --ink-chroma: 0.022;
+  --canvas: oklch(0.245 var(--canvas-chroma) var(--canvas-hue));
+  --sentence: oklch(0.3 0.022 var(--accent-hue));
+  --word: oklch(0.465 0.056 var(--accent-hue));
+  --word-ink: oklch(0.97 0.02 var(--accent-hue));
+  --wash: oklch(0.335 0.032 var(--accent-hue));
+  --wash-ink: oklch(0.95 0.026 var(--accent-hue));
+  --accent: oklch(0.68 0.07 var(--accent-hue));
+  --accent-strong: oklch(0.74 0.07 var(--accent-hue));
+  --ink: oklch(0.85 var(--ink-chroma) var(--ink-hue));
+  --ink-strong: oklch(0.91 0.026 var(--ink-hue));
   --danger: oklch(0.68 0.14 30);
 }
 
-/* ---------- Light ---------- */
-[data-theme="light"] {
+/* ---------- Light, and the ladder Sepia shares ----------
+   Polarity inverts: the pill gets lighter than the canvas is dark, and pill
+   text goes dark. Same ladder, opposite direction. */
+[data-theme="light"],
+[data-theme="sepia"] {
   color-scheme: light;
-  --canvas: oklch(0.965 0.004 250);
-  --raised: oklch(0.995 0.002 250);
-  --inset: oklch(0.928 0.006 250);
-  --segment: oklch(0.995 0.002 250);
-  --grabber: oklch(0.82 0.008 250);
+  --canvas-hue: 250;
+  --ink-hue: 250;
+  --accent-hue: 250;
+  --theme-accent-hue: 250;
+  --accent-l: 0.55;
+  --canvas-chroma: 0.004;
+  --ink-chroma: 0.008;
 
-  --sentence: oklch(0.925 0.008 250);
-  --word: oklch(0.84 0.055 250);
-  --word-ink: oklch(0.24 0.02 250);
-  --wash: oklch(0.885 0.038 250);
-  --wash-ink: oklch(0.26 0.015 250);
+  --canvas: oklch(0.965 var(--canvas-chroma) var(--canvas-hue));
+  --surface: oklch(0.975 0.003 var(--canvas-hue));
+  --raised: oklch(0.995 0.002 var(--canvas-hue));
+  --sunken: oklch(0.94 0.005 var(--canvas-hue));
+  --inset: oklch(0.928 0.006 var(--canvas-hue));
+  --segment: oklch(0.995 0.002 var(--canvas-hue));
+  --grabber: oklch(0.82 0.008 var(--canvas-hue));
+  --control-border: oklch(0.86 0.008 var(--canvas-hue));
 
-  --accent: oklch(0.55 0.075 250);
-  --accent-strong: oklch(0.5 0.08 250);
-  --on-accent: oklch(0.99 0.004 250);
+  --sentence: oklch(0.925 0.008 var(--accent-hue));
+  --word: oklch(0.84 0.055 var(--accent-hue));
+  --word-ink: oklch(0.24 0.02 var(--accent-hue));
+  --wash: oklch(0.885 0.038 var(--accent-hue));
+  --wash-ink: oklch(0.26 0.015 var(--accent-hue));
 
-  --ink: oklch(0.36 0.008 250);
-  --ink-strong: oklch(0.28 0.008 250);
-  --ink-dim: oklch(0.47 0.008 250);
-  --ink-dimmer: oklch(0.54 0.008 250);
+  --accent: oklch(0.55 0.075 var(--accent-hue));
+  --accent-strong: oklch(0.5 0.08 var(--accent-hue));
+  --on-accent: oklch(0.99 0.004 var(--accent-hue));
 
-  --ui: oklch(0.32 0.008 250);
-  --ui-muted: oklch(0.54 0.01 250);
-  --ui-faint: oklch(0.68 0.01 250);
+  --ink: oklch(0.36 var(--ink-chroma) var(--ink-hue));
+  --ink-strong: oklch(0.28 var(--ink-chroma) var(--ink-hue));
+  --ink-dim: oklch(0.47 var(--ink-chroma) var(--ink-hue));
+  --ink-dimmer: oklch(0.54 var(--ink-chroma) var(--ink-hue));
+  --ink-faint: oklch(0.62 0.01 var(--ink-hue));
 
-  --track: oklch(0.89 0.006 250);
-  --slider-track: oklch(0.87 0.006 250);
+  --ui: oklch(0.32 var(--ink-chroma) var(--ink-hue));
+  --ui-muted: oklch(0.54 0.01 var(--ink-hue));
+  --ui-faint: oklch(0.68 0.01 var(--ink-hue));
+
+  --track: oklch(0.89 0.006 var(--canvas-hue));
+  --slider-track: oklch(0.87 0.006 var(--canvas-hue));
   --thumb: oklch(1 0 0);
 
-  --hairline: oklch(0.2 0.01 250 / 0.12);
-  --hairline-soft: oklch(0.2 0.01 250 / 0.08);
-  --scrim: oklch(0.45 0.01 250 / 0.32);
+  --hairline: oklch(0.2 0.01 var(--canvas-hue) / 0.12);
+  --hairline-soft: oklch(0.2 0.01 var(--canvas-hue) / 0.08);
+  --scrim: oklch(0.45 0.01 var(--canvas-hue) / 0.32);
   --chrome: oklch(1 0 0 / 0.86);
-  --shadow-sheet: 0 -18px 46px oklch(0.3 0.01 250 / 0.14);
-  --shadow-lift: 0 10px 30px oklch(0.3 0.01 250 / 0.1);
+  --shadow-sheet: 0 -18px 46px oklch(0.3 0.01 var(--canvas-hue) / 0.14);
+  --shadow-lift: 0 10px 30px oklch(0.3 0.01 var(--canvas-hue) / 0.1);
   --danger: oklch(0.52 0.17 27);
 }
 
-/* ---------- Sepia ---------- */
 [data-theme="sepia"] {
-  color-scheme: light;
-  --canvas: oklch(0.935 0.024 85);
-  --raised: oklch(0.965 0.018 85);
+  --canvas-hue: 85;
+  --ink-hue: 60;
+  --accent-hue: 65;
+  --theme-accent-hue: 65;
+  --accent-l: 0.56;
+  --canvas-chroma: 0.024;
+  --ink-chroma: 0.022;
+  --canvas: oklch(0.935 var(--canvas-chroma) var(--canvas-hue));
+  --surface: oklch(0.95 0.02 var(--canvas-hue));
+  --raised: oklch(0.965 0.018 var(--canvas-hue));
+  --sunken: oklch(0.91 0.024 var(--canvas-hue));
   --inset: oklch(0.9 0.026 82);
-  --segment: oklch(0.985 0.012 85);
+  --segment: oklch(0.985 0.012 var(--canvas-hue));
   --grabber: oklch(0.8 0.024 80);
-
-  --sentence: oklch(0.895 0.03 80);
-  --word: oklch(0.815 0.075 70);
-  --word-ink: oklch(0.26 0.03 55);
-  --wash: oklch(0.858 0.045 78);
-  --wash-ink: oklch(0.28 0.026 58);
-
-  --accent: oklch(0.56 0.07 65);
-  --accent-strong: oklch(0.5 0.075 62);
+  --control-border: oklch(0.84 0.026 80);
+  --sentence: oklch(0.895 0.03 var(--accent-hue));
+  --word: oklch(0.815 0.075 var(--accent-hue));
+  --word-ink: oklch(0.26 0.03 var(--accent-hue));
+  --wash: oklch(0.858 0.045 var(--accent-hue));
+  --wash-ink: oklch(0.28 0.026 var(--accent-hue));
+  --accent: oklch(0.56 0.07 var(--accent-hue));
+  --accent-strong: oklch(0.5 0.075 var(--accent-hue));
   --on-accent: oklch(0.99 0.008 85);
-
-  --ink: oklch(0.38 0.022 60);
-  --ink-strong: oklch(0.3 0.024 60);
-  --ink-dim: oklch(0.46 0.022 62);
-  --ink-dimmer: oklch(0.52 0.02 65);
-
-  --ui: oklch(0.34 0.022 60);
+  --ink: oklch(0.38 var(--ink-chroma) var(--ink-hue));
+  --ink-strong: oklch(0.3 0.024 var(--ink-hue));
   --ui-muted: oklch(0.52 0.02 70);
   --ui-faint: oklch(0.66 0.022 75);
-
   --track: oklch(0.86 0.026 80);
   --slider-track: oklch(0.845 0.026 80);
   --thumb: oklch(0.99 0.01 85);
-
   --hairline: oklch(0.25 0.02 60 / 0.14);
   --hairline-soft: oklch(0.25 0.02 60 / 0.09);
   --scrim: oklch(0.45 0.02 70 / 0.32);
@@ -192,6 +205,22 @@
   --shadow-sheet: 0 -18px 46px oklch(0.3 0.02 60 / 0.16);
   --shadow-lift: 0 10px 30px oklch(0.3 0.02 60 / 0.12);
   --danger: oklch(0.5 0.17 30);
+}
+
+/* ---------- Accent — a hue rotation only ----------
+   Lightness and chroma are fixed above, so Violet and Moss inherit Slate's
+   contrast guarantees. Slate follows the theme's own hue, which is what
+   keeps Warm and Sepia warm. These come after the themes so they win. */
+[data-accent="slate"] {
+  --accent-hue: var(--theme-accent-hue);
+}
+
+[data-accent="violet"] {
+  --accent-hue: 305;
+}
+
+[data-accent="moss"] {
+  --accent-hue: 150;
 }
 
 /* ============================================================

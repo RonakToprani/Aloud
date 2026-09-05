@@ -5,6 +5,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import {
   FONT_SIZE_RANGE,
   LINE_HEIGHT_RANGE,
+  type AccentName,
   type HighlightStyle,
   type ReadingFace,
   type Settings,
@@ -29,6 +30,12 @@ const THEMES: { value: ThemeName; label: string }[] = [
 const HIGHLIGHTS: { value: HighlightStyle; label: string; hint: string }[] = [
   { value: "pill", label: "Pill", hint: "A tinted pill that moves between words" },
   { value: "wash", label: "Wash", hint: "A soft tint that fades from word to word" },
+];
+
+const ACCENTS: { value: AccentName; label: string }[] = [
+  { value: "slate", label: "Slate" },
+  { value: "violet", label: "Violet" },
+  { value: "moss", label: "Moss" },
 ];
 
 export function AppearanceSheet({ open, onClose, settings, update }: Props) {
@@ -91,6 +98,42 @@ export function AppearanceSheet({ open, onClose, settings, update }: Props) {
             </button>
           ))}
         </div>
+      </Field>
+
+      <Field label="Accent">
+        <div className={styles.accentGrid}>
+          {ACCENTS.map((accent) => (
+            <button
+              key={accent.value}
+              type="button"
+              role="radio"
+              aria-checked={settings.accent === accent.value}
+              className={styles.themeOption}
+              onClick={() => update({ accent: accent.value })}
+            >
+              <span
+                className={styles.accentSwatch}
+                data-accent={accent.value}
+                data-active={settings.accent === accent.value ? "true" : undefined}
+              >
+                <span className={styles.accentDot} />
+              </span>
+              <span
+                className={styles.themeName}
+                data-active={settings.accent === accent.value ? "true" : undefined}
+              >
+                {accent.label}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className={styles.accentSpecimen} aria-hidden="true">
+          taken off their{" "}
+          <span className={settings.highlight === "pill" ? styles.previewPill : styles.previewWash}>
+            hinges
+          </span>
+          ; Rumpelmayer&rsquo;s men were coming.
+        </p>
       </Field>
 
       <Field label="Text">

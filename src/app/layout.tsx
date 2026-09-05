@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Sans, Newsreader } from "next/font/google";
+import { Instrument_Sans, Instrument_Serif, Newsreader } from "next/font/google";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { DEFAULT_SETTINGS } from "@/lib/storage/prefs";
 import "./globals.css";
@@ -17,6 +17,15 @@ const instrumentSans = Instrument_Sans({
   variable: "--font-instrument",
   display: "swap",
   weight: ["400", "500", "600"],
+});
+
+/** Display only: the wordmark, the hero counter, screen titles. Never body. */
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+  display: "swap",
+  weight: "400",
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -47,8 +56,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#2b2f36" },
-    { media: "(prefers-color-scheme: light)", color: "#f2f2f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#24262c" },
+    { media: "(prefers-color-scheme: light)", color: "#f4f4f6" },
   ],
 };
 
@@ -59,17 +68,23 @@ var s=JSON.parse(localStorage.getItem('aloud.settings.v1')||'{}');
 var d=document.documentElement;
 d.dataset.theme=['dark','warm','light','sepia'].indexOf(s.theme)>=0?s.theme:'${DEFAULT_SETTINGS.theme}';
 d.dataset.face=s.face==='sans'?'sans':'serif';
+d.dataset.accent=['slate','violet','moss'].indexOf(s.accent)>=0?s.accent:'slate';
 d.style.setProperty('--reader-size',(s.fontSize||${DEFAULT_SETTINGS.fontSize})+'px');
 d.style.setProperty('--reader-leading',String(s.lineHeight||${DEFAULT_SETTINGS.lineHeight}));
 }catch(e){document.documentElement.dataset.theme='${DEFAULT_SETTINGS.theme}';}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme={DEFAULT_SETTINGS.theme} suppressHydrationWarning>
+    <html
+      lang="en"
+      data-theme={DEFAULT_SETTINGS.theme}
+      data-accent={DEFAULT_SETTINGS.accent}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${newsreader.variable} ${instrumentSans.variable}`}>
+      <body className={`${newsreader.variable} ${instrumentSans.variable} ${instrumentSerif.variable}`}>
         <SettingsProvider>{children}</SettingsProvider>
       </body>
     </html>
