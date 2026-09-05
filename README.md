@@ -80,9 +80,12 @@ for the home-screen app on iOS) turns it into a real account. What is stored:
    the SQL editor (or `supabase db push`).
 2. Authentication › Providers: enable **Email** and **Anonymous sign-ins**.
    Apple and Google are optional and use the same redirect.
-3. Authentication › Email Templates › Magic Link: include `{{ .Token }}` in
-   the body as well as the link, so a reader on the home-screen app can type
-   the code instead of following a link that would open in Safari.
+3. Optional, needs a custom SMTP provider (free-tier projects can't edit the
+   template otherwise): set the Magic Link email template to
+   `supabase/templates/magic_link.html`, which includes `{{ .Token }}`, and
+   set `NEXT_PUBLIC_SUPABASE_EMAIL_CODE=true`. The sign-in screen then offers
+   a code field, so a reader on the home-screen app can type the code instead
+   of following a link that would open in Safari.
 4. Authentication › URL Configuration: add `https://<your-domain>/signin/done`
    (and `http://localhost:3000/signin/done`) to the redirect allow-list.
 5. Copy `.env.example` to `.env.local` and fill in the URL and anon key; add

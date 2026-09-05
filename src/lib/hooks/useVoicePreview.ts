@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SpeechEngine, UtteranceHandle } from "@/lib/speech/engine";
 
-/** What a voice reads when the book has nothing to offer yet. */
-export const PREVIEW_FALLBACK =
-  "The doors would be taken off their hinges; Rumpelmayer's men were coming. And then, what a morning.";
+/** A voice auditions by introducing itself. Vendor suffixes like
+ *  "(Enhanced)" are dropped so it says its name, not its packaging. */
+export function voiceIntro(name: string): string {
+  const plain = name.replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+(multilingual|neural|online|natural)$/i, "").trim() || "your reader";
+  return `Hi, I'm ${plain}. I'll read your books at whatever speed you like, and light up each word as I say it. If you like how I sound, choose me and press play.`;
+}
 
 /**
  * Plays a short sample in a voice, one at a time. Tapping the voice that is

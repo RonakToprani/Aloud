@@ -8,7 +8,7 @@ import { BackIcon } from "@/components/ui/Icons";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
 import { pickDefaultVoice, useSpeechEngine } from "@/lib/hooks/useSpeechEngine";
 import { useMediaSession } from "@/lib/hooks/useMediaSession";
-import { PREVIEW_FALLBACK, useVoicePreview } from "@/lib/hooks/useVoicePreview";
+import { useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
@@ -337,28 +337,15 @@ export function ReaderView({ bookId }: { bookId: string }) {
 
   const { previewing, preview, stop: stopPreview } = useVoicePreview(engine, settings.rate);
 
-  // Each voice auditions with the book's own opening, so the choice is made
-  // on the words it will actually read.
-  const sampleText = useMemo(() => {
-    const opening = getChapter(0);
-    if (!opening) return PREVIEW_FALLBACK;
-    const parts: string[] = [];
-    let words = 0;
-    for (const sentence of opening.sentences) {
-      if (!sentence.words.length) continue;
-      parts.push(sentence.speakable);
-      words += sentence.words.length;
-      if (words >= 18 || parts.length >= 2) break;
-    }
-    return parts.length ? parts.join(" ") : PREVIEW_FALLBACK;
-  }, [getChapter]);
-
+  // Each voice auditions by introducing itself, so the reader hears the
+  // voice rather than a passage they were about to hear anyway.
   const onPreview = useCallback(
     (voiceId: string) => {
       playerRef.current?.pause();
-      preview(voiceId, sampleText);
+      const voice = voices.find((v) => v.id === voiceId);
+      preview(voiceId, voiceIntro(voice?.name ?? ""));
     },
-    [preview, sampleText],
+    [preview, voices],
   );
 
   const onStartWithVoice = useCallback(() => {

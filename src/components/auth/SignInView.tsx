@@ -9,6 +9,10 @@ import styles from "./SignIn.module.css";
 
 /** How long before the link can be sent again. */
 const RESEND_SECONDS = 45;
+/** The six-digit code only exists once the project's magic-link email
+ *  template includes it, which needs a custom SMTP provider. Until then the
+ *  screen must not ask for something the email doesn't carry. */
+const EMAIL_HAS_CODE = process.env.NEXT_PUBLIC_SUPABASE_EMAIL_CODE === "true";
 
 function validEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
@@ -141,6 +145,7 @@ export function SignInView() {
           {/* A link opened from a mail app lands in Safari, not in a copy of
               Aloud saved to the home screen. The code in the same email gets
               that reader in without leaving the app. */}
+          {EMAIL_HAS_CODE && (
           <form
             className={styles.codeBlock}
             onSubmit={(event) => {
@@ -167,6 +172,8 @@ export function SignInView() {
             </button>
             {error && <p className={styles.error} role="alert">{error}</p>}
           </form>
+          )}
+          {!EMAIL_HAS_CODE && error && <p className={styles.error} role="alert">{error}</p>}
         </div>
       ) : (
         <div className={styles.body}>

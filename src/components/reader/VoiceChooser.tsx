@@ -55,8 +55,8 @@ export function VoiceChooser({
             Choose a voice
           </h1>
           <p className={styles.lede}>
-            Tap the speaker to hear each one read the opening of <em>{bookTitle}</em>. You can
-            change your mind any time from the reader.
+            Tap the speaker to hear each voice introduce itself, then pick the one you want for{" "}
+            <em>{bookTitle}</em>. You can change your mind any time from the reader.
           </p>
         </header>
 
