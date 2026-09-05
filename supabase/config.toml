@@ -159,7 +159,7 @@ site_url = "https://aloud-red.vercel.app"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["http://localhost:3000/**", "http://127.0.0.1:3000/**", "https://aloud-red.vercel.app/**", "https://aloud-*-ronaktopranis-projects.vercel.app/**", "https://aloud-git-*-ronaktopranis-projects.vercel.app/**"]
+additional_redirect_urls = ["http://localhost:3000/**", "http://127.0.0.1:3000/**", "https://aloud-red.vercel.app/**", "https://aloud-*-ronaktopranis-projects.vercel.app/**", "https://aloud-git-*-ronaktopranis-projects.vercel.app/**", "https://aloudapp.com/**", "https://www.aloudapp.com/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -233,14 +233,17 @@ otp_length = 6
 otp_expiry = 3600
 
 # Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Resend. The API key is never committed: export RESEND_API_KEY before
+# `supabase config push`. Until a sending domain is verified in Resend,
+# onboarding@resend.dev can only deliver to the Resend account's own address.
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "onboarding@resend.dev"
+sender_name = "Aloud"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -253,13 +256,11 @@ otp_expiry = 3600
 # subject = "Your password has been changed"
 # content_path = "./supabase/templates/password_changed_notification.html"
 
-# The magic-link template in supabase/templates/magic_link.html adds the
-# six-digit code the app's "type the code instead" field needs. Free-tier
-# projects can only apply it once a custom SMTP provider is configured:
-#
-# [auth.email.template.magic_link]
-# subject = "Sign in to Aloud"
-# content_path = "./supabase/templates/magic_link.html"
+# Adds the six-digit code the app's "type the code instead" field needs.
+# Applying a template needs the custom SMTP provider above.
+[auth.email.template.magic_link]
+subject = "Sign in to Aloud"
+content_path = "./supabase/templates/magic_link.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
@@ -326,6 +327,16 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Google sign-in. Flip `enabled` once the client secret is exported as
+# SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET for `supabase config push`. The OAuth
+# client's authorised redirect URI must be
+# https://xkrhmqehytezexnotfxh.supabase.co/auth/v1/callback
+[auth.external.google]
+enabled = false
+client_id = "320872251079-ehevbl976i608689uqnlqhq63ag62sms.apps.googleusercontent.com"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+skip_nonce_check = false
+
 [auth.external.apple]
 enabled = false
 client_id = ""
