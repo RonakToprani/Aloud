@@ -3,6 +3,7 @@ import { Instrument_Sans, Instrument_Serif, Newsreader } from "next/font/google"
 import { AuthProvider } from "@/components/AuthProvider";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { SettingsSync } from "@/components/SettingsSync";
+import { InstallPromptCatcher } from "@/components/install/InstallPromptCatcher";
 import { DEFAULT_SETTINGS } from "@/lib/storage/prefs";
 import "./globals.css";
 
@@ -90,6 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <SettingsProvider>
             <SettingsSync />
+            <InstallPromptCatcher />
             {children}
           </SettingsProvider>
         </AuthProvider>

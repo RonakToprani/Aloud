@@ -1,0 +1,107 @@
+/* ---------- The counter, in the signed-out hero ---------- */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.counter {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 62px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 900px) {
+  .counter {
+    font-size: 118px;
+    letter-spacing: -0.015em;
+  }
+}
+
+.readers {
+  font-size: 14px;
+  color: var(--ink-dimmer);
+  font-variant-numeric: tabular-nums;
+}
+
+.presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one thing on the site allowed to blink. */
+.presenceDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  flex: none;
+}
+
+.presenceDot[data-live="true"] {
+  animation: breathe 2600ms var(--ease-soft) infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presenceDot[data-live="true"] {
+    animation: none;
+  }
+}
+
+/* ---------- The same figures above a full library ---------- */
+
+.strip {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  font-size: 12px;
+  color: var(--ui-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.stripFigure {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1;
+  color: var(--ink-strong);
+  margin-right: 1px;
+}
+
+.stripDot {
+  color: var(--ui-faint);
+}
+
+.strip .presenceDot {
+  margin-right: -1px;
+}

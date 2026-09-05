@@ -50,10 +50,18 @@ async function measure(book: ParsedBook, onProgress?: (fraction: number) => void
   };
 }
 
+/** Re-adding a book the account already knows about keeps its id, so the
+ *  saved place and bookmarks line up with the text again. */
+export interface ImportOptions {
+  id?: string;
+  addedAt?: number;
+}
+
 async function persist(
   book: ParsedBook,
   source: BookMeta["source"],
   onProgress?: (progress: ImportProgress) => void,
+  options?: ImportOptions,
 ): Promise<BookMeta> {
   onProgress?.({ stage: "indexing", fraction: 0 });
   const counts = await measure(book, (fraction) =>
@@ -61,11 +69,11 @@ async function persist(
   );
 
   const meta: BookMeta = {
-    id: makeId(),
+    id: options?.id ?? makeId(),
     title: book.title,
     author: book.author,
     source,
-    addedAt: Date.now(),
+    addedAt: options?.addedAt ?? Date.now(),
     chapterTitles: book.chapters.map((chapter) => chapter.title),
     ...counts,
     cover: book.cover,
@@ -93,6 +101,7 @@ async function assertRoom(bytes: number): Promise<void> {
 export async function importFile(
   file: File,
   onProgress?: (progress: ImportProgress) => void,
+  options?: ImportOptions,
 ): Promise<BookMeta> {
   await assertRoom(file.size);
   onProgress?.({ stage: "reading", fraction: 0 });
@@ -105,7 +114,7 @@ export async function importFile(
     const parsed = await parseEpub(file, (fraction) =>
       onProgress?.({ stage: "parsing", fraction }),
     );
-    return persist(parsed, "epub", onProgress);
+    return persist(parsed, "epub", onProgress, options);
   }
 
   const isText = /\.(txt|md|markdown)$/i.test(file.name) || file.type.startsWith("text/");
@@ -117,15 +126,16 @@ export async function importFile(
 
   onProgress?.({ stage: "parsing", fraction: 0 });
   const text = await file.text();
-  return persist(parsePlainText(text, name), "txt", onProgress);
+  return persist(parsePlainText(text, name), "txt", onProgress, options);
 }
 
 export async function importPastedText(
   text: string,
   title: string,
   onProgress?: (progress: ImportProgress) => void,
+  options?: ImportOptions,
 ): Promise<BookMeta> {
-  return persist(parsePlainText(text, title.trim() || "Pasted text"), "paste", onProgress);
+  return persist(parsePlainText(text, title.trim() || "Pasted text"), "paste", onProgress, options);
 }
 
 /** Turns any import failure into something a person can act on. */

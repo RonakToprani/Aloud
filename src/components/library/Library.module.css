@@ -10,6 +10,20 @@
   animation: pageIn 420ms var(--ease-soft) both;
 }
 
+/* The first visit is one column that fills the screen: header, a centred
+   hero, and the actions pinned to the bottom. */
+.page[data-landing="true"] {
+  max-width: 480px;
+  padding: max(26px, env(safe-area-inset-top)) max(28px, env(safe-area-inset-right))
+    calc(34px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left));
+}
+
+@media (min-width: 900px) {
+  .page[data-landing="true"] {
+    max-width: 640px;
+  }
+}
+
 .head {
   display: flex;
   align-items: center;
@@ -30,6 +44,140 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.signInLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.signInLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.accountChip {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--sentence);
+  color: var(--accent-strong);
+  transition: background-color var(--dur-ui) var(--ease-soft);
+}
+
+.accountChip:hover {
+  background: var(--segment);
+}
+
+.accountInitial {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* ---------- Landing (no books yet) ---------- */
+
+.landing {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 34px;
+  padding: 24px 0;
+}
+
+.landingRule {
+  width: 100%;
+  height: 1px;
+  background: var(--track);
+}
+
+/* The one place marketing copy demonstrates the mechanic. */
+.landingSentence {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.68;
+  color: var(--ink-dim);
+  text-align: center;
+  text-wrap: pretty;
+  max-width: 34ch;
+}
+
+@media (min-width: 900px) {
+  .landingSentence {
+    font-size: 23px;
+    line-height: 1.6;
+  }
+}
+
+.landingPill {
+  background: var(--word);
+  color: var(--word-ink);
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin: 0 -2px;
+}
+
+.landingActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.landingPrimary,
+.landingSecondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 16px;
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background-color var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft);
+}
+
+.landingPrimary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.landingPrimary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.landingSecondary {
+  border: 1px solid var(--control-border);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.landingSecondary:hover:not(:disabled) {
+  background: var(--inset);
+}
+
+.landingPrimary:disabled,
+.landingSecondary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.landingCaption {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
 }
 
 .primaryButton,
@@ -92,6 +240,8 @@
 }
 
 .continueCard {
+  width: 100%;
+  text-align: left;
   display: grid;
   grid-template-columns: 96px 1fr;
   gap: 18px;
@@ -106,6 +256,23 @@
 
 .continueCard:hover {
   background: var(--segment);
+}
+
+/* Without its text, a book is a memory: present, but greyed. */
+.continueCard[data-missing="true"] .continueCover,
+.tile[data-missing="true"] .tileCoverWrap > :global(*):first-child {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+.continueCard[data-missing="true"] .continueTitle,
+.tile[data-missing="true"] .tileTitle {
+  color: var(--ink-dimmer);
+}
+
+.continueCard[data-missing="true"] .resume {
+  background: var(--inset);
+  color: var(--ui);
 }
 
 .continueCover {
@@ -207,19 +374,41 @@
 }
 
 .tileLink {
+  width: 100%;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 9px;
   text-decoration: none;
+  text-align: left;
   color: inherit;
 }
 
-.tileLink > :global(*):first-child {
-  transition: transform var(--dur-ui) var(--ease-soft);
+.tileCoverWrap {
+  position: relative;
+  display: block;
 }
 
-.tileLink:hover > :global(*):first-child {
+.tileCoverWrap > :global(*):first-child {
+  transition: transform var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft);
+}
+
+.tileLink:hover .tileCoverWrap > :global(*):first-child {
   transform: translateY(-3px);
+}
+
+.tileBadge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--ui-muted);
+  border: 1px solid var(--hairline);
 }
 
 .tileTitle {
@@ -375,6 +564,33 @@
 .errorCard .ghostButton {
   align-self: flex-start;
   margin-left: -16px;
+}
+
+/* ---------- Not on this device ---------- */
+
+.missingWho {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.missingTitle {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.3;
+  color: var(--ink-strong);
+}
+
+.missingAuthor {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.missingBody {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ui-muted);
 }
 
 /* ---------- Paste ---------- */

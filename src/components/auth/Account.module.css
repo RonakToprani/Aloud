@@ -1,0 +1,111 @@
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.email {
+  font-size: 15px;
+  color: var(--ui);
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ui-muted);
+}
+
+.week {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.total {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--ink-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.bars {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  height: 52px;
+  margin-top: 6px;
+}
+
+.barColumn {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 5px;
+  height: 100%;
+}
+
+.bar {
+  display: block;
+  border-radius: 2px;
+  background: var(--control-border);
+  transition: height 320ms var(--ease-soft);
+}
+
+.bar[data-today="true"] {
+  background: var(--accent);
+}
+
+.barLabel {
+  font-size: 9.5px;
+  text-align: center;
+  color: var(--ui-faint);
+}
+
+.signOut,
+.signIn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--dur-ui) var(--ease-soft);
+}
+
+.signOut {
+  background: var(--inset);
+  color: var(--ui);
+}
+
+.signOut:hover:not(:disabled) {
+  background: var(--segment);
+}
+
+.signIn {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+
+.signIn:hover {
+  background: var(--accent);
+}
+
+.footnote {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
