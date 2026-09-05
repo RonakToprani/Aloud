@@ -9,13 +9,15 @@ import type {
   UtteranceHandle,
 } from "../engine";
 import { getEdgeVoices, type EdgeVoice } from "./voicesClient";
+import { planPassage, type PassageInput, type PassagePlan } from "./passage";
 import {
-  FIRST_PASSAGE_MAX_CHARS,
-  PASSAGE_MAX_CHARS,
-  planPassage,
-  type PassageInput,
-  type PassagePlan,
-} from "./passage";
+  applyCuts,
+  DEFAULT_TIGHTEN,
+  planCuts,
+  remapWords,
+  type SentenceSpan,
+  type TightenSettings,
+} from "./tighten";
 
 /** A minimal, always-silent WAV. Playing it once inside a user gesture is
  *  enough to mark this <audio> element as activated for the rest of the
@@ -96,6 +98,47 @@ interface DecodedSentence {
 
 /** How many decoded sentences to keep for a skip backwards. */
 const DECODED_CACHE_LIMIT = 8;
+
+/** How much text each successive passage asks for. The first is small so
+ *  pressing play feels immediate; the second is synthesised while the first
+ *  plays and so can be larger; from then on there is a passage of margin. */
+const PASSAGE_BUDGETS = [220, 700, 1500];
+
+/** Sentence and paragraph watchers poll the audio clock this often. A timer
+ *  rather than requestAnimationFrame, which stops entirely while the tab is
+ *  in the background and would leave a passage's end undetected. */
+const WATCH_INTERVAL_MS = 40;
+
+/**
+ * Trim the silences Edge leaves in a clip — see tighten.ts. Returns a new
+ * buffer and the word timings shifted to match.
+ */
+function tightenBuffer(
+  ctx: BaseAudioContext,
+  buffer: AudioBuffer,
+  words: RawTimedWord[],
+  sentences: SentenceSpan[],
+  settings: TightenSettings = DEFAULT_TIGHTEN,
+): { buffer: AudioBuffer; words: RawTimedWord[] } {
+  const channel = buffer.getChannelData(0);
+  const cuts = planCuts(channel, buffer.sampleRate, words, sentences, settings);
+  if (!cuts.length) return { buffer, words };
+  const first = applyCuts(channel, buffer.sampleRate, cuts);
+  if (!first.length) return { buffer, words };
+  const out = ctx.createBuffer(buffer.numberOfChannels, first.length, buffer.sampleRate);
+  out.copyToChannel(first, 0);
+  for (let c = 1; c < buffer.numberOfChannels; c++) {
+    out.copyToChannel(applyCuts(buffer.getChannelData(c), buffer.sampleRate, cuts), c);
+  }
+  return { buffer: out, words: remapWords(words, cuts) };
+}
+
+/** A lone sentence keeps a sentence's worth of pause at its end, since the
+ *  next clip only starts once this one reports finishing. */
+const LONE_SENTENCE_TIGHTEN: TightenSettings = {
+  ...DEFAULT_TIGHTEN,
+  trailMs: DEFAULT_TIGHTEN.sentencePauseMs,
+};
 
 class EdgeApiError extends Error {}
 
@@ -333,7 +376,7 @@ class EdgeUtterance implements UtteranceHandle {
   private cancelled = false;
   private finished = false;
   private readonly controller = new AbortController();
-  private rafId: number | null = null;
+  private ticker: ReturnType<typeof setInterval> | null = null;
   private words: RawTimedWord[] = [];
   private nextWordIndex = 0;
 
@@ -482,7 +525,10 @@ class EdgeUtterance implements UtteranceHandle {
   private scheduleBoundaries(): void {
     this.nextWordIndex = 0;
     const tick = () => {
-      if (this.cancelled || this.finished) return;
+      if (this.cancelled || this.finished) {
+        this.stopBoundaries();
+        return;
+      }
       const nowMs = this.elapsed() * 1000;
       while (this.nextWordIndex < this.words.length && this.words[this.nextWordIndex].offsetMs <= nowMs) {
         const word = this.words[this.nextWordIndex];
@@ -494,14 +540,14 @@ class EdgeUtterance implements UtteranceHandle {
         this.callbacks.onBoundary?.(event);
         this.nextWordIndex += 1;
       }
-      this.rafId = requestAnimationFrame(tick);
     };
-    this.rafId = requestAnimationFrame(tick);
+    this.stopBoundaries();
+    this.ticker = setInterval(tick, WATCH_INTERVAL_MS);
   }
 
   private stopBoundaries(): void {
-    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
-    this.rafId = null;
+    if (this.ticker !== null) clearInterval(this.ticker);
+    this.ticker = null;
   }
 
   pause(): void {
@@ -540,23 +586,43 @@ interface DecodedPassage {
   buffer: AudioBuffer;
   words: RawTimedWord[];
   startMs: number[];
+  /** A sentence's span ends where the next begins; the last one's ends a
+   *  pause after the audio does, which is when the next passage is due. */
   endMs: number[];
+  /** Silence owed after the last word, before whatever follows. */
+  pauseAfterMs: number;
 }
 
-/** Locate each sentence in the returned audio using the word timings, whose
+/** Locate each sentence in the tightened audio using the word timings, whose
  *  char indices address the passage as a whole. */
-function locateSentences(plan: PassagePlan, words: RawTimedWord[], durationMs: number): {
-  startMs: number[];
-  endMs: number[];
-} {
+function locateSentences(
+  plan: PassagePlan,
+  words: RawTimedWord[],
+  durationMs: number,
+  pauseAfterMs: number,
+): { startMs: number[]; endMs: number[] } {
   const startMs = plan.sentences.map((sentence) => {
     const first = words.find((word) => word.charIndex >= sentence.start);
     return first ? first.offsetMs : 0;
   });
   // A sentence runs until the next one opens, so no audio is ever skipped —
   // trailing pauses belong to the sentence that caused them.
-  const endMs = startMs.map((_, i) => (i + 1 < startMs.length ? startMs[i + 1] : durationMs));
+  const endMs = startMs.map((_, i) =>
+    i + 1 < startMs.length ? startMs[i + 1] : durationMs + pauseAfterMs,
+  );
   return { startMs, endMs };
+}
+
+function pauseAfter(plan: PassagePlan): number {
+  const last = plan.sentences[plan.sentences.length - 1];
+  return last?.endsParagraph ? DEFAULT_TIGHTEN.paragraphPauseMs : DEFAULT_TIGHTEN.sentencePauseMs;
+}
+
+interface PlaybackHooks {
+  /** Audio was (re)scheduled: anything queued behind it must be re-timed. */
+  onStarted(playback: PassagePlayback): void;
+  /** Audio was stopped or paused: anything queued behind it is void. */
+  onStopped(playback: PassagePlayback): void;
 }
 
 /**
@@ -564,7 +630,10 @@ function locateSentences(plan: PassagePlan, words: RawTimedWord[], durationMs: n
  *
  * The audio keeps running across sentence boundaries; a sentence ending is a
  * timestamp being crossed, not a source stopping. That is what makes the
- * intonation carry from one sentence into the next.
+ * intonation carry from one sentence into the next. A passage can also be
+ * scheduled to begin at an exact moment on the audio clock — the end of the
+ * one before it — so the seam between passages is sample-accurate rather
+ * than whenever JavaScript next gets a turn.
  */
 class PassagePlayback {
   private source: AudioBufferSourceNode | null = null;
@@ -575,7 +644,7 @@ class PassagePlayback {
   constructor(
     readonly passage: DecodedPassage,
     private readonly output: CloudAudioOutput,
-    private readonly onFinished: () => void,
+    private readonly hooks: PlaybackHooks,
   ) {}
 
   get running(): boolean {
@@ -593,14 +662,31 @@ class PassagePlayback {
     return Math.max(0, (ctx.currentTime - this.originTime) * 1000);
   }
 
-  /** True when the playhead already sits inside this span. */
+  /** Context time at which this passage's last sentence, pause included, ends. */
+  endTime(): number | null {
+    if (!this.running) return null;
+    const { endMs } = this.passage;
+    return this.originTime + endMs[endMs.length - 1] / 1000;
+  }
+
+  /** Slack after a sentence's start within which a request to speak it is a
+   *  normal advance rather than a jump back to its beginning. Generous, so a
+   *  background tab whose timers are throttled to a second still carries on
+   *  rather than repeating that second. */
+  private static readonly ADVANCE_SLACK_MS = 1500;
+
+  /** True when the playhead sits at the opening of this span — where a
+   *  normal advance would find it — so playing the span need not restart
+   *  anything. A playhead deep inside the span means a deliberate jump back
+   *  to the sentence's start, which must rewind. */
   covers(fromMs: number, toMs: number): boolean {
     if (!this.running) return false;
     const now = this.elapsedMs();
-    return now >= fromMs - 120 && now < toMs;
+    return now >= fromMs - 120 && now < Math.min(toMs, fromMs + PassagePlayback.ADVANCE_SLACK_MS);
   }
 
-  startAt(offsetMs: number): void {
+  /** Begin at `offsetMs` into the passage — now, or at context time `at`. */
+  startAt(offsetMs: number, at?: number): void {
     const ctx = this.output.context;
     if (!ctx) return;
     this.stop();
@@ -611,16 +697,18 @@ class PassagePlayback {
     source.connect(gain);
     gain.connect(this.output.destination ?? ctx.destination);
     source.onended = () => {
+      // The buffer ran out. The span may still be inside its closing pause,
+      // and a queued passage may already be sounding; nothing to do here.
       if (this.source !== source) return;
-      this.source = null;
-      this.onFinished();
     };
     const offset = Math.max(0, offsetMs / 1000);
-    source.start(0, offset);
+    const when = Math.max(ctx.currentTime, at ?? ctx.currentTime);
+    source.start(when, offset);
     this.source = source;
     this.gain = gain;
-    this.originTime = ctx.currentTime - offset;
+    this.originTime = when - offset;
     this.pausedAtMs = null;
+    this.hooks.onStarted(this);
   }
 
   pause(): void {
@@ -666,6 +754,7 @@ class PassagePlayback {
     } catch {
       /* already stopped */
     }
+    this.hooks.onStopped(this);
   }
 }
 
@@ -677,7 +766,7 @@ class PassagePlayback {
 class PassageUtterance implements UtteranceHandle {
   private cancelled = false;
   private finished = false;
-  private rafId: number | null = null;
+  private ticker: ReturnType<typeof setInterval> | null = null;
   private nextWordIndex = 0;
   private readonly words: RawTimedWord[];
 
@@ -721,7 +810,10 @@ class PassageUtterance implements UtteranceHandle {
   private watch(): void {
     const { startMs, endMs } = this.playback.passage;
     const tick = () => {
-      if (this.done) return;
+      if (this.done) {
+        this.stopWatching();
+        return;
+      }
       const now = this.playback.elapsedMs();
       while (
         this.nextWordIndex < this.words.length &&
@@ -739,16 +831,15 @@ class PassageUtterance implements UtteranceHandle {
         this.finished = true;
         this.stopWatching();
         this.callbacks.onEnd?.();
-        return;
       }
-      this.rafId = requestAnimationFrame(tick);
     };
-    this.rafId = requestAnimationFrame(tick);
+    this.stopWatching();
+    this.ticker = setInterval(tick, WATCH_INTERVAL_MS);
   }
 
   private stopWatching(): void {
-    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
-    this.rafId = null;
+    if (this.ticker !== null) clearInterval(this.ticker);
+    this.ticker = null;
   }
 
   pause(): void {
@@ -768,6 +859,79 @@ class PassageUtterance implements UtteranceHandle {
   }
 }
 
+/**
+ * A sentence whose passage is still on its way. Stands in for the utterance
+ * until the audio arrives, then hands over to a real PassageUtterance —
+ * which is how the very first sentence of a session plays from the same
+ * continuous reading as the ones after it, rather than as a clip of its own.
+ */
+class AwaitedUtterance implements UtteranceHandle {
+  private cancelled = false;
+  private failed = false;
+  private inner: PassageUtterance | null = null;
+  private wantPaused = false;
+
+  constructor(
+    private readonly callbacks: SpeakCallbacks,
+    ready: Promise<unknown>,
+    private readonly locate: () => { playback: PassagePlayback; index: number } | null,
+  ) {
+    ready.then(
+      () => {
+        if (this.cancelled) return;
+        const found = this.locate();
+        if (!found) {
+          this.fail();
+          return;
+        }
+        this.inner = new PassageUtterance(found.playback, found.index, this.callbacks);
+        this.inner.start();
+        if (this.wantPaused) this.inner.pause();
+      },
+      () => {
+        if (!this.cancelled) this.fail();
+      },
+    );
+  }
+
+  private fail(): void {
+    this.failed = true;
+    const error: SpeechError = {
+      kind: "synthesis-failed",
+      message: "The cloud voice service didn't respond.",
+    };
+    this.callbacks.onError?.(error);
+  }
+
+  get done(): boolean {
+    return this.cancelled || this.failed || !!this.inner?.done;
+  }
+
+  get playing(): boolean {
+    return this.inner ? this.inner.playing : false;
+  }
+
+  get paused(): boolean {
+    return this.inner ? this.inner.paused : this.wantPaused && !this.done;
+  }
+
+  pause(): void {
+    this.wantPaused = true;
+    this.inner?.pause();
+  }
+
+  resume(): void {
+    this.wantPaused = false;
+    this.inner?.resume();
+  }
+
+  cancel(): void {
+    if (this.cancelled) return;
+    this.cancelled = true;
+    this.inner?.cancel();
+  }
+}
+
 export interface EdgeSpeechEngineOptions {
   /** Filter like 'en-' passed to getEdgeVoices; keeps the list to one
    *  language rather than every locale Microsoft ships. */
@@ -780,11 +944,18 @@ interface PendingPrefetch {
   promise: Promise<DecodedSentence>;
 }
 
+interface PassageInFlight {
+  key: string;
+  plan: PassagePlan;
+  promise: Promise<DecodedPassage>;
+}
+
 /**
  * Speaks through Microsoft Edge's cloud "Read Aloud" voices instead of
  * whatever is installed on the device. Synthesis happens on our own server
  * (see `/api/speech/edge/synthesize`) and comes back as one MP3 plus word
- * timings; this class just plays it and paces `onBoundary` against playback.
+ * timings; this class tightens the silences, plays it, and paces
+ * `onBoundary` against playback.
  */
 export class EdgeSpeechEngine implements SpeechEngine {
   readonly id = "edge-tts";
@@ -796,13 +967,28 @@ export class EdgeSpeechEngine implements SpeechEngine {
   private readonly output = new CloudAudioOutput();
   /** Sentences already decoded and able to start on the next audio tick. */
   private readonly decoded = new Map<string, DecodedSentence>();
-  private current: EdgeUtterance | PassageUtterance | null = null;
+  private current: EdgeUtterance | PassageUtterance | AwaitedUtterance | null = null;
   private pending: PendingPrefetch | null = null;
+  /** The passage sounding now (or paused). */
   private playback: PassagePlayback | null = null;
+  /** The next passage, scheduled on the audio clock to follow `playback`. */
+  private queued: PassagePlayback | null = null;
+  /** The next passage, decoded but not yet scheduled. */
   private nextPassage: DecodedPassage | null = null;
-  private passageInFlight: string | null = null;
-  private hasPlayedAnything = false;
+  private inFlight: PassageInFlight | null = null;
+  private passagesPlanned = 0;
   private deferredStop: ReturnType<typeof setTimeout> | null = null;
+
+  /** Every passage shares these; which one is speaking decides what they do. */
+  private readonly hooks: PlaybackHooks = {
+    onStarted: (playback) => {
+      if (playback === this.playback) this.queueNext();
+    },
+    onStopped: (playback) => {
+      if (playback === this.playback) this.dropQueued();
+      else if (playback === this.queued) this.queued = null;
+    },
+  };
 
   constructor(private readonly options: EdgeSpeechEngineOptions = {}) {}
 
@@ -856,6 +1042,17 @@ export class EdgeSpeechEngine implements SpeechEngine {
     }
   }
 
+  /** Decode a lone sentence and tighten its silences. */
+  private async decodeSentence(result: SynthesisResult, text: string): Promise<DecodedSentence> {
+    const raw = await this.output.decode(result.bytes);
+    const ctx = this.output.context;
+    if (!ctx) return { buffer: raw, words: result.words };
+    const span: SentenceSpan = { start: 0, end: text.length, endsParagraph: false };
+    return tightenBuffer(ctx, raw, result.words, [span], LONE_SENTENCE_TIGHTEN);
+  }
+
+  /* ---------------------------------------------------------------- passages */
+
   /**
    * Takes the sentences about to be read and synthesises them together, so the
    * model shapes one continuous reading rather than a series of isolated
@@ -865,37 +1062,77 @@ export class EdgeSpeechEngine implements SpeechEngine {
     const shortName = edgeShortName(options.voiceId);
     if (!this.supported || !shortName || !sentences.length) return;
 
-    // One passage queued ahead is enough. This is called at every sentence
-    // with a window that slides forward, so without this the plan changes
-    // slightly each time and the passage is synthesised again from scratch —
-    // several times over, for audio that was already on its way.
-    if (this.nextPassage || this.passageInFlight) return;
+    // One passage ahead is enough. This is called at every sentence with a
+    // window that slides forward, so without this the plan would change
+    // slightly each time and the passage be synthesised again from scratch.
+    if (this.nextPassage || this.inFlight) return;
 
     // Anything the passage in progress already covers is not ours to plan.
     const covered = new Set(this.playback?.passage.plan.sentences.map((s) => s.text) ?? []);
     const remaining = sentences.filter((entry) => !covered.has(entry.text.trim()));
     if (!remaining.length) return;
 
-    const budget = this.hasPlayedAnything ? PASSAGE_MAX_CHARS : FIRST_PASSAGE_MAX_CHARS;
+    const budget = PASSAGE_BUDGETS[Math.min(this.passagesPlanned, PASSAGE_BUDGETS.length - 1)];
     const plan = planPassage(remaining, budget);
     if (!plan) return;
+    this.passagesPlanned += 1;
 
-    // Nothing is queued or in flight — the guard above has already established
-    // that — so this passage is the one to fetch.
     const key = cacheKey(shortName, plan.text, options.rate);
-    this.passageInFlight = key;
+    const promise = requestSynthesis(plan.text, shortName, options.rate, new AbortController().signal).then(
+      async (result): Promise<DecodedPassage> => {
+        const raw = await this.output.decode(result.bytes);
+        const ctx = this.output.context;
+        const tightened = ctx ? tightenBuffer(ctx, raw, result.words, plan.sentences) : { buffer: raw, words: result.words };
+        const pause = pauseAfter(plan);
+        const { startMs, endMs } = locateSentences(plan, tightened.words, tightened.buffer.duration * 1000, pause);
+        return { key, plan, buffer: tightened.buffer, words: tightened.words, startMs, endMs, pauseAfterMs: pause };
+      },
+    );
+    this.inFlight = { key, plan, promise };
 
-    void requestSynthesis(plan.text, shortName, options.rate, new AbortController().signal)
-      .then(async (result) => {
-        const buffer = await this.output.decode(result.bytes);
-        const { startMs, endMs } = locateSentences(plan, result.words, buffer.duration * 1000);
-        if (this.passageInFlight !== key) return;
-        this.passageInFlight = null;
-        this.nextPassage = { key, plan, buffer, words: result.words, startMs, endMs };
+    promise
+      .then((passage) => {
+        if (this.inFlight?.key !== key) return;
+        this.inFlight = null;
+        this.nextPassage = passage;
+        this.queueNext();
       })
       .catch(() => {
-        if (this.passageInFlight === key) this.passageInFlight = null;
+        if (this.inFlight?.key === key) this.inFlight = null;
       });
+  }
+
+  /** Schedule the decoded next passage to begin the instant the current one
+   *  ends, so the seam is placed by the audio clock rather than by a timer. */
+  private queueNext(): void {
+    if (this.queued || !this.nextPassage || !this.playback?.running) return;
+    const at = this.playback.endTime();
+    if (at === null) return;
+    const queued = new PassagePlayback(this.nextPassage, this.output, this.hooks);
+    this.queued = queued;
+    queued.startAt(this.nextPassage.startMs[0], at);
+  }
+
+  private dropQueued(): void {
+    const queued = this.queued;
+    this.queued = null;
+    queued?.stop();
+  }
+
+  /** Make the next passage the current one. */
+  private promote(): PassagePlayback | null {
+    const passage = this.nextPassage;
+    if (!passage) return null;
+    this.nextPassage = null;
+    const queued = this.queued;
+    this.queued = null;
+    const previous = this.playback;
+    this.playback = null;
+    // The previous passage has either run out or is being left; a queued
+    // passage is already on the clock and simply becomes current.
+    previous?.stop();
+    this.playback = queued ?? new PassagePlayback(passage, this.output, this.hooks);
+    return this.playback;
   }
 
   /** The passage holding this sentence, if one is ready. */
@@ -907,14 +1144,13 @@ export class EdgeSpeechEngine implements SpeechEngine {
     }
     const inNext = this.nextPassage?.plan.sentences.findIndex((s) => s.text === trimmed);
     if (this.nextPassage && inNext !== undefined && inNext >= 0) {
-      const passage = this.nextPassage;
-      this.nextPassage = null;
-      this.playback?.stop();
-      this.playback = new PassagePlayback(passage, this.output, () => {});
-      return { playback: this.playback, index: inNext };
+      const playback = this.promote();
+      return playback ? { playback, index: inNext } : null;
     }
     return null;
   }
+
+  /* ---------------------------------------------------------------- sentences */
 
   /**
    * Starts fetching a sentence's audio without playing it, so that by the
@@ -930,12 +1166,12 @@ export class EdgeSpeechEngine implements SpeechEngine {
     // own: the two requests compete for the same connection, and the
     // single-sentence copy would be thrown away unheard.
     const trimmed = options.text.trim();
-    const inPassage = (passage: DecodedPassage | null | undefined) =>
-      passage?.plan.sentences.some((sentence) => sentence.text === trimmed) ?? false;
-    if (inPassage(this.playback?.passage) || inPassage(this.nextPassage)) return;
+    const inPlan = (plan: PassagePlan | null | undefined) =>
+      plan?.sentences.some((sentence) => sentence.text === trimmed) ?? false;
+    if (inPlan(this.playback?.passage.plan) || inPlan(this.nextPassage?.plan) || inPlan(this.inFlight?.plan)) return;
     // A passage on its way will cover this sentence and more; fetching it
     // alone as well would only compete with it for the connection.
-    if (this.nextPassage || this.passageInFlight) return;
+    if (this.nextPassage || this.inFlight) return;
 
     const key = cacheKey(shortName, options.text, options.rate);
     if (this.pending?.key === key) return;
@@ -946,10 +1182,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
     // and it is the half an <audio> element refuses to do early on iOS. Doing
     // it here leaves speak() with nothing to do but schedule the buffer.
     const promise = requestSynthesis(options.text, shortName, options.rate, controller.signal).then(
-      async (result): Promise<DecodedSentence> => ({
-        buffer: await this.output.decode(result.bytes),
-        words: result.words,
-      }),
+      (result) => this.decodeSentence(result, options.text),
     );
     this.pending = { key, controller, promise };
 
@@ -982,7 +1215,6 @@ export class EdgeSpeechEngine implements SpeechEngine {
       queueMicrotask(() => callbacks.onError?.(error));
       return { cancel() {}, done: true };
     }
-    this.hasPlayedAnything = true;
     if (this.deferredStop) {
       clearTimeout(this.deferredStop);
       this.deferredStop = null;
@@ -995,6 +1227,15 @@ export class EdgeSpeechEngine implements SpeechEngine {
       const utterance = new PassageUtterance(inPassage.playback, inPassage.index, callbacks);
       this.current = utterance;
       utterance.start();
+      return utterance;
+    }
+
+    // Its passage is on its way: wait for that rather than fetch the sentence
+    // alone, which would arrive no sooner and read as a clip of its own.
+    const trimmed = options.text.trim();
+    if (this.inFlight?.plan.sentences.some((sentence) => sentence.text === trimmed)) {
+      const utterance = new AwaitedUtterance(callbacks, this.inFlight.promise, () => this.passageFor(options.text));
+      this.current = utterance;
       return utterance;
     }
 
@@ -1012,10 +1253,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
         return inFlight.promise;
       }
       const result = await requestSynthesis(options.text, shortName, options.rate, signal);
-      const sentence: DecodedSentence = {
-        buffer: await this.output.decode(result.bytes),
-        words: result.words,
-      };
+      const sentence = await this.decodeSentence(result, options.text);
       this.rememberDecoded(key, sentence);
       return sentence;
     };
@@ -1057,6 +1295,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
       this.deferredStop = null;
       this.playback?.stop();
       this.playback = null;
+      this.dropQueued();
     }, 0);
   }
 
@@ -1074,7 +1313,9 @@ export class EdgeSpeechEngine implements SpeechEngine {
     this.deferredStop = null;
     this.playback?.stop();
     this.playback = null;
+    this.dropQueued();
     this.nextPassage = null;
+    this.inFlight = null;
     this.clearPending();
     this.decoded.clear();
     this.listeners.clear();

@@ -48,6 +48,34 @@ resizes, so the eye follows one object rather than a strobe; it snaps rather
 than glides across a line break. Wash mode is a pair that crossfades. Neither
 occludes a letterform.
 
+## Cloud voices, and why they sound continuous
+
+Microsoft's Edge voices are synthesised on our own server route and come
+back as MP3 plus word timings. Three things turn that into narration rather
+than a queue of clips (`src/lib/speech/edge/`):
+
+**Passages.** Sentences are sent together — 220 characters for the opening
+so play feels instant, then 700, then 1500 — ending at paragraph breaks, so
+the model shapes intonation across a paragraph instead of dropping to a full
+stop after every sentence. The first sentence of a session waits for its
+passage rather than playing as a clip of its own.
+
+**Tightened silences.** Measured against the live endpoint, Edge leaves
+950–1175ms of silence after every sentence and ~900ms at the end of each
+clip. It refuses SSML that would shorten them, so `tighten.ts` shortens them
+in the decoded audio: silent runs are found by RMS, sentence pauses are cut
+to 380ms, paragraph pauses to 620ms, phrasing pauses under 450ms are left
+alone, and the word timings are shifted to match. Splicing silence to
+silence is inaudible.
+
+**Sample-accurate seams.** The next passage is decoded while the current one
+plays and scheduled on the audio clock to begin the instant the current one's
+closing pause ends, so a passage boundary costs no JavaScript latency and
+survives a backgrounded tab. Pausing drops the scheduled passage; resuming
+re-times it.
+
+`node scripts/measure-gap.mjs` records the schedule through the real player.
+
 ## Storage and sync
 
 Local first, always. Parsed books live in IndexedDB; reading position, voice,

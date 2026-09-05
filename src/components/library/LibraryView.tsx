@@ -511,6 +511,13 @@ export function LibraryView() {
       ) : (
         <>
           <StatsStrip />
+          {showAccount && !signedIn && (
+            <p className={styles.nudge}>
+              These books live on this device only.{" "}
+              <Link href="/signin">Sign in</Link> to keep your library and your place in it on every
+              device.
+            </p>
+          )}
 
           {continuing && (
             <section className={styles.continue} aria-labelledby="continue-heading">

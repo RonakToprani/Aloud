@@ -222,6 +222,24 @@
   cursor: default;
 }
 
+.nudge {
+  margin: -10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ui-muted);
+}
+
+.nudge a {
+  color: var(--accent-strong);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.nudge a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* ---------- Section headings ---------- */
 
 .sectionLabel {

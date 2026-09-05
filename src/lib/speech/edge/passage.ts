@@ -21,6 +21,8 @@ export interface PassageSentence {
   /** Character range within the passage. */
   start: number;
   end: number;
+  /** A paragraph ends after this sentence, so its pause may run longer. */
+  endsParagraph: boolean;
 }
 
 export interface PassagePlan {
@@ -54,7 +56,7 @@ export const FIRST_PASSAGE_MAX_CHARS = 220;
  * reset in the one place it sounds wrong.
  */
 export function planPassage(inputs: PassageInput[], maxChars: number): PassagePlan | null {
-  const sentences: Building[] = [];
+  const sentences: PassageSentence[] = [];
   let text = "";
   /** Sentence count at the last paragraph end seen inside the budget. */
   let lastParagraphEnd = 0;
@@ -92,15 +94,7 @@ export function planPassage(inputs: PassageInput[], maxChars: number): PassagePl
   // to move — trimming here would drop text that fitted perfectly well.
   if (budgetRanOut && lastParagraphEnd > 0 && lastParagraphEnd < sentences.length) {
     const kept = sentences.slice(0, lastParagraphEnd);
-    return { text: text.slice(0, kept[kept.length - 1].end), sentences: kept.map(strip) };
+    return { text: text.slice(0, kept[kept.length - 1].end), sentences: kept };
   }
-  return { text, sentences: sentences.map(strip) };
-}
-
-interface Building extends PassageSentence {
-  endsParagraph: boolean;
-}
-
-function strip(sentence: PassageSentence): PassageSentence {
-  return { text: sentence.text, start: sentence.start, end: sentence.end };
+  return { text, sentences };
 }

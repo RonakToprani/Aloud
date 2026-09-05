@@ -36,8 +36,11 @@ const RESUME_VERIFY_MS = 450;
 const PHANTOM_END_MS = 250;
 const PHANTOM_END_FRACTION = 0.15;
 const MAX_RECOVERIES = 3;
-/** If the engine has not started speaking by now, it never will. */
+/** If the engine has not started speaking by now, it never will. A device
+ *  voice answers within a few hundred ms or not at all; a cloud voice is
+ *  synthesising a passage over the network and deserves longer. */
 const START_TIMEOUT_MS = 2500;
+const CLOUD_START_TIMEOUT_MS = 9000;
 
 /**
  * Owns playback: one sentence per utterance, chained on end.
@@ -101,11 +104,16 @@ export class Player {
     });
     this.options.onSentence?.(chapterIndex, bounded);
 
-    // Warm the sentence under the cursor while nothing is playing, so pressing
-    // play is instant instead of paying a network round trip in silence. While
-    // playing this is left alone: the lookahead slot belongs to the *next*
-    // sentence, and stealing it would reintroduce the gap it exists to remove.
-    if (this.state.status !== "playing") this.prefetchAt(chapterIndex, bounded);
+    // Warm the reading under the cursor while nothing is playing, so pressing
+    // play is instant instead of paying a network round trip in silence. The
+    // passage is offered first so an engine that reads in passages has the
+    // opening one ready; the lone-sentence prefetch is what remains for the
+    // others. While playing this is left alone: the lookahead slot belongs to
+    // the *next* sentence, and stealing it would reintroduce the gap.
+    if (this.state.status !== "playing") {
+      this.offerPassage(chapterIndex, bounded);
+      this.prefetchAt(chapterIndex, bounded);
+    }
   }
 
   /** Seek and play in one gesture — what tapping a word does. */
@@ -353,10 +361,18 @@ export class Player {
     // produces no events at all: no start, no end, no error. Without this the
     // reader just sees the highlight parked on the first word in silence.
     this.clearStartTimer();
-    this.startTimer = setTimeout(() => {
-      if (this.destroyed || this.sync !== sync) return;
-      this.recover("silent");
-    }, START_TIMEOUT_MS);
+    this.startTimer = setTimeout(
+      () => {
+        if (this.destroyed || this.sync !== sync) return;
+        this.recover("silent");
+      },
+      this.voiceId?.startsWith("edge:") ? CLOUD_START_TIMEOUT_MS : START_TIMEOUT_MS,
+    );
+
+    // Offered before speak(), so that an engine which synthesises passages
+    // can answer the very first sentence from one — the alternative is a
+    // clip of its own, with a full stop's fall at the end, and a seam.
+    this.offerPassage(target.chapterIndex, target.sentenceIndex);
 
     this.handle = this.options.engine.speak(
       { text, voiceId: this.voiceId, rate: this.rate },
@@ -399,7 +415,6 @@ export class Player {
       },
     );
 
-    this.offerPassage(target.chapterIndex, target.sentenceIndex);
     this.prefetchNext(target.chapterIndex, target.sentenceIndex);
   }
 
