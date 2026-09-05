@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
-import { edgeHeaders, escapeSsml, ratePercent, synthesisUrl } from "./protocol";
+import { edgeHeaders, synthesisUrl } from "./protocol";
+import { buildSsml } from "./ssml";
 
 /** One spoken word, timed against the returned audio. */
 export interface TimedWord {
@@ -27,7 +28,10 @@ export class EdgeSynthesisError extends Error {
   }
 }
 
-const TIMEOUT_MS = 20_000;
+/** A passage is minutes of audio, not one sentence, and synthesis time scales
+ *  with the text. The next passage is requested a whole passage ahead, so a
+ *  slow one costs margin rather than silence. */
+const TIMEOUT_MS = 55_000;
 const OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
 
 /**
@@ -197,11 +201,7 @@ function sendTurn(socket: WebSocket, text: string, voice: string, rate: number):
       JSON.stringify(config),
   );
 
-  const ssml =
-    `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>` +
-    `<voice name='${voice}'>` +
-    `<prosody pitch='+0Hz' rate='${ratePercent(rate)}' volume='+0%'>${escapeSsml(text)}</prosody>` +
-    `</voice></speak>`;
+  const ssml = buildSsml(text, voice, rate);
 
   socket.send(
     `X-RequestId:${randomUUID().replace(/-/g, "")}\r\n` +

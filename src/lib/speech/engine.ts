@@ -21,6 +21,13 @@ export type VoiceTier =
   /** Eloquence and the old joke voices. Never a sensible default. */
   | "novelty";
 
+/** A sentence offered for joint synthesis, with where the paragraph ends. */
+export interface PreparedSentence {
+  text: string;
+  /** True when the next sentence starts a new paragraph. */
+  endsParagraph: boolean;
+}
+
 export interface EngineVoice {
   /** Stable across reloads on the same device. */
   id: string;
@@ -110,10 +117,12 @@ export interface SpeechEngine {
    * inside the audio. Handing over the whole paragraph lets the model shape
    * the intonation across it.
    *
-   * The first entry is the sentence `speak` will be called with next. Engines
-   * that synthesise one sentence at a time simply omit this.
+   * The first entry is the sentence `speak` will be called with next, and each
+   * carries whether a paragraph ends after it — the seam between two passages
+   * is the one place a pitch reset is audible, and a paragraph end is where a
+   * reset belongs. Engines that synthesise one sentence at a time omit this.
    */
-  prepare?(texts: string[], options: Omit<SpeakOptions, "text">): void;
+  prepare?(sentences: PreparedSentence[], options: Omit<SpeakOptions, "text">): void;
 
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle;
   pause(): void;

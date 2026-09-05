@@ -1,6 +1,10 @@
 import { isSameOrigin, withinRateLimit } from "@/lib/speech/edge/guard";
 import { EdgeSynthesisError, synthesize } from "@/lib/speech/edge/synthesize";
 
+/** Passages are minutes of audio rather than one sentence, and synthesis time
+ *  scales with the text, so the default function budget is not enough. */
+export const maxDuration = 60;
+
 /** A reader sentence is a few dozen words at most; this is generous headroom
  *  against a request built to hold the socket open synthesising a novel. */
 const MAX_TEXT_LENGTH = 4000;

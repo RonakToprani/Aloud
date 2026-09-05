@@ -1,5 +1,6 @@
 import { EdgeSpeechEngine } from "./edge/engine";
-import type { EngineVoice, SpeakCallbacks, SpeakOptions, SpeechEngine, UtteranceHandle } from "./engine";
+import type {
+  PreparedSentence, EngineVoice, SpeakCallbacks, SpeakOptions, SpeechEngine, UtteranceHandle } from "./engine";
 import { WebSpeechEngine } from "./webSpeechEngine";
 
 const EDGE_PREFIX = "edge:";
@@ -51,10 +52,10 @@ export class MultiSpeechEngine implements SpeechEngine {
     this.edgeEngine.unlock();
   }
 
-  prepare(texts: string[], options: Omit<SpeakOptions, "text">): void {
+  prepare(sentences: PreparedSentence[], options: Omit<SpeakOptions, "text">): void {
     // Only the cloud engine can synthesise sentences together; the device
     // voices speak whatever they are handed, one utterance at a time.
-    if (options.voiceId?.startsWith(EDGE_PREFIX)) this.edgeEngine.prepare(texts, options);
+    if (options.voiceId?.startsWith(EDGE_PREFIX)) this.edgeEngine.prepare(sentences, options);
   }
 
   prefetch(options: SpeakOptions): void {

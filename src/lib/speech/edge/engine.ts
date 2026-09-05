@@ -13,6 +13,7 @@ import {
   FIRST_PASSAGE_MAX_CHARS,
   PASSAGE_MAX_CHARS,
   planPassage,
+  type PassageInput,
   type PassagePlan,
 } from "./passage";
 
@@ -860,21 +861,28 @@ export class EdgeSpeechEngine implements SpeechEngine {
    * model shapes one continuous reading rather than a series of isolated
    * sentences each landing on a full stop.
    */
-  prepare(texts: string[], options: Omit<SpeakOptions, "text">): void {
+  prepare(sentences: PassageInput[], options: Omit<SpeakOptions, "text">): void {
     const shortName = edgeShortName(options.voiceId);
-    if (!this.supported || !shortName || !texts.length) return;
+    if (!this.supported || !shortName || !sentences.length) return;
+
+    // One passage queued ahead is enough. This is called at every sentence
+    // with a window that slides forward, so without this the plan changes
+    // slightly each time and the passage is synthesised again from scratch —
+    // several times over, for audio that was already on its way.
+    if (this.nextPassage || this.passageInFlight) return;
 
     // Anything the passage in progress already covers is not ours to plan.
     const covered = new Set(this.playback?.passage.plan.sentences.map((s) => s.text) ?? []);
-    const remaining = texts.filter((text) => !covered.has(text.trim()));
+    const remaining = sentences.filter((entry) => !covered.has(entry.text.trim()));
     if (!remaining.length) return;
 
     const budget = this.hasPlayedAnything ? PASSAGE_MAX_CHARS : FIRST_PASSAGE_MAX_CHARS;
     const plan = planPassage(remaining, budget);
     if (!plan) return;
 
+    // Nothing is queued or in flight — the guard above has already established
+    // that — so this passage is the one to fetch.
     const key = cacheKey(shortName, plan.text, options.rate);
-    if (this.nextPassage?.key === key || this.passageInFlight === key) return;
     this.passageInFlight = key;
 
     void requestSynthesis(plan.text, shortName, options.rate, new AbortController().signal)
@@ -925,7 +933,9 @@ export class EdgeSpeechEngine implements SpeechEngine {
     const inPassage = (passage: DecodedPassage | null | undefined) =>
       passage?.plan.sentences.some((sentence) => sentence.text === trimmed) ?? false;
     if (inPassage(this.playback?.passage) || inPassage(this.nextPassage)) return;
-    if (this.passageInFlight) return;
+    // A passage on its way will cover this sentence and more; fetching it
+    // alone as well would only compete with it for the connection.
+    if (this.nextPassage || this.passageInFlight) return;
 
     const key = cacheKey(shortName, options.text, options.rate);
     if (this.pending?.key === key) return;

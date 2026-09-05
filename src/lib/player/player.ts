@@ -421,18 +421,28 @@ export class Player {
    *  in isolation. */
   private offerPassage(chapterIndex: number, sentenceIndex: number): void {
     if (!this.options.engine.prepare) return;
-    const texts: string[] = [];
+    const texts: { text: string; endsParagraph: boolean }[] = [];
     let cursor: { chapterIndex: number; sentenceIndex: number } | null = {
       chapterIndex,
       sentenceIndex,
     };
     while (cursor && texts.length < Player.PASSAGE_LOOKAHEAD) {
-      const sentence = this.chapter(cursor.chapterIndex)?.sentences[cursor.sentenceIndex];
+      const chapter = this.chapter(cursor.chapterIndex);
+      const sentence = chapter?.sentences[cursor.sentenceIndex];
       if (!sentence) break;
-      texts.push(sentence.speakable);
       // Passages never span a chapter: the voice should land at a chapter end.
       const next = this.resolveSentence(cursor.chapterIndex, cursor.sentenceIndex + 1, 1);
-      cursor = next && next.chapterIndex === chapterIndex ? next : null;
+      const continues = next && next.chapterIndex === chapterIndex ? next : null;
+      const nextSentence = continues
+        ? this.chapter(continues.chapterIndex)?.sentences[continues.sentenceIndex]
+        : undefined;
+      texts.push({
+        text: sentence.speakable,
+        // The block a sentence belongs to is its paragraph; a change of block,
+        // or running out of chapter, ends one.
+        endsParagraph: !nextSentence || nextSentence.blockIndex !== sentence.blockIndex,
+      });
+      cursor = continues;
     }
     if (texts.length) {
       this.options.engine.prepare(texts, { voiceId: this.voiceId, rate: this.rate });
