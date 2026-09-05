@@ -1,10 +1,12 @@
 # Aloud
 
 A read-along reader. Open a book, tap a word, and hear it read aloud with the
-words lighting up as they're spoken. Everything runs in the browser: no server,
-no account, no data leaving the device.
+words lighting up as they're spoken. The book itself never leaves the device;
+an optional account keeps everything else — your place, bookmarks, settings
+and listening time — the same on every device you sign in to.
 
-Built with Next.js on the App Router, deployed on Vercel.
+Built with Next.js on the App Router, deployed on Vercel, with Supabase for
+auth and sync.
 
 ## How it works
 
@@ -46,10 +48,48 @@ resizes, so the eye follows one object rather than a strobe; it snaps rather
 than glides across a line break. Wash mode is a pair that crossfades. Neither
 occludes a letterform.
 
-## Storage
+## Storage and sync
 
-Parsed books live in IndexedDB; reading position, voice, rate and appearance
-live in `localStorage`. EPUBs are unzipped with JSZip and the OPF spine is
+Local first, always. Parsed books live in IndexedDB; reading position, voice,
+rate and appearance live in `localStorage`. The app works in full with no
+network and no account.
+
+On top of that sits the account (`src/lib/sync/`). Every visitor gets a quiet
+anonymous Supabase session so their listening counts and their progress is
+kept; signing in with a magic link (or the six-digit code from the same email,
+for the home-screen app on iOS) turns it into a real account. What is stored:
+
+- **Book metadata** — title, author, chapter titles and sentence counts. Never
+  the text. A book the account knows about but this device has never held
+  shows greyed in the library; tapping it asks for the same file again, and
+  the saved place and bookmarks fit straight back onto it.
+- **Reading positions** — written a couple of seconds after each sentence
+  change, straight away on pause, and with a keepalive request as the page
+  closes. Newest copy wins, judged by the writing device's own clock stamp
+  with a 1.5s margin so two devices never bounce the reader back.
+- **Bookmarks** — the union of both lists.
+- **Settings** — one document on the profile, newest wins.
+- **Listening time** — one row per reader visit, its running total replaced
+  every 15s while playing. A trigger folds each write's delta into
+  `reading_stats`, the single pre-aggregated row the home counter reads.
+  "Listening right now" is a realtime presence channel.
+
+### Setting up Supabase
+
+1. Create a project and run `supabase/migrations/20260904000000_init.sql` in
+   the SQL editor (or `supabase db push`).
+2. Authentication › Providers: enable **Email** and **Anonymous sign-ins**.
+   Apple and Google are optional and use the same redirect.
+3. Authentication › Email Templates › Magic Link: include `{{ .Token }}` in
+   the body as well as the link, so a reader on the home-screen app can type
+   the code instead of following a link that would open in Safari.
+4. Authentication › URL Configuration: add `https://<your-domain>/signin/done`
+   (and `http://localhost:3000/signin/done`) to the redirect allow-list.
+5. Copy `.env.example` to `.env.local` and fill in the URL and anon key; add
+   the same two variables to the Vercel project.
+
+Without the two variables the app runs exactly as before: local only, no
+sign-in, no counter. EPUBs are unzipped with JSZip and the OPF spine is
 walked directly, which gives cleaner control over extracting structured text
 than rendering EPUB pages would. DRM is detected from `META-INF/encryption.xml`
 — font obfuscation is ignored, encrypted spine documents are reported plainly.
@@ -59,7 +99,7 @@ than rendering EPUB pages would. DRM is detected from `META-INF/encryption.xml`
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 32 tests: segmentation, timing, playback, EPUB
+npm test             # 56 tests: segmentation, timing, playback, EPUB, sync
 npm run typecheck
 npm run build
 node scripts/screenshots.mjs   # renders every screen and theme (needs Chrome)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckIcon } from "@/components/ui/Icons";
+import { CheckIcon, SpeakerIcon, StopIcon } from "@/components/ui/Icons";
 import { groupVoices } from "@/lib/hooks/useSpeechEngine";
 import type { EngineVoice, VoiceTier } from "@/lib/speech/engine";
 import styles from "./Sheets.module.css";
@@ -12,6 +12,10 @@ interface Props {
   voiceId: string | null;
   onVoice: (voiceId: string) => void;
   ready: boolean;
+  /** Play a short sample in this voice; call again with the same id to stop. */
+  onPreview?: (voiceId: string) => void;
+  /** The voice currently being sampled, if any. */
+  previewing?: string | null;
 }
 
 /** Provider metadata worth surfacing. A voice Microsoft built for narrating
@@ -37,7 +41,15 @@ const TIER_LABEL: Partial<Record<VoiceTier, string>> = {
 const isApple = () =>
   typeof navigator !== "undefined" && /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
 
-export function VoiceList({ voices, preferredLang, voiceId, onVoice, ready }: Props) {
+export function VoiceList({
+  voices,
+  preferredLang,
+  voiceId,
+  onVoice,
+  ready,
+  onPreview,
+  previewing = null,
+}: Props) {
   const [showAll, setShowAll] = useState(false);
 
   const groups = useMemo(
@@ -102,30 +114,48 @@ export function VoiceList({ voices, preferredLang, voiceId, onVoice, ready }: Pr
           <div key={group.lang} className={styles.voiceGroup}>
             <div className={styles.voiceGroupLabel}>{group.label}</div>
             {group.voices.map((voice) => (
-              <button
+              <div
                 key={voice.id}
-                type="button"
-                role="radio"
-                aria-checked={voice.id === voiceId}
                 className={styles.voiceRow}
                 data-active={voice.id === voiceId ? "true" : undefined}
-                onClick={() => onVoice(voice.id)}
+                data-previewing={previewing === voice.id ? "true" : undefined}
               >
-                <span className={styles.voiceName}>{voice.name}</span>
-                <span className={styles.voiceMeta}>
-                  {showTrait && traitLabel(voice) && (
-                    <span className={styles.badge} data-tier="premium">
-                      {traitLabel(voice)}
-                    </span>
-                  )}
-                  {distinguishes(voice.tier) && (
-                    <span className={styles.badge} data-tier={voice.tier}>
-                      {TIER_LABEL[voice.tier]}
-                    </span>
-                  )}
-                  {voice.id === voiceId && <CheckIcon size={16} />}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={voice.id === voiceId}
+                  className={styles.voicePick}
+                  onClick={() => onVoice(voice.id)}
+                >
+                  <span className={styles.voiceName}>{voice.name}</span>
+                  <span className={styles.voiceMeta}>
+                    {showTrait && traitLabel(voice) && (
+                      <span className={styles.badge} data-tier="premium">
+                        {traitLabel(voice)}
+                      </span>
+                    )}
+                    {distinguishes(voice.tier) && (
+                      <span className={styles.badge} data-tier={voice.tier}>
+                        {TIER_LABEL[voice.tier]}
+                      </span>
+                    )}
+                    {voice.id === voiceId && <CheckIcon size={16} />}
+                  </span>
+                </button>
+                {onPreview && voice.tier !== "siri" && (
+                  <button
+                    type="button"
+                    className={styles.voicePreview}
+                    onClick={() => onPreview(voice.id)}
+                    aria-label={
+                      previewing === voice.id ? `Stop ${voice.name}` : `Hear ${voice.name}`
+                    }
+                    aria-pressed={previewing === voice.id}
+                  >
+                    {previewing === voice.id ? <StopIcon size={17} /> : <SpeakerIcon size={17} />}
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         ))}

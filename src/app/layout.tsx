@@ -77,9 +77,13 @@ d.style.setProperty('--reader-leading',String(s.lineHeight||${DEFAULT_SETTINGS.l
 }catch(e){document.documentElement.dataset.theme='${DEFAULT_SETTINGS.theme}';}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // The font variables live on <html>, not <body>: the --font-ui tokens in
+  // globals.css are resolved on :root, and a variable defined further down
+  // the tree is invisible there.
   return (
     <html
       lang="en"
+      className={`${newsreader.variable} ${instrumentSans.variable} ${instrumentSerif.variable}`}
       data-theme={DEFAULT_SETTINGS.theme}
       data-accent={DEFAULT_SETTINGS.accent}
       suppressHydrationWarning
@@ -87,7 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${newsreader.variable} ${instrumentSans.variable} ${instrumentSerif.variable}`}>
+      <body>
         <AuthProvider>
           <SettingsProvider>
             <SettingsSync />

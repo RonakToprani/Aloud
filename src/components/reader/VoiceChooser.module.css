@@ -1,0 +1,100 @@
+/* A full-height panel over the reader, scrolling list above a pinned action. */
+
+.page {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  animation: pageIn 320ms var(--ease-soft) both;
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  width: min(520px, 100%);
+  margin: 0 auto;
+  padding: max(26px, env(safe-area-inset-top)) 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.15;
+  color: var(--ink-strong);
+}
+
+.lede {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+  text-wrap: pretty;
+}
+
+.lede em {
+  color: var(--ink);
+}
+
+.foot {
+  flex: none;
+  width: min(520px, 100%);
+  margin: 0 auto;
+  padding: 14px 28px calc(24px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--canvas) 70%, transparent);
+}
+
+.start {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background-color var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft);
+}
+
+.start:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.start:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

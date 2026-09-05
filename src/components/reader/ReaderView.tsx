@@ -2,28 +2,46 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { useSettings } from "@/components/SettingsProvider";
 import { BackIcon } from "@/components/ui/Icons";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
 import { pickDefaultVoice, useSpeechEngine } from "@/lib/hooks/useSpeechEngine";
 import { useMediaSession } from "@/lib/hooks/useMediaSession";
+import { PREVIEW_FALLBACK, useVoicePreview } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
-import { loadPosition, savePosition } from "@/lib/storage/prefs";
+import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
+import { useListeningClock } from "@/lib/sync/listening";
+import {
+  deleteRemoteBookmark,
+  pullBookmarks,
+  pullPosition,
+  pushBookmarks,
+  pushPosition,
+  pushPositionNow,
+} from "@/lib/sync/remote";
 import { segmentChapter, type SegmentedChapter } from "@/lib/text/segment";
-import type { Bookmark, BookMeta, Chapter } from "@/lib/types";
+import type { Bookmark, BookMeta, Chapter, Position } from "@/lib/types";
 import { AppearanceSheet } from "./AppearanceSheet";
 import { ContentsSheet } from "./ContentsSheet";
 import { ControlBar } from "./ControlBar";
 import { PlaybackSheet } from "./PlaybackSheet";
 import { ReaderSurface } from "./ReaderSurface";
+import { VoiceChooser } from "./VoiceChooser";
 import styles from "./ReaderView.module.css";
 
 /** How long the chrome stays up after the last touch while reading. */
 const CHROME_IDLE_MS = 3600;
 /** Words per minute at 1× — refined by the reader's own speed setting. */
 const BASE_WPM = 165;
+/** How long after the last sentence change the account is told where the
+ *  reader is. Pausing and leaving write straight away. */
+const POSITION_PUSH_MS = 2500;
+/** A position from another device only wins by a clear margin, so two
+ *  devices' clocks disagreeing by a second never bounces the reader back. */
+const POSITION_SLACK_MS = 1500;
 
 type Sheet = "appearance" | "playback" | "contents" | null;
 
@@ -35,6 +53,7 @@ interface LoadedBook {
 export function ReaderView({ bookId }: { bookId: string }) {
   const { settings, update } = useSettings();
   const { engine, ready: voicesReady, supported, voices, preferredLang } = useSpeechEngine();
+  const { userId, epoch: authEpoch } = useAuth();
 
   const [book, setBook] = useState<LoadedBook | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -54,11 +73,21 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
+  /** True until this book has a saved place: its first opening on this device
+   *  begins by choosing the voice that will read it. */
+  const [needsVoice, setNeedsVoice] = useState(false);
+  /** Where another device left off, if newer than this one. */
+  const [remotePosition, setRemotePosition] = useState<Position | null>(null);
 
   const playerRef = useRef<Player | null>(null);
   const segmentCache = useRef(new Map<number, SegmentedChapter>());
   const stateRef = useRef(playerState);
   stateRef.current = playerState;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Nothing about the reader's place is written until the book is open. */
+  const loaded = useRef(false);
 
   const showToast = useCallback((text: string, action?: ToastMessage["action"]) => {
     setToast({ id: Date.now(), text, action });
@@ -78,6 +107,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
           setLoadError("That book isn't in your library any more. It may have been removed.");
           return;
         }
+        // A first opening asks for a voice; a book already under way, or one
+        // whose voice was chosen before, goes straight to the text.
+        const stored = loadPosition(bookId);
+        const underway = !!stored && (stored.chapterIndex > 0 || stored.sentenceIndex > 0 || stored.wordIndex > 0);
+        setNeedsVoice(!underway && !hasChosenVoice(bookId));
+        loaded.current = true;
         setBook({ meta, chapters: body.chapters });
         setBookmarks(await listBookmarks(bookId).catch(() => []));
       } catch (error) {
@@ -111,6 +146,65 @@ export function ReaderView({ bookId }: { bookId: string }) {
     [book],
   );
 
+  /* ---------------- account ---------------- */
+
+  // Ask the account where this book was left and which sentences were kept,
+  // then settle both ways: a newer place from another device is adopted, a
+  // newer one here is sent up; bookmarks are the union of the two lists.
+  useEffect(() => {
+    if (!book || !userId) return;
+    let alive = true;
+    (async () => {
+      const [theirs, remoteMarks] = await Promise.all([
+        pullPosition(bookId).catch(() => null),
+        pullBookmarks(bookId).catch(() => null),
+      ]);
+      if (!alive) return;
+
+      const mine = loadPosition(bookId);
+      if (theirs && (!mine || theirs.updatedAt > mine.updatedAt + POSITION_SLACK_MS)) {
+        setRemotePosition(theirs);
+      } else if (mine && (!theirs || mine.updatedAt > theirs.updatedAt)) {
+        void pushPosition(bookId, mine).catch(() => {});
+      }
+
+      if (remoteMarks) {
+        const local = await listBookmarks(bookId).catch(() => [] as Bookmark[]);
+        if (!alive) return;
+        const localIds = new Set(local.map((mark) => mark.id));
+        const remoteIds = new Set(remoteMarks.map((mark) => mark.id));
+        const arrived = remoteMarks.filter((mark) => !localIds.has(mark.id));
+        const departed = local.filter((mark) => !remoteIds.has(mark.id));
+        await Promise.all(arrived.map((mark) => putBookmark(mark).catch(() => {})));
+        if (departed.length) void pushBookmarks(departed).catch(() => {});
+        if (arrived.length) setBookmarks([...local, ...arrived]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [book, bookId, userId, authEpoch]);
+
+  // A newer place from another device moves the cursor — but only while
+  // nothing is playing here, and never once the reader has started.
+  useEffect(() => {
+    if (!remotePosition || !playerRef.current) return;
+    if (stateRef.current.status === "playing") return;
+    playerRef.current.seek(remotePosition.chapterIndex, remotePosition.sentenceIndex, remotePosition.wordIndex);
+    savePosition(bookId, remotePosition);
+    setRemotePosition(null);
+    showToast("Picked up where you left off on another device.");
+  }, [remotePosition, bookId, showToast]);
+
+  const schedulePush = useCallback((chapterIndex: number, sentenceIndex: number, wordIndex: number) => {
+    if (!userIdRef.current) return;
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => {
+      pushTimer.current = null;
+      void pushPosition(bookId, { chapterIndex, sentenceIndex, wordIndex, updatedAt: Date.now() }).catch(() => {});
+    }, POSITION_PUSH_MS);
+  }, [bookId]);
+
   /* ---------------- player ---------------- */
 
   useEffect(() => {
@@ -131,6 +225,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
           wordIndex: 0,
           updatedAt: Date.now(),
         });
+        schedulePush(chapterIndex, sentenceIndex, 0);
       },
     });
     playerRef.current = player;
@@ -177,16 +272,24 @@ export function ReaderView({ bookId }: { bookId: string }) {
     }
   }, [voicesReady, voices, settings.voiceId, preferredLang, update, showToast]);
 
-  // Save the exact word when the reader leaves, locks the phone, or pauses.
+  // Save the exact word when the reader leaves, locks the phone, or pauses —
+  // here, and on the account with a request that survives the page closing.
   useEffect(() => {
     const persist = () => {
+      if (!loaded.current) return;
       const state = stateRef.current;
-      savePosition(bookId, {
+      const position = {
         chapterIndex: state.chapterIndex,
         sentenceIndex: state.sentenceIndex,
         wordIndex: state.wordIndex,
         updatedAt: Date.now(),
-      });
+      };
+      savePosition(bookId, position);
+      if (pushTimer.current) {
+        clearTimeout(pushTimer.current);
+        pushTimer.current = null;
+      }
+      pushPositionNow(bookId, position, userIdRef.current);
     };
     window.addEventListener("pagehide", persist);
     document.addEventListener("visibilitychange", persist);
@@ -196,6 +299,23 @@ export function ReaderView({ bookId }: { bookId: string }) {
       document.removeEventListener("visibilitychange", persist);
     };
   }, [bookId]);
+
+  // Pausing is the moment a reader is most likely to pick up another
+  // device, so the exact word goes up straight away.
+  useEffect(() => {
+    if (playerState.status !== "paused" || !userId) return;
+    if (pushTimer.current) {
+      clearTimeout(pushTimer.current);
+      pushTimer.current = null;
+    }
+    const state = stateRef.current;
+    void pushPosition(bookId, {
+      chapterIndex: state.chapterIndex,
+      sentenceIndex: state.sentenceIndex,
+      wordIndex: state.wordIndex,
+      updatedAt: Date.now(),
+    }).catch(() => {});
+  }, [playerState.status, bookId, userId]);
 
   // The lock screen shows this, so it outlives any one sentence.
   useEffect(() => {
@@ -211,6 +331,43 @@ export function ReaderView({ bookId }: { bookId: string }) {
 
   const playing = playerState.status === "playing";
   useWakeLock(playing);
+  useListeningClock(playing, bookId, userId);
+
+  /* ---------------- voice preview ---------------- */
+
+  const { previewing, preview, stop: stopPreview } = useVoicePreview(engine, settings.rate);
+
+  // Each voice auditions with the book's own opening, so the choice is made
+  // on the words it will actually read.
+  const sampleText = useMemo(() => {
+    const opening = getChapter(0);
+    if (!opening) return PREVIEW_FALLBACK;
+    const parts: string[] = [];
+    let words = 0;
+    for (const sentence of opening.sentences) {
+      if (!sentence.words.length) continue;
+      parts.push(sentence.speakable);
+      words += sentence.words.length;
+      if (words >= 18 || parts.length >= 2) break;
+    }
+    return parts.length ? parts.join(" ") : PREVIEW_FALLBACK;
+  }, [getChapter]);
+
+  const onPreview = useCallback(
+    (voiceId: string) => {
+      playerRef.current?.pause();
+      preview(voiceId, sampleText);
+    },
+    [preview, sampleText],
+  );
+
+  const onStartWithVoice = useCallback(() => {
+    stopPreview();
+    engine.unlock();
+    markVoiceChosen(bookId);
+    setNeedsVoice(false);
+    playerRef.current?.play();
+  }, [engine, stopPreview, bookId]);
 
   /* ---------------- chrome ---------------- */
 
@@ -273,6 +430,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
       );
       if (existing) {
         await deleteBookmark(existing.id).catch(() => {});
+        void deleteRemoteBookmark(existing.id).catch(() => {});
         setBookmarks((current) => current.filter((mark) => mark.id !== existing.id));
         showToast("Bookmark removed");
         return;
@@ -289,6 +447,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
       };
       try {
         await putBookmark(mark);
+        void pushBookmarks([mark]).catch(() => {});
         setBookmarks((current) => [...current, mark]);
         if (navigator.vibrate) navigator.vibrate(8);
         showToast("Bookmark added");
@@ -305,12 +464,14 @@ export function ReaderView({ bookId }: { bookId: string }) {
       if (!removed) return;
       setBookmarks((current) => current.filter((mark) => mark.id !== id));
       await deleteBookmark(id).catch(() => {});
+      void deleteRemoteBookmark(id).catch(() => {});
       showToast("Bookmark removed", {
         label: "Undo",
         onAction: () => {
-          void putBookmark(removed).then(() =>
-            setBookmarks((current) => [...current, removed]),
-          );
+          void putBookmark(removed).then(() => {
+            setBookmarks((current) => [...current, removed]);
+            void pushBookmarks([removed]).catch(() => {});
+          });
         },
       });
     },
@@ -348,6 +509,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (needsVoice) return;
 
       switch (event.key) {
         case " ":
@@ -376,7 +538,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onToggle, onNext, onPrevious, settings.rate, update]);
+  }, [onToggle, onNext, onPrevious, settings.rate, update, needsVoice]);
 
   /* ---------------- derived ---------------- */
 
@@ -465,8 +627,24 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const chapterTitle =
     book.meta.chapterTitles[playerState.chapterIndex] ?? `Chapter ${playerState.chapterIndex + 1}`;
 
+  const chooseVoice = needsVoice && supported && voicesReady && voices.length > 0;
+
   return (
     <>
+      {chooseVoice && (
+        <VoiceChooser
+          bookTitle={book.meta.title}
+          voices={voices}
+          preferredLang={preferredLang}
+          ready={voicesReady}
+          voiceId={settings.voiceId}
+          onVoice={(voiceId) => update({ voiceId })}
+          previewing={previewing}
+          onPreview={onPreview}
+          onStart={onStartWithVoice}
+        />
+      )}
+
       <header className={styles.top} data-hidden={chromeExpanded ? undefined : "true"}>
         <div className={styles.topInner}>
           <Link className={styles.back} href="/" aria-label="Back to library">
@@ -554,6 +732,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
         voices={voices}
         preferredLang={preferredLang}
         voicesReady={voicesReady}
+        previewing={previewing}
+        onPreview={onPreview}
         sleepMinutes={sleepMinutes}
         sleepRemaining={sleepRemaining}
         onSleep={setSleepMinutes}

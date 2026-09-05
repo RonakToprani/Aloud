@@ -26,6 +26,7 @@ import {
   pushPosition,
   type RemoteBook,
 } from "@/lib/sync/remote";
+import { supabaseConfigured } from "@/lib/supabase/client";
 import { BookCover } from "./BookCover";
 import type { BookBody, BookMeta } from "@/lib/types";
 import styles from "./Library.module.css";
@@ -451,8 +452,12 @@ export function LibraryView() {
           {/* First visit: say what this is, show what it has done, and let
               the reader start without an account. */}
           <section className={styles.landing}>
-            <StatsHero />
-            <div className={styles.landingRule} aria-hidden="true" />
+            {supabaseConfigured && (
+              <>
+                <StatsHero />
+                <div className={styles.landingRule} aria-hidden="true" />
+              </>
+            )}
             <p className={styles.landingSentence}>
               Bring your own books. Press play, and{" "}
               <span className={styles.landingPill}>every</span> word lights as it&rsquo;s spoken.

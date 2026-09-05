@@ -42,6 +42,7 @@ export const RATE_STEPS = [
 
 const SETTINGS_KEY = "aloud.settings.v1";
 const POSITION_PREFIX = "aloud.position.";
+const VOICE_CHOSEN_KEY = "aloud.voiceChosen.v1";
 
 function readJson<T>(key: string): T | null {
   if (typeof localStorage === "undefined") return null;
@@ -124,6 +125,19 @@ export function loadPosition(bookId: string): Position | null {
 
 export function savePosition(bookId: string, position: Position): void {
   writeJson(POSITION_PREFIX + bookId, position);
+}
+
+/** Books this device has picked a reading voice for. A book opened for the
+ *  first time asks; one that has been started, or already chosen, does not. */
+export function hasChosenVoice(bookId: string): boolean {
+  const chosen = readJson<string[]>(VOICE_CHOSEN_KEY);
+  return Array.isArray(chosen) && chosen.includes(bookId);
+}
+
+export function markVoiceChosen(bookId: string): void {
+  const chosen = readJson<string[]>(VOICE_CHOSEN_KEY);
+  const next = Array.isArray(chosen) ? chosen : [];
+  if (!next.includes(bookId)) writeJson(VOICE_CHOSEN_KEY, [...next, bookId]);
 }
 
 export function clearPosition(bookId: string): void {

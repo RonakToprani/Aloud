@@ -17,6 +17,8 @@ interface Props {
   voices: EngineVoice[];
   preferredLang: string;
   voicesReady: boolean;
+  previewing: string | null;
+  onPreview: (voiceId: string) => void;
   sleepMinutes: number | null;
   sleepRemaining: number | null;
   onSleep: (minutes: number | null) => void;
@@ -47,6 +49,8 @@ export function PlaybackSheet({
   voices,
   preferredLang,
   voicesReady,
+  previewing,
+  onPreview,
   sleepMinutes,
   sleepRemaining,
   onSleep,
@@ -105,6 +109,8 @@ export function PlaybackSheet({
           voiceId={voiceId}
           onVoice={onVoice}
           ready={voicesReady}
+          onPreview={onPreview}
+          previewing={previewing}
         />
       </Field>
     </Sheet>

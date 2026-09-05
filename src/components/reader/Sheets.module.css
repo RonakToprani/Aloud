@@ -234,13 +234,9 @@
 
 .voiceRow {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 46px;
-  padding: 10px 12px;
+  align-items: stretch;
+  gap: 2px;
   border-radius: 10px;
-  text-align: left;
   color: var(--ui-muted);
   transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft);
 }
@@ -252,6 +248,41 @@
 .voiceRow[data-active="true"] {
   background: var(--inset);
   color: var(--ui);
+}
+
+.voicePick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: left;
+  color: inherit;
+}
+
+/* Hearing a voice is the only way to choose one. The button sits at the
+   row's edge, quiet until it is playing. */
+.voicePreview {
+  flex: none;
+  width: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--ui-muted);
+  transition: color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
+}
+
+.voicePreview:hover {
+  color: var(--ui);
+  background: var(--segment);
+}
+
+.voiceRow[data-previewing="true"] .voicePreview {
+  color: var(--accent-strong);
 }
 
 .voiceName {
