@@ -66,8 +66,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export function loadSettings(): Settings {
-  const stored = readJson<Partial<Settings>>(SETTINGS_KEY);
+/** Coerce any stored or synced object into a valid Settings. */
+export function normalizeSettings(stored: Partial<Settings> | null | undefined): Settings {
   if (!stored) return { ...DEFAULT_SETTINGS };
   return {
     theme: (["dark", "warm", "light", "sepia"] as const).includes(stored.theme as ThemeName)
@@ -92,6 +92,10 @@ export function loadSettings(): Settings {
       : DEFAULT_SETTINGS.accent,
     updatedAt: Number(stored.updatedAt) || 0,
   };
+}
+
+export function loadSettings(): Settings {
+  return normalizeSettings(readJson<Partial<Settings>>(SETTINGS_KEY));
 }
 
 /** The keys a reader actually chooses; `updatedAt` is bookkeeping. */

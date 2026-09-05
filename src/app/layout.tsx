@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Sans, Instrument_Serif, Newsreader } from "next/font/google";
+import { AuthProvider } from "@/components/AuthProvider";
 import { SettingsProvider } from "@/components/SettingsProvider";
+import { SettingsSync } from "@/components/SettingsSync";
 import { DEFAULT_SETTINGS } from "@/lib/storage/prefs";
 import "./globals.css";
 
@@ -85,7 +87,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className={`${newsreader.variable} ${instrumentSans.variable} ${instrumentSerif.variable}`}>
-        <SettingsProvider>{children}</SettingsProvider>
+        <AuthProvider>
+          <SettingsProvider>
+            <SettingsSync />
+            {children}
+          </SettingsProvider>
+        </AuthProvider>
       </body>
     </html>
   );
