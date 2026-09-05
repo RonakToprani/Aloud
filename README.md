@@ -1,156 +1,123 @@
-# Aloud
+<p align="center">
+  <img src="public/icons/icon-192.png" width="88" alt="" />
+</p>
 
-A read-along reader. Open a book, tap a word, and hear it read aloud with the
-words lighting up as they're spoken. The book itself never leaves the device;
-an optional account keeps everything else — your place, bookmarks, settings
-and listening time — the same on every device you sign in to.
+<h1 align="center">Aloud</h1>
 
-Built with Next.js on the App Router, deployed on Vercel, with Supabase for
-auth and sync.
+<p align="center">
+  Bring your own books. Press play, and every word lights up as it's spoken.
+</p>
+
+<p align="center">
+  <a href="https://aloud-red.vercel.app"><img alt="Open Aloud" src="https://img.shields.io/badge/open-aloud--red.vercel.app-5b7fa6?style=flat-square" /></a>
+  <img alt="Hours listened" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=hours%20listened&query=%24.hours_listened_label&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
+  <img alt="Readers" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=readers&query=%24.readers&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
+  <img alt="Active this week" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=active%20this%20week&query=%24.active_readers_7d&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-8b8f99?style=flat-square" /></a>
+</p>
+
+Aloud is a read-along reader for the web. Add an EPUB, a text file, or paste
+anything, and it reads to you with a real voice while the sentence and the
+word being spoken light up on the page. It's a personal library: the books
+you bring, nothing else. No store, no feed, no social layer.
+
+It's built for a phone, one-handed, often at night. Save it to the home
+screen and it opens full-screen, keeps reading with the screen locked, and
+puts play and pause on the lock screen.
+
+**Try it:** [aloud-red.vercel.app](https://aloud-red.vercel.app). Reading
+works without an account; sign in to keep your library and your place in it
+on every device.
+
+## What it does
+
+- **Reads any book you own.** EPUB and plain text. Books stay on your device;
+  the text is never uploaded anywhere.
+- **Lights every word.** A single pill glides from word to word as it's
+  spoken, with the current sentence washed behind it. Tap any word to start
+  reading from there. Hold a sentence to bookmark it.
+- **Sounds like narration.** Sentences are synthesised together as passages
+  so the intonation carries across a paragraph, the silences between
+  sentences are trimmed to a natural length, and passages join on the audio
+  clock with no seam.
+- **Chooses a voice with you.** Open a book for the first time and each voice
+  introduces itself before you pick one. Dozens of natural cloud voices, plus
+  whatever your device has installed.
+- **Reads the way you like.** Four themes (dark, warm, light, sepia), three
+  accents (slate, violet, moss), two highlight styles, type size, line height,
+  serif or sans, speed from 0.5× to 2.5×, and a sleep timer.
+- **Follows you across devices.** Your place is saved to the sentence, so
+  picking up on another device lands where you stopped. Bookmarks and
+  settings travel too. A book whose text isn't on the device you're holding
+  shows greyed until you add the same file again.
+- **Counts what's been read.** The home page shows how many hours have been
+  read aloud, by how many readers, and how many are listening right now.
+  Those badges at the top of this page are live.
 
 ## How it works
 
-**Speech comes from the browser.** `SpeechSynthesis` does the talking, behind a
-`SpeechEngine` interface (`src/lib/speech/engine.ts`). Nothing above that
-interface knows which engine is in use, so a self-hosted Piper server returning
-audio plus word timestamps could be dropped in without the UI noticing.
+Everything runs in the browser and a Next.js app on Vercel; Supabase holds
+accounts and the small amount of state that syncs.
 
-**One sentence per utterance.** Chapters are split with `Intl.Segmenter` and
-spoken a sentence at a time, chained on `onend`. Short utterances keep pause,
-resume and seek reliable — Safari's `pause()` misbehaves on long ones — and give
-the timing model a fresh calibration point every sentence.
+**Speech sits behind one interface.** `SpeechEngine`
+(`src/lib/speech/engine.ts`) is the seam: on-device speech synthesis and the
+cloud voices are two implementations, and nothing above the seam knows which
+is playing. A new engine that returns audio plus word timings drops in without
+touching the reader.
 
-**The highlight has two timing strategies, chosen at runtime.**
-`src/lib/speech/synchronizer.ts` prefers real `boundary` events. If none arrive
-within 400ms of `onstart`, it falls back to a timer that walks the words using
-per-word duration estimates derived from word length, punctuation and the rate
-setting. It switches in either direction mid-sentence: boundary events that dry
-up hand over to the timer within 600ms, and a late boundary event takes control
-straight back. Which strategy is live is decided from observed behaviour, never
-from the user agent, and the reader should never see a stalled highlight.
+**One sentence at a time.** Chapters are split with `Intl.Segmenter` and
+spoken sentence by sentence, chained on end. Short utterances keep pause,
+resume and seek reliable on every browser, and give the timing model a fresh
+calibration point each sentence.
 
-**It corrects its own drift.** Each estimated sentence compares its predicted
-duration against the real `onend` timestamp and folds the ratio into a per-voice
-calibration factor kept in `localStorage`, so timing improves over the first few
-sentences and stays good across sessions. Within a sentence, a mid-utterance
-fallback anchors on the last boundary actually seen and takes its real/model
-ratio from it, rather than assuming the current word has just started.
-
-**Only the current sentence is rendered word by word.** Every sentence is a span
-(needed for the sentence wash and for mapping taps), but word spans exist just
-for the sentence being spoken. A novel stays cheap in the DOM while the
-highlight still gets exact rectangles. Taps resolve to a word through
-`caretRangeFromPoint`, so tapping works anywhere in the chapter.
+**The highlight has two clocks.** `src/lib/speech/synchronizer.ts` uses real
+word-boundary events when the engine sends them. If none arrive within 400ms
+it walks the words on a timer using per-word estimates from word length,
+punctuation and speed, and switches back the moment a boundary event shows
+up. Each sentence's real duration feeds a per-voice calibration kept across
+sessions, so timing improves over the first few sentences and stays good.
 
 **Highlights are drawn, not styled.** `HighlightLayer` paints measured
-rectangles behind the text. Pill mode is a single element that moves and
-resizes, so the eye follows one object rather than a strobe; it snaps rather
-than glides across a line break. Wash mode is a pair that crossfades. Neither
-occludes a letterform.
+rectangles behind the text. The pill is one element that moves and resizes,
+so the eye tracks an object rather than a strobe.
 
-## Cloud voices, and why they sound continuous
+**Cloud voices sound continuous** (`src/lib/speech/edge/`). Sentences are
+sent for synthesis together — a short opening passage so play feels
+immediate, then larger ones, always ending at paragraph breaks — so the
+model shapes intonation across a paragraph rather than dropping to a full
+stop after every sentence. The audio that comes back carries about a second
+of silence after every sentence, so `tighten.ts` finds each silent run and
+shortens it: 380ms between sentences, 620ms between paragraphs, phrasing
+pauses left alone, word timings shifted to match. The next passage is decoded
+while the current one plays and scheduled on the audio clock to begin the
+instant the current one's closing pause ends.
 
-Microsoft's Edge voices are synthesised on our own server route and come
-back as MP3 plus word timings. Three things turn that into narration rather
-than a queue of clips (`src/lib/speech/edge/`):
+**Local first.** Parsed books live in IndexedDB; reading place, voice, speed
+and appearance in localStorage. The app works in full with no network and no
+account. On top of that, `src/lib/sync/` keeps book metadata, places,
+bookmarks, settings and listening time on the account: newest copy wins,
+positions are written on pause and as the page closes, and the home counter
+reads one pre-aggregated row rather than scanning sessions.
 
-**Passages.** Sentences are sent together — 220 characters for the opening
-so play feels instant, then 700, then 1500 — ending at paragraph breaks, so
-the model shapes intonation across a paragraph instead of dropping to a full
-stop after every sentence. The first sentence of a session waits for its
-passage rather than playing as a clip of its own.
+**Design tokens are one ladder.** Every theme in `src/app/globals.css` is the
+same lightness and chroma ladder with a different hue, and the accent is a
+hue rotation on top. That's what keeps 4 themes × 3 accents × 2 highlights
+feeling like one product.
 
-**Tightened silences.** Measured against the live endpoint, Edge leaves
-950–1175ms of silence after every sentence and ~900ms at the end of each
-clip. It refuses SSML that would shorten them, so `tighten.ts` shortens them
-in the decoded audio: silent runs are found by RMS, sentence pauses are cut
-to 380ms, paragraph pauses to 620ms, phrasing pauses under 450ms are left
-alone, and the word timings are shifted to match. Splicing silence to
-silence is inaudible.
+## Contributing
 
-**Sample-accurate seams.** The next passage is decoded while the current one
-plays and scheduled on the audio clock to begin the instant the current one's
-closing pause ends, so a passage boundary costs no JavaScript latency and
-survives a backgrounded tab. Pausing drops the scheduled passage; resuming
-re-times it.
-
-`node scripts/measure-gap.mjs` records the schedule through the real player.
-
-## Storage and sync
-
-Local first, always. Parsed books live in IndexedDB; reading position, voice,
-rate and appearance live in `localStorage`. The app works in full with no
-network and no account.
-
-On top of that sits the account (`src/lib/sync/`). Every visitor gets a quiet
-anonymous Supabase session so their listening counts and their progress is
-kept; signing in with a magic link (or the six-digit code from the same email,
-for the home-screen app on iOS) turns it into a real account. What is stored:
-
-- **Book metadata** — title, author, chapter titles and sentence counts. Never
-  the text. A book the account knows about but this device has never held
-  shows greyed in the library; tapping it asks for the same file again, and
-  the saved place and bookmarks fit straight back onto it.
-- **Reading positions** — written a couple of seconds after each sentence
-  change, straight away on pause, and with a keepalive request as the page
-  closes. Newest copy wins, judged by the writing device's own clock stamp
-  with a 1.5s margin so two devices never bounce the reader back.
-- **Bookmarks** — the union of both lists.
-- **Settings** — one document on the profile, newest wins.
-- **Listening time** — one row per reader visit, its running total replaced
-  every 15s while playing. A trigger folds each write's delta into
-  `reading_stats`, the single pre-aggregated row the home counter reads.
-  "Listening right now" is a realtime presence channel.
-
-### Setting up Supabase
-
-1. Create a project and run `supabase/migrations/20260904000000_init.sql` in
-   the SQL editor (or `supabase db push`).
-2. Authentication › Providers: enable **Email** and **Anonymous sign-ins**.
-   Google and Apple are optional: each needs its own OAuth credentials there
-   (Google: an OAuth client in Google Cloud Console with the redirect URI
-   `https://<project-ref>.supabase.co/auth/v1/callback`; Apple: a Services
-   ID, key and team ID from the Apple Developer account). Then list the
-   enabled ones in `NEXT_PUBLIC_AUTH_PROVIDERS` so their buttons appear.
-3. Supabase's default magic-link email includes a six-digit code as well as
-   the link. Set `NEXT_PUBLIC_SUPABASE_EMAIL_CODE=true` so the sign-in screen
-   offers a code field: a reader on the home-screen app types the code
-   instead of following a link that would open in Safari. If you later
-   customise the template (custom SMTP required on the free tier), keep
-   `{{ .Token }}` in it; `supabase/templates/magic_link.html` is a start.
-4. Authentication › URL Configuration: add `https://<your-domain>/signin/done`
-   (and `http://localhost:3000/signin/done`) to the redirect allow-list.
-5. Copy `.env.example` to `.env.local` and fill in the URL and anon key; add
-   the same two variables to the Vercel project.
-
-Without the two variables the app runs exactly as before: local only, no
-sign-in, no counter. EPUBs are unzipped with JSZip and the OPF spine is
-walked directly, which gives cleaner control over extracting structured text
-than rendering EPUB pages would. DRM is detected from `META-INF/encryption.xml`
-— font obfuscation is ignored, encrypted spine documents are reported plainly.
-
-## Development
+Aloud is MIT-licensed and open to contributions of every size. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to run it, how the code is laid
+out, and what makes a good pull request. Ideas and questions go in
+[Discussions](https://github.com/RonakToprani/Aloud/discussions); bugs in
+[Issues](https://github.com/RonakToprani/Aloud/issues).
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
-npm test             # 56 tests: segmentation, timing, playback, EPUB, sync
-npm run typecheck
-npm run build
-node scripts/screenshots.mjs   # renders every screen and theme (needs Chrome)
+npm run dev
+npm test
 ```
 
-## Testing notes
+## Licence
 
-The timing code is exercised against a fake engine that reproduces each real
-failure mode: boundary events per word, no boundary events at all, events that
-stop mid-sentence, synthesis that starts and dies, and Safari's instant silent
-"end". See `tests/synchronizer.test.ts` and `tests/player.test.ts`.
-
-**Still to verify on hardware:** everything above was tested under Node and in
-desktop Chrome. iOS Safari — the primary target — has not been tested on a real
-device. The two things to watch there are whether `boundary` events fire at all
-for the chosen voice (the fallback should handle it either way), and whether
-lock-screen controls appear; Media Session is wired up, but iOS may need a
-silent looping `<audio>` element to hold the audio session, which is not
-included because it risks interfering with speech and needs a device to judge.
+[MIT](LICENSE).
