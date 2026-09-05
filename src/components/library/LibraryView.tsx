@@ -125,22 +125,38 @@ export function LibraryView() {
   const refresh = useCallback(async () => {
     try {
       const local = await listBooks();
+      setStorageError(null);
       setBooks(local);
       const localIds = new Set(local.map((book) => book.id));
       setRemoteBooks((current) => current.filter((book) => !localIds.has(book.id)));
     } catch (loadFailure) {
+      // The books are still there; this device just wouldn't hand them
+      // over this time. Say so, and offer another go rather than an
+      // empty shelf.
       setStorageError(
         loadFailure instanceof Error
           ? loadFailure.message
-          : "Your library couldn't be read from this device.",
+          : "Your library couldn't be read from this device just now.",
       );
-      setBooks([]);
+      setBooks((current) => current ?? []);
     }
   }, []);
 
   useEffect(() => {
     setRemoteBooks(readRemoteCache());
     void refresh();
+    // A tab restored from the background re-reads the shelf: Safari may
+    // have closed storage behind it, and another device may have added
+    // a book meanwhile.
+    const onShow = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("pageshow", onShow);
+    };
   }, [refresh]);
 
   /* ---------------- sync with the account ---------------- */
@@ -440,8 +456,11 @@ export function LibraryView() {
 
       {storageError && (
         <div className={styles.errorCard} role="alert">
-          <strong>Your library can&rsquo;t be saved here</strong>
+          <strong>Your library couldn&rsquo;t be opened</strong>
           <p>{storageError}</p>
+          <button type="button" className={styles.ghostButton} onClick={() => void refresh()}>
+            Try again
+          </button>
         </div>
       )}
 

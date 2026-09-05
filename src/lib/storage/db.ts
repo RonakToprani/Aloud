@@ -22,9 +22,14 @@ export class StorageUnavailableError extends Error {
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function openDb(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+/** Delays between attempts to open the database. iOS Safari is known to
+ *  fail the first open after a tab is restored and succeed a moment later. */
+const OPEN_RETRY_MS = [0, 250, 700, 1500];
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function openOnce(): Promise<IDBDatabase> {
+  return new Promise<IDBDatabase>((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
       reject(
         new StorageUnavailableError(
@@ -43,7 +48,20 @@ function openDb(): Promise<IDBDatabase> {
         store.createIndex("bookId", "bookId", { unique: false });
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Safari drops the connection when a tab sits in the background and
+      // hands back an unusable handle on return. Forget it, so the next
+      // call opens a fresh one instead of failing for the rest of the page.
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
     request.onerror = () =>
       reject(
         new StorageUnavailableError(
@@ -57,18 +75,58 @@ function openDb(): Promise<IDBDatabase> {
         ),
       );
   });
-  return dbPromise;
+}
+
+function openDb(): Promise<IDBDatabase> {
+  if (dbPromise) return dbPromise;
+  const attempt = (async () => {
+    let failure: unknown;
+    for (const delay of OPEN_RETRY_MS) {
+      if (delay) await sleep(delay);
+      try {
+        return await openOnce();
+      } catch (error) {
+        failure = error;
+        if (typeof indexedDB === "undefined") break;
+      }
+    }
+    throw failure;
+  })();
+  dbPromise = attempt;
+  // A failed open must not poison every later call.
+  attempt.catch(() => {
+    if (dbPromise === attempt) dbPromise = null;
+  });
+  return attempt;
+}
+
+/** A transaction on a connection Safari has quietly closed throws
+ *  synchronously; that is the signal to reconnect and try once more. */
+function isStaleConnection(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "InvalidStateError";
 }
 
 function run<T>(
   storeNames: string | string[],
   mode: IDBTransactionMode,
   body: (tx: IDBTransaction) => IDBRequest<T> | Promise<T>,
+  retried = false,
 ): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const tx = db.transaction(storeNames, mode);
+        let tx: IDBTransaction;
+        try {
+          tx = db.transaction(storeNames, mode);
+        } catch (error) {
+          if (isStaleConnection(error) && !retried) {
+            dbPromise = null;
+            resolve(run(storeNames, mode, body, true));
+            return;
+          }
+          reject(error);
+          return;
+        }
         let result: T;
         let settled = false;
 
