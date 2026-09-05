@@ -84,12 +84,12 @@ for the home-screen app on iOS) turns it into a real account. What is stored:
    `https://<project-ref>.supabase.co/auth/v1/callback`; Apple: a Services
    ID, key and team ID from the Apple Developer account). Then list the
    enabled ones in `NEXT_PUBLIC_AUTH_PROVIDERS` so their buttons appear.
-3. Optional, needs a custom SMTP provider (free-tier projects can't edit the
-   template otherwise): set the Magic Link email template to
-   `supabase/templates/magic_link.html`, which includes `{{ .Token }}`, and
-   set `NEXT_PUBLIC_SUPABASE_EMAIL_CODE=true`. The sign-in screen then offers
-   a code field, so a reader on the home-screen app can type the code instead
-   of following a link that would open in Safari.
+3. Supabase's default magic-link email includes a six-digit code as well as
+   the link. Set `NEXT_PUBLIC_SUPABASE_EMAIL_CODE=true` so the sign-in screen
+   offers a code field: a reader on the home-screen app types the code
+   instead of following a link that would open in Safari. If you later
+   customise the template (custom SMTP required on the free tier), keep
+   `{{ .Token }}` in it; `supabase/templates/magic_link.html` is a start.
 4. Authentication › URL Configuration: add `https://<your-domain>/signin/done`
    (and `http://localhost:3000/signin/done`) to the redirect allow-list.
 5. Copy `.env.example` to `.env.local` and fill in the URL and anon key; add

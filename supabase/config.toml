@@ -251,8 +251,10 @@ enabled = false
 # subject = "Your password has been changed"
 # content_path = "./supabase/templates/password_changed_notification.html"
 
-# Adds the six-digit code the app's "type the code instead" field needs.
-# Applying a template needs the custom SMTP provider above.
+# Supabase's default magic-link email already carries the six-digit code
+# ({{ .Token }}) alongside the link, which is what the app's "type the code
+# instead" field relies on. Custom wording needs a custom SMTP provider on
+# the free tier; the template is ready in supabase/templates/ for that day.
 #
 # [auth.email.template.magic_link]
 # subject = "Sign in to Aloud"
