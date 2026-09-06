@@ -117,16 +117,60 @@ export async function importFile(
     return persist(parsed, "epub", onProgress, options);
   }
 
+  // A saved web page is a book too; it just needs its markup taken off.
+  const isHtml = /\.x?html?$/i.test(file.name) || /^text\/html|application\/xhtml/.test(file.type);
+  if (isHtml) {
+    onProgress?.({ stage: "parsing", fraction: 0 });
+    const doc = new DOMParser().parseFromString(await decodeText(file), "text/html");
+    const title = doc.title.trim() || name;
+    const text = extractText(doc.body);
+    return persist(parsePlainText(text, title), "txt", onProgress, options);
+  }
+
   const isText = /\.(txt|md|markdown)$/i.test(file.name) || file.type.startsWith("text/");
   if (!isText) {
     throw new EpubParseError(
-      "Aloud reads EPUB and plain text files. This one is neither — if it's a PDF, it'll need converting to EPUB first.",
+      "Aloud reads EPUB and plain text files. This one is neither. If it's a PDF, it will need converting to EPUB first.",
     );
   }
 
   onProgress?.({ stage: "parsing", fraction: 0 });
-  const text = await file.text();
+  let text = await decodeText(file);
+  if (/\.(md|markdown)$/i.test(file.name)) text = stripMarkdown(text);
   return persist(parsePlainText(text, name), "txt", onProgress, options);
+}
+
+/** UTF-8 first; a file that isn't valid UTF-8 is almost always Windows-1252,
+ *  and reading it as UTF-8 turns every accent into a replacement mark. */
+async function decodeText(file: File): Promise<string> {
+  const bytes = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
+/** Enough Markdown to read aloud: headings, emphasis, links, list markers. */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/(\*|_)(.+?)\1/g, "$2")
+    .replace(/`([^`]+)`/g, "$1");
+}
+
+/** Paragraph text from a parsed HTML document, one block per line pair. */
+function extractText(body: HTMLElement | null): string {
+  if (!body) return "";
+  for (const el of Array.from(body.querySelectorAll("script,style,nav,header,footer,noscript"))) el.remove();
+  const blocks = Array.from(body.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li,blockquote,pre"));
+  const parts = (blocks.length ? blocks : [body]).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  return parts.join("\n\n");
 }
 
 export async function importPastedText(

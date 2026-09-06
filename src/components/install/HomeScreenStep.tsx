@@ -123,7 +123,7 @@ export function HomeScreenStep({ onDone }: Props) {
 
       <div className={styles.actions}>
         <button type="button" className={styles.primary} onClick={finish}>
-          {installed ? "Continue" : "I've added it — continue"}
+          {installed ? "Continue" : "I've added it, continue"}
         </button>
         {!installed && (
           <button type="button" className={styles.skip} onClick={finish}>

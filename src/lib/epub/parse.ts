@@ -33,10 +33,49 @@ const CONTAINER_TAGS = new Set([
 const SKIP_TAGS = new Set([
   "SCRIPT", "STYLE", "NAV", "SVG", "IMG", "IMAGE", "AUDIO", "VIDEO", "HEAD", "LINK", "META", "RT", "RP",
 ]);
+/** Elements that separate text without being paragraphs of their own. */
+const FLOW_TAGS = new Set(["TABLE", "THEAD", "TBODY", "TFOOT", "TR", "TD", "TH", "HR", "CAPTION"]);
 const BLOCK_SELECTOR = "p,h1,h2,h3,h4,h5,h6,blockquote,li,dd,dt,figcaption,pre";
 
+/** Invisible characters that would otherwise land inside words. */
+const INVISIBLE = /[\u00AD\u200B\u200C\u200D\uFEFF]/g;
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function clean(text: string): string {
-  return text.replace(/ /g, " ").replace(/\s+/g, " ").trim();
+  return text.replace(INVISIBLE, "").replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Text of an element with a space at every block or line boundary, so
+ *  nested divs, table cells and <br> runs don't glue words together, and
+ *  with ruby readings, scripts and styles left out. */
+function flatText(element: Element): string {
+  let out = "";
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out += node.textContent ?? "";
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = (node as Element).tagName.toUpperCase();
+    if (SKIP_TAGS.has(tag)) return;
+    if (tag === "BR") {
+      out += " ";
+      return;
+    }
+    const breaks = BLOCK_TAGS.has(tag) || CONTAINER_TAGS.has(tag) || FLOW_TAGS.has(tag);
+    if (breaks) out += " ";
+    for (const child of Array.from(node.childNodes)) visit(child);
+    if (breaks) out += " ";
+  };
+  visit(element);
+  return out;
 }
 
 function kindOf(tag: string): BlockKind {
@@ -89,15 +128,28 @@ function extractBlocks(root: Element): Block[] {
         flush();
         if (element.querySelector(BLOCK_SELECTOR)) {
           walk(element);
+        } else if (
+          CONTAINER_TAGS.has(tag) &&
+          Array.from(element.children).some((c) => CONTAINER_TAGS.has(c.tagName.toUpperCase()))
+        ) {
+          // Divs used as paragraphs, the way converters emit them: each
+          // becomes its own block rather than one run of glued text.
+          walk(element);
         } else {
-          const text = clean(element.textContent ?? "");
+          const text = clean(flatText(element));
           if (text) out.push({ kind: kindOf(tag), text });
         }
         continue;
       }
+      if (FLOW_TAGS.has(tag)) {
+        flush();
+        const text = clean(flatText(element));
+        if (text) out.push({ kind: "p", text });
+        continue;
+      }
 
       // Anything else is inline as far as reading is concerned.
-      pending += element.textContent ?? "";
+      pending += flatText(element);
     }
     flush();
   };
@@ -128,7 +180,7 @@ function resolvePath(base: string, relative: string): string {
   const href = relative.split("#")[0];
   if (!href) return "";
   const stack = base.split("/").slice(0, -1);
-  for (const part of decodeURIComponent(href).split("/")) {
+  for (const part of safeDecode(href).split("/")) {
     if (part === "." || part === "") continue;
     if (part === "..") stack.pop();
     else stack.push(part);
@@ -184,14 +236,25 @@ function buildTocTitles(doc: Document, basePath: string): Map<string, string> {
     const content = firstNamed(point, "content");
     const src = content?.getAttribute("src");
     const text = clean(label?.textContent ?? "");
-    if (src && text) titles.set(resolvePath(basePath, src), text);
+    // The first entry pointing at a file names it; nested sections and
+    // page markers that follow must not overwrite that.
+    const path = src ? resolvePath(basePath, src) : "";
+    if (path && text && !titles.has(path)) titles.set(path, text);
   }
 
   if (!titles.size) {
-    for (const anchor of Array.from(doc.querySelectorAll("nav a, a"))) {
+    // Only the table of contents: an EPUB3 nav file also carries page lists
+    // and landmarks, whose anchors would turn every title into a number.
+    const navs = Array.from(doc.querySelectorAll("nav"));
+    const typeOf = (nav: Element) =>
+      nav.getAttribute("epub:type") ?? nav.getAttributeNS("http://www.idpf.org/2007/ops", "type") ?? "";
+    const toc = navs.find((nav) => /\btoc\b/i.test(typeOf(nav))) ?? navs[0];
+    const anchors = toc ? Array.from(toc.querySelectorAll("a")) : Array.from(doc.querySelectorAll("a"));
+    for (const anchor of anchors) {
       const href = anchor.getAttribute("href");
       const text = clean(anchor.textContent ?? "");
-      if (href && text) titles.set(resolvePath(basePath, href), text);
+      const path = href ? resolvePath(basePath, href) : "";
+      if (path && text && !titles.has(path)) titles.set(path, text);
     }
   }
   return titles;
@@ -218,7 +281,7 @@ export async function parseEpub(
     zip = await JSZip.loadAsync(file);
   } catch {
     throw new EpubParseError(
-      "This file isn't a readable EPUB — it may be damaged or only renamed to .epub.",
+      "This file isn't a readable EPUB. It may be damaged, or only renamed to .epub.",
     );
   }
 
@@ -321,7 +384,8 @@ export async function parseEpub(
     const entry = manifest.get(spineIds[i]);
     onProgress?.(spineIds.length ? i / spineIds.length : 1);
     if (!entry || skipPaths.has(entry.path)) continue;
-    if (!/xhtml|html|xml/.test(entry.type) && !/\.x?html?$/i.test(entry.path)) continue;
+    if (/^image\//i.test(entry.type)) continue;
+    if (!/xhtml|html/.test(entry.type) && !/\.x?html?$/i.test(entry.path)) continue;
 
     const file = zip.file(entry.path);
     if (!file) continue;
@@ -344,9 +408,11 @@ export async function parseEpub(
 
     // A leading heading becomes the chapter title rather than body text.
     const tocTitle = titles.get(entry.path);
-    const leadHeading = blocks[0].kind !== "p" ? blocks[0].text : null;
+    const leadHeading = /^h[1-3]$/.test(blocks[0].kind) ? blocks[0].text : null;
     const chapterTitle = tocTitle ?? leadHeading ?? `Chapter ${chapters.length + 1}`;
-    if (!tocTitle && leadHeading) blocks = blocks.slice(1);
+    // Not read twice when the table of contents already names it.
+    const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+    if (leadHeading && (!tocTitle || same(leadHeading, tocTitle))) blocks = blocks.slice(1);
 
     chapters.push({
       id: entry.path,

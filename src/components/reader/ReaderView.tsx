@@ -50,10 +50,30 @@ interface LoadedBook {
   chapters: Chapter[];
 }
 
+/**
+ * A saved place only means something on the copy of the book it was saved
+ * in. A re-added file that segments differently, or a different edition,
+ * can put the place past the end of a chapter or in a chapter that isn't
+ * there; rather than land at a random spot (or the last sentence, which
+ * reads as "finished"), fall back to the start of the nearest chapter.
+ */
+function fitPosition(position: Position, meta: BookMeta): Position | null {
+  const chapters = meta.chapterSentenceCounts.length;
+  if (!chapters) return null;
+  if (position.chapterIndex < 0 || position.chapterIndex >= chapters) {
+    return { ...position, chapterIndex: Math.min(Math.max(0, position.chapterIndex), chapters - 1), sentenceIndex: 0, wordIndex: 0 };
+  }
+  const sentences = meta.chapterSentenceCounts[position.chapterIndex] ?? 0;
+  if (position.sentenceIndex < 0 || position.sentenceIndex >= sentences) {
+    return { ...position, sentenceIndex: 0, wordIndex: 0 };
+  }
+  return position;
+}
+
 export function ReaderView({ bookId }: { bookId: string }) {
   const { settings, update } = useSettings();
   const { engine, ready: voicesReady, supported, voices, preferredLang } = useSpeechEngine();
-  const { userId, epoch: authEpoch } = useAuth();
+  const { userId, epoch: authEpoch, ensureAccount } = useAuth();
 
   const [book, setBook] = useState<LoadedBook | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -188,13 +208,18 @@ export function ReaderView({ bookId }: { bookId: string }) {
   // A newer place from another device moves the cursor — but only while
   // nothing is playing here, and never once the reader has started.
   useEffect(() => {
-    if (!remotePosition || !playerRef.current) return;
+    if (!remotePosition || !playerRef.current || !book) return;
     if (stateRef.current.status === "playing") return;
-    playerRef.current.seek(remotePosition.chapterIndex, remotePosition.sentenceIndex, remotePosition.wordIndex);
+    const fit = fitPosition(remotePosition, book.meta);
+    if (!fit) {
+      setRemotePosition(null);
+      return;
+    }
+    playerRef.current.seek(fit.chapterIndex, fit.sentenceIndex, fit.wordIndex);
     savePosition(bookId, remotePosition);
     setRemotePosition(null);
     showToast("Picked up where you left off on another device.");
-  }, [remotePosition, bookId, showToast]);
+  }, [remotePosition, bookId, book, showToast]);
 
   const schedulePush = useCallback((chapterIndex: number, sentenceIndex: number, wordIndex: number) => {
     if (!userIdRef.current) return;
@@ -231,8 +256,15 @@ export function ReaderView({ bookId }: { bookId: string }) {
     playerRef.current = player;
 
     const stored = loadPosition(bookId);
-    if (stored) player.seek(stored.chapterIndex, stored.sentenceIndex, stored.wordIndex);
-    else player.seek(0, 0, 0);
+    const fit = stored ? fitPosition(stored, book.meta) : null;
+    if (fit) {
+      player.seek(fit.chapterIndex, fit.sentenceIndex, fit.wordIndex);
+      if (stored && fit.sentenceIndex !== stored.sentenceIndex) {
+        showToast("This copy is laid out differently, so the chapter starts over.");
+      }
+    } else {
+      player.seek(0, 0, 0);
+    }
 
     return () => {
       player.destroy();
@@ -266,8 +298,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
     if (settings.voiceId) {
       showToast(
         stored
-          ? `${stored.name} can't be used by websites on this device — switched to ${preferred.name}.`
-          : `That voice isn't on this device — switched to ${preferred.name}.`,
+          ? `${stored.name} can't be used by websites on this device, so ${preferred.name} is reading instead.`
+          : `That voice isn't on this device, so ${preferred.name} is reading instead.`,
       );
     }
   }, [voicesReady, voices, settings.voiceId, preferredLang, update, showToast]);
@@ -331,6 +363,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
 
   const playing = playerState.status === "playing";
   useWakeLock(playing);
+  useEffect(() => {
+    if (playing) void ensureAccount();
+  }, [playing, ensureAccount]);
   useListeningClock(playing, bookId, userId);
 
   /* ---------------- voice preview ---------------- */
@@ -481,7 +516,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
         setSleepMinutes(null);
         setSleepRemaining(null);
         playerRef.current?.pause();
-        showToast("Sleep timer finished — your place is saved.");
+        showToast("Sleep timer finished. Your place is saved.");
         return;
       }
       setSleepRemaining(remaining);

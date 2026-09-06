@@ -59,7 +59,7 @@ export function PlaybackSheet({
 
   return (
     <Sheet open={open} title="Voice & speed" onClose={onClose} tall>
-      <Field label={`Speed — ${rate.toFixed(2).replace(/0$/, "")}×`}>
+      <Field label={`Speed ${rate.toFixed(2).replace(/0$/, "")}×`}>
         <Slider
           label="Reading speed"
           min={0}

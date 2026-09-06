@@ -9,6 +9,7 @@ export const revalidate = 60;
 
 interface Stats {
   total_seconds: number;
+  measured_seconds?: number;
   readers: number;
   active_readers: number;
   updated_at: string;
@@ -32,7 +33,9 @@ export async function GET(): Promise<Response> {
     const hours = row.total_seconds / 3600;
     return NextResponse.json(
       {
-        hours_listened: Math.round(hours * 10) / 10,
+        hours_listened: Math.floor(hours * 10) / 10,
+        /** Listening recorded by the app itself, without the pre-tracking baseline. */
+        measured_hours: Math.floor(((row.measured_seconds ?? row.total_seconds) / 3600) * 10) / 10,
         hours_listened_label: hours >= 100 ? Math.floor(hours).toLocaleString("en-US") : (Math.floor(hours * 10) / 10).toString(),
         readers: row.readers,
         active_readers_7d: row.active_readers,

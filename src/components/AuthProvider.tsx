@@ -24,6 +24,10 @@ interface AuthContextValue {
   email: string | null;
   /** Bumps whenever the account changes, so sync work can re-run. */
   epoch: number;
+  /** Make sure there is an account to write to, creating a quiet anonymous
+   *  one if needed. Called the first time the reader does something worth
+   *  keeping, so a visit that only looks around costs nothing. */
+  ensureAccount: () => Promise<void>;
   sendLink: (email: string) => Promise<{ error: string | null }>;
   verifyCode: (email: string, code: string) => Promise<{ error: string | null }>;
   signInWith: (provider: "apple" | "google") => Promise<{ error: string | null }>;
@@ -79,19 +83,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, next) => apply(next));
 
-    void supabase.auth.getSession().then(async ({ data }) => {
+    void supabase.auth.getSession().then(({ data }) => {
       if (!alive) return;
-      if (data.session) {
-        apply(data.session);
-        return;
-      }
-      // No account yet: make a quiet one so this reader's progress syncs and
-      // their listening counts, without asking anything of them. If the
-      // project has anonymous sign-ins off, the app simply stays local.
-      const { data: anon, error } = await supabase.auth.signInAnonymously();
-      if (!alive) return;
-      if (error || !anon.session) setStatus("signed-out");
-      else apply(anon.session);
+      if (data.session) apply(data.session);
+      else setStatus("signed-out");
     });
 
     return () => {
@@ -99,6 +94,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  const anonInFlight = useRef<Promise<void> | null>(null);
+  const ensureAccount = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    if (session) return;
+    if (anonInFlight.current) return anonInFlight.current;
+    // A quiet account so this reader's progress syncs and their listening
+    // counts, without asking anything of them. If the project has anonymous
+    // sign-ins off, the app simply stays local.
+    anonInFlight.current = supabase.auth
+      .signInAnonymously()
+      .then(({ data, error }) => {
+        if (error || !data.session) setStatus("signed-out");
+      })
+      .catch(() => {})
+      .finally(() => {
+        anonInFlight.current = null;
+      });
+    return anonInFlight.current;
+  }, [session]);
 
   const sendLink = useCallback(async (email: string) => {
     const supabase = getSupabase();
@@ -131,9 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = getSupabase();
     if (!supabase) return;
     await supabase.auth.signOut();
-    // Back to a quiet anonymous account, as on first visit.
-    const { data } = await supabase.auth.signInAnonymously();
-    if (!data.session) setStatus("signed-out");
+    setStatus("signed-out");
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -143,12 +157,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userId: session?.user.id ?? null,
       email: session?.user.email ?? null,
       epoch,
+      ensureAccount,
       sendLink,
       verifyCode,
       signInWith,
       signOut,
     }),
-    [status, session, epoch, sendLink, verifyCode, signInWith, signOut],
+    [status, session, epoch, ensureAccount, sendLink, verifyCode, signInWith, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -99,7 +99,7 @@ function writeRemoteCache(books: RemoteBook[]): void {
 }
 
 export function LibraryView() {
-  const { status: authStatus, userId, epoch, email } = useAuth();
+  const { status: authStatus, userId, epoch, email, ensureAccount } = useAuth();
 
   const [books, setBooks] = useState<BookMeta[] | null>(null);
   const [remoteBooks, setRemoteBooks] = useState<RemoteBook[]>([]);
@@ -212,13 +212,19 @@ export function LibraryView() {
   // Anything still pending when the page closes is committed for real.
   useEffect(() => {
     const timers = pendingDeletes.current;
-    return () => {
+    const commitAll = () => {
       for (const [id, timer] of timers) {
         clearTimeout(timer);
         void deleteBook(id).catch(() => {});
         void deleteRemoteBook(id).catch(() => {});
+        clearPosition(id);
       }
       timers.clear();
+    };
+    window.addEventListener("pagehide", commitAll);
+    return () => {
+      window.removeEventListener("pagehide", commitAll);
+      commitAll();
     };
   }, []);
 
@@ -232,6 +238,8 @@ export function LibraryView() {
       try {
         const meta = await task();
         await refresh();
+        // The first book is the moment an account starts earning its keep.
+        await ensureAccount();
         void pushBooks([meta]).catch(() => {});
       } catch (importFailure) {
         setError(describeImportError(importFailure));
@@ -239,7 +247,7 @@ export function LibraryView() {
         setProgress(null);
       }
     },
-    [refresh],
+    [refresh, ensureAccount],
   );
 
   const onFiles = useCallback(
@@ -375,7 +383,7 @@ export function LibraryView() {
         </span>
       </button>
     ) : (
-      <Link href="/signin" className={styles.signInLink}>
+      <Link href="/signin" prefetch={false} className={styles.signInLink}>
         Sign in
       </Link>
     )
@@ -514,7 +522,7 @@ export function LibraryView() {
           {showAccount && !signedIn && (
             <p className={styles.nudge}>
               These books live on this device only.{" "}
-              <Link href="/signin">Sign in</Link> to keep your library and your place in it on every
+              <Link href="/signin" prefetch={false}>Sign in</Link> to keep your library and your place in it on every
               device.
             </p>
           )}

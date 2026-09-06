@@ -504,8 +504,8 @@ export class Player {
           kind: reason === "silent" ? "no-voices" : "synthesis-failed",
           message:
             reason === "silent"
-              ? "This voice produced no sound. On iPhone, Siri voices are reserved by the system and can't be used by websites — open Voice & speed and pick another."
-              : "The voice stopped responding. This happens occasionally on iOS — press play to pick up where you left off.",
+              ? "This voice produced no sound. On iPhone, Siri voices are reserved by the system and can't be used by websites. Open Voice & speed and pick another."
+              : "The voice stopped responding. This happens occasionally on iOS. Press play to pick up where you left off.",
         },
       });
       return;

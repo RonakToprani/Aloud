@@ -82,7 +82,11 @@ export function Logo({ size = 26, markOnly = false, className }: LogoProps) {
   return (
     <span className={`${styles.lockup} ${className ?? ""}`} style={{ ["--mark" as string]: `${size}px` }}>
       <LogoMark size={size} className={styles.mark} />
-      {!markOnly && <span className={styles.word}>Aloud</span>}
+      {!markOnly && (
+        <span className={styles.word} aria-hidden="true">
+          Aloud
+        </span>
+      )}
       <span className="srOnly">Aloud</span>
     </span>
   );

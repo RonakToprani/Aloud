@@ -48,6 +48,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     root.dataset.accent = settings.accent;
     root.style.setProperty("--reader-size", `${settings.fontSize}px`);
     root.style.setProperty("--reader-leading", String(settings.lineHeight));
+    // The browser chrome follows the page, not the OS: a light theme on a
+    // dark phone should not sit under a dark status bar.
+    const canvas: Record<string, string> = { dark: "#1a1f23", warm: "#251f19", light: "#f1f4f6", sepia: "#f1e9d8" };
+    // React owns these tags, so their content is changed in place rather
+    // than the tags being replaced; both media variants get the same colour.
+    for (const meta of Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'))) {
+      meta.content = canvas[settings.theme] ?? canvas.dark;
+    }
   }, [
     settings.theme,
     settings.face,

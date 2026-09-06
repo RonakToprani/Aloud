@@ -78,7 +78,7 @@ export function AppearanceSheet({ open, onClose, settings, update }: Props) {
               type="button"
               role="radio"
               aria-checked={settings.highlight === option.value}
-              aria-label={`${option.label} — ${option.hint}`}
+              aria-label={`${option.label}: ${option.hint}`}
               className={styles.highlightCard}
               data-active={settings.highlight === option.value ? "true" : undefined}
               onClick={() => update({ highlight: option.value })}

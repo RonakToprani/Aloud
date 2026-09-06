@@ -4,6 +4,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { SettingsSync } from "@/components/SettingsSync";
 import { InstallPromptCatcher } from "@/components/install/InstallPromptCatcher";
+import { ServiceWorker } from "@/components/install/ServiceWorker";
 import { DEFAULT_SETTINGS } from "@/lib/storage/prefs";
 import "./globals.css";
 
@@ -51,6 +52,16 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
   },
   formatDetection: { telephone: false },
+  metadataBase: new URL("https://aloud-red.vercel.app"),
+  openGraph: {
+    title: "Aloud",
+    description: "Bring your own books. Press play, and every word lights up as it's spoken.",
+    url: "/",
+    siteName: "Aloud",
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512 }],
+    type: "website",
+  },
+  twitter: { card: "summary", title: "Aloud", description: "Bring your own books. Press play, and every word lights up as it's spoken.", images: ["/icons/icon-512.png"] },
 };
 
 export const viewport: Viewport = {
@@ -59,8 +70,10 @@ export const viewport: Viewport = {
   maximumScale: 5,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#24262c" },
-    { media: "(prefers-color-scheme: light)", color: "#f4f4f6" },
+    // The dark canvas, oklch(0.235 0.011 250), as sRGB. SettingsProvider
+    // rewrites this to the chosen theme's canvas once the app is running.
+    { media: "(prefers-color-scheme: dark)", color: "#1a1f23" },
+    { media: "(prefers-color-scheme: light)", color: "#f1f4f6" },
   ],
 };
 
@@ -96,6 +109,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SettingsProvider>
             <SettingsSync />
             <InstallPromptCatcher />
+            <ServiceWorker />
             {children}
           </SettingsProvider>
         </AuthProvider>

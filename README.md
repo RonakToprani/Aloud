@@ -82,8 +82,8 @@ rectangles behind the text. The pill is one element that moves and resizes,
 so the eye tracks an object rather than a strobe.
 
 **Cloud voices sound continuous** (`src/lib/speech/edge/`). Sentences are
-sent for synthesis together — a short opening passage so play feels
-immediate, then larger ones, always ending at paragraph breaks — so the
+sent for synthesis together (a short opening passage so play feels
+immediate, then larger ones, always ending at paragraph breaks) so the
 model shapes intonation across a paragraph rather than dropping to a full
 stop after every sentence. The audio that comes back carries about a second
 of silence after every sentence, so `tighten.ts` finds each silent run and
@@ -93,8 +93,9 @@ while the current one plays and scheduled on the audio clock to begin the
 instant the current one's closing pause ends.
 
 **Local first.** Parsed books live in IndexedDB; reading place, voice, speed
-and appearance in localStorage. The app works in full with no network and no
-account. On top of that, `src/lib/sync/` keeps book metadata, places,
+and appearance in localStorage. Once open, the app reads with no network and
+no account, and a small service worker keeps the shell available offline.
+On top of that, `src/lib/sync/` keeps book metadata, places,
 bookmarks, settings and listening time on the account: newest copy wins,
 positions are written on pause and as the page closes, and the home counter
 reads one pre-aggregated row rather than scanning sessions.
