@@ -9,6 +9,9 @@ export interface ToastMessage {
   /** Optional single action, used for undoing a deletion. */
   action?: { label: string; onAction: () => void };
   durationMs?: number;
+  /** A message meant to be read rather than glanced at: laid out as a small
+   *  card with the action beneath it, rather than a one-line confirmation. */
+  notice?: boolean;
 }
 
 interface Props {
@@ -33,7 +36,7 @@ export function Toast({ toast, onDismiss }: Props) {
 
   return (
     <div className={styles.wrap} role="status" aria-live="polite">
-      <div className={styles.toast}>
+      <div className={styles.toast} data-notice={toast.notice ? "true" : undefined}>
         <span className={styles.text}>{toast.text}</span>
         {toast.action && (
           <button

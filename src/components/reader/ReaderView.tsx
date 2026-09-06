@@ -810,7 +810,6 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const chooseVoice = needsVoice && supported && voicesReady && voices.length > 0;
   // The sample carries a per-device id of its own; see lib/library/sample.
   const isSample = book.meta.id.startsWith("sample-");
-  const canSignIn = authStatus !== "unavailable" && authStatus !== "signed-in";
 
   return (
     <>
@@ -883,16 +882,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
                 Add a book of your own and it will be read to you the same way.
               </p>
             )}
-            <div className={styles.finishedActions}>
-              <Link className={styles.noticeAction} href="/">
-                {isSample ? "Add a book" : "Back to your library"}
-              </Link>
-              {canSignIn && (
-                <Link className={styles.finishedSignIn} href="/signin">
-                  Keep your place on every device
-                </Link>
-              )}
-            </div>
+            <Link className={styles.noticeAction} href="/">
+              {isSample ? "Add a book" : "Back to your library"}
+            </Link>
           </div>
         )}
       </main>

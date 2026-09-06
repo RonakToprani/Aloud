@@ -185,9 +185,10 @@ export function LibraryView() {
       }
       setToast({
         id: Date.now(),
-        text: "These books live on this device only.",
-        durationMs: 9000,
-        action: { label: "Sign in", onAction: () => router.push("/signin") },
+        notice: true,
+        text: "These books live on this device only. Sign up to keep your library and your place in it on every device.",
+        durationMs: 13000,
+        action: { label: "Sign up", onAction: () => router.push("/signin") },
       });
     }, 1600);
     return () => clearTimeout(timer);

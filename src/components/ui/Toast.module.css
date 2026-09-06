@@ -24,6 +24,38 @@
   animation: toastIn var(--dur-ui) var(--ease-soft) both;
 }
 
+/* Two or three lines of explanation, with the action under them where the
+   eye arrives after reading rather than beside the first word. */
+.toast[data-notice="true"] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 13px;
+  max-width: 370px;
+  padding: 17px 18px 15px;
+  border-color: var(--hairline);
+}
+
+.toast[data-notice="true"] .text {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.toast[data-notice="true"] .action {
+  align-self: flex-end;
+  min-height: 38px;
+  padding: 0 20px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.toast[data-notice="true"] .action:hover {
+  background: var(--accent-strong);
+}
+
 .text {
   font-size: 13px;
   color: var(--ui);
