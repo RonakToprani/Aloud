@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CloseIcon,
   ContentsIcon,
   LevelIcon,
   NextIcon,
@@ -37,6 +38,8 @@ interface Props {
   hint?: ControlHint | null;
   /** Tapping the pointer opens what it points at. */
   onHint?: (at: ControlHint["at"]) => void;
+  /** Waving it away ends the walkthrough. */
+  onHintDismiss?: () => void;
 }
 
 function formatRate(rate: number): string {
@@ -68,6 +71,7 @@ export function ControlBar({
   sleepRemainingMs,
   hint,
   onHint,
+  onHintDismiss,
 }: Props) {
   const sleepLabel =
     sleepRemainingMs === null ? null : `sleep ${Math.max(1, Math.ceil(sleepRemainingMs / 60000))}m`;
@@ -107,14 +111,19 @@ export function ControlBar({
 
         <div className={styles.row}>
           {hint && (
-            <button
-              type="button"
-              className={styles.hint}
-              data-at={hint.at}
-              onClick={() => onHint?.(hint.at)}
-            >
-              {hint.text}
-            </button>
+            <div className={styles.hint} data-at={hint.at}>
+              <button type="button" className={styles.hintBody} onClick={() => onHint?.(hint.at)}>
+                {hint.text}
+              </button>
+              <button
+                type="button"
+                className={styles.hintClose}
+                onClick={onHintDismiss}
+                aria-label="Dismiss"
+              >
+                <CloseIcon size={15} />
+              </button>
+            </div>
           )}
           <button
             type="button"

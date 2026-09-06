@@ -36,26 +36,39 @@ import { VoiceChooser } from "./VoiceChooser";
 import styles from "./ReaderView.module.css";
 
 /**
- * Two quiet pointers at the controls, shown once on the first book anyone
- * plays and never again. The settings are the reason people stay: the wrong
- * voice or 19px of text in a bright theme is the difference between a reader
- * who carries on and one who closes the tab. Nobody opens a sheet to find
- * that out on their own.
+ * A three-step walk through the two settings that decide whether someone
+ * stays: how the page looks, and who reads it.
+ *
+ * Each sign waits to be tapped rather than timing out, because a pointer
+ * that vanishes while you are reading the sentence under it has taught
+ * nobody anything. Tapping opens what it points at, and the next sign
+ * appears once that is closed. Shown once, then never again.
  */
-const TIPS_KEY = "aloud.tips.v2";
-const TIP_VISIBLE_MS = 8000;
-const TIP_TICK_MS = 500;
-const TIPS: (ControlHint & { afterMs: number })[] = [
-  { at: "appearance", text: "Text size, spacing and colour", afterMs: 6000 },
-  { at: "playback", text: "Another voice, or a different speed", afterMs: 18000 },
-];
+const COACH_KEY = "aloud.coach.v1";
+type CoachStep = "appearance" | "voice" | "done";
+/** Reading time before the first sign, so it lands after the voice has settled. */
+const COACH_AFTER_MS = 5000;
+const COACH_TICK_MS = 500;
 
-function tipsAlreadyShown(): Set<string> {
+const COACH_TEXT: Record<"appearance" | "voice", string> = {
+  appearance: "Tap here to change the text size, spacing and colour",
+  voice: "Now tap here to pick a different voice, or change the speed",
+};
+
+function storedCoachStep(): CoachStep {
   try {
-    const raw = JSON.parse(localStorage.getItem(TIPS_KEY) ?? "[]");
-    return new Set(Array.isArray(raw) ? (raw as string[]) : []);
+    const raw = localStorage.getItem(COACH_KEY);
+    return raw === "voice" || raw === "done" ? raw : "appearance";
   } catch {
-    return new Set();
+    return "done"; // no memory of it means never starting it
+  }
+}
+
+function rememberCoachStep(step: CoachStep): void {
+  try {
+    localStorage.setItem(COACH_KEY, step);
+  } catch {
+    /* it simply offers again next time */
   }
 }
 
@@ -125,10 +138,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const [needsVoice, setNeedsVoice] = useState(false);
   /** Set when the reader arrived here expecting the book to start itself. */
   const [autoplay, setAutoplay] = useState(false);
-  const [tip, setTip] = useState<ControlHint | null>(null);
+  /** Which sign is due, or null before the walkthrough has begun. */
+  const [coachStep, setCoachStep] = useState<CoachStep | null>(null);
+  /** True while the voice sheet is open because a sign sent them there. */
+  const [coachNote, setCoachNote] = useState(false);
   /** Reading time, in ms, with nothing open over the top of it. */
-  const tipClock = useRef(0);
-  const tipsShown = useRef<Set<string>>(new Set());
+  const coachClock = useRef(0);
   const finishedRef = useRef<HTMLDivElement>(null);
   /** Where another device left off, if newer than this one. */
   const [remotePosition, setRemotePosition] = useState<Position | null>(null);
@@ -468,64 +483,77 @@ export function ReaderView({ bookId }: { bookId: string }) {
   /* ---------------- first-time pointers ---------------- */
 
   useEffect(() => {
-    tipsShown.current = tipsAlreadyShown();
+    const stored = storedCoachStep();
+    if (stored !== "done") setCoachStep(null); // begins once there is reading behind it
   }, []);
 
-  // Paced by time actually spent reading, not by the wall clock: a reader
-  // who pauses to look through a sheet has not missed their turn. Each is
-  // remembered the moment it appears, so leaving early costs the one that
-  // was on screen rather than both of them.
+  // Paced by time actually spent reading, so a reader who pauses to look at
+  // something has not missed their turn.
   useEffect(() => {
-    if (!playing || sheet || tip) return;
-    if (tipsShown.current.size >= TIPS.length) return;
+    if (!playing || sheet || coachStep) return;
+    if (storedCoachStep() === "done") return;
     const timer = setInterval(() => {
-      tipClock.current += TIP_TICK_MS;
-      const due = TIPS.find(
-        (entry) => !tipsShown.current.has(entry.at) && tipClock.current >= entry.afterMs,
-      );
-      if (!due) return;
-      tipsShown.current.add(due.at);
-      try {
-        localStorage.setItem(TIPS_KEY, JSON.stringify([...tipsShown.current]));
-      } catch {
-        /* it simply offers again next time */
-      }
-      setTip({ at: due.at, text: due.text });
-    }, TIP_TICK_MS);
+      coachClock.current += COACH_TICK_MS;
+      if (coachClock.current >= COACH_AFTER_MS) setCoachStep(storedCoachStep());
+    }, COACH_TICK_MS);
     return () => clearInterval(timer);
-  }, [playing, sheet, tip]);
+  }, [playing, sheet, coachStep]);
 
-  useEffect(() => {
-    if (!tip) return;
-    const timer = setTimeout(() => setTip(null), TIP_VISIBLE_MS);
-    return () => clearTimeout(timer);
-  }, [tip]);
-
-  // A pointer at a control the reader has already opened is noise.
-  useEffect(() => {
-    if (sheet) setTip(null);
-  }, [sheet]);
-
-  /** Tapping the pointer opens the thing it is pointing at. */
-  const onTip = useCallback((at: ControlHint["at"]) => {
-    setTip(null);
-    setSheet(at);
+  /** Tapping a sign opens what it points at and arms the next one. */
+  const onCoach = useCallback((at: ControlHint["at"]) => {
+    if (at === "appearance") {
+      rememberCoachStep("voice");
+      setCoachStep("voice");
+      setSheet("appearance");
+    } else {
+      rememberCoachStep("done");
+      setCoachStep("done");
+      setCoachNote(true);
+      setSheet("playback");
+    }
   }, []);
+
+  const onCoachDismiss = useCallback(() => {
+    rememberCoachStep("done");
+    setCoachStep("done");
+  }, []);
+
+  // Opening a sheet by hand counts too: the sign has done its job.
+  useEffect(() => {
+    if (sheet === "appearance" && coachStep === "appearance") {
+      rememberCoachStep("voice");
+      setCoachStep("voice");
+    }
+    if (sheet === "playback" && coachStep === "voice") {
+      rememberCoachStep("done");
+      setCoachStep("done");
+      setCoachNote(true);
+    }
+    if (!sheet) setCoachNote(false);
+  }, [sheet, coachStep]);
+
+  /** The sign on screen right now, if any. A sheet hides it. */
+  const coachHint: ControlHint | null =
+    sheet || coachStep === null || coachStep === "done"
+      ? null
+      : coachStep === "appearance"
+        ? { at: "appearance", text: COACH_TEXT.appearance }
+        : { at: "playback", text: COACH_TEXT.voice };
 
   /* ---------------- chrome ---------------- */
 
   const wakeChrome = useCallback(() => setChromeExpanded(true), []);
 
   useEffect(() => {
-    // A pointer at a hidden control points at nothing.
-    if (!playing || sheet || tip) {
+    // A sign pointing at a hidden control points at nothing.
+    if (!playing || sheet || coachHint) {
       setChromeExpanded(true);
       return;
     }
     if (!chromeExpanded) return;
     const timer = setTimeout(() => setChromeExpanded(false), CHROME_IDLE_MS);
     return () => clearTimeout(timer);
-  }, [playing, chromeExpanded, sheet, tip, playerState.sentenceIndex]);
+  }, [playing, chromeExpanded, sheet, coachHint, playerState.sentenceIndex]);
 
   /* ---------------- transport ---------------- */
 
@@ -874,8 +902,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
         minutesLeft={playerState.status === "ended" ? null : minutesLeft}
         rate={settings.rate}
         sleepRemainingMs={sleepRemaining}
-        hint={tip}
-        onHint={onTip}
+        hint={coachHint}
+        onHint={onCoach}
+        onHintDismiss={onCoachDismiss}
       />
 
       <AppearanceSheet
@@ -894,6 +923,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
         voices={voices}
         preferredLang={preferredLang}
         voicesReady={voicesReady}
+        note={coachNote}
         previewing={previewing}
         onPreview={onPreview}
         sleepMinutes={sleepMinutes}

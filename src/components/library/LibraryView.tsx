@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountSheet } from "@/components/auth/AccountSheet";
 import { useAuth } from "@/components/AuthProvider";
-import { StatsHero, StatsStrip } from "@/components/home/Stats";
+import { StatsHero } from "@/components/home/Stats";
 import { Sheet } from "@/components/ui/Sheet";
 import { CloudIcon, PlusIcon, TrashIcon } from "@/components/ui/Icons";
 import { Logo } from "@/components/ui/Logo";
@@ -385,9 +385,6 @@ export function LibraryView() {
 
   const loaded = books !== null;
   const empty = loaded && entries.length === 0;
-  // The sample is not a library. Until someone brings a book of their own,
-  // the counter keeps the whole page rather than a line at the top of it.
-  const hasOwnBooks = entries.some((entry) => !entry.meta.id.startsWith("sample-"));
   const showAccount = authStatus !== "unavailable";
   const signedIn = authStatus === "signed-in";
 
@@ -551,13 +548,9 @@ export function LibraryView() {
         </>
       ) : (
         <>
-          {hasOwnBooks ? (
-            <StatsStrip />
-          ) : (
-            <div className={styles.libraryHero}>
-              <StatsHero />
-            </div>
-          )}
+          <div className={styles.libraryHero}>
+            <StatsHero />
+          </div>
           {showAccount && !signedIn && (
             <p className={styles.nudge}>
               These books live on this device only.{" "}

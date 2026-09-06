@@ -203,6 +203,18 @@
   font-weight: 500;
 }
 
+/* One paragraph of orientation, shown once, where the reader can act on it. */
+.note {
+  margin: 0;
+  padding: 13px 15px;
+  border-radius: 14px;
+  background: var(--sentence);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
 .hint {
   margin: 0;
   font-size: 12.5px;

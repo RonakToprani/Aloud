@@ -76,32 +76,3 @@
     animation: none;
   }
 }
-
-/* ---------- The same figures above a full library ---------- */
-
-.strip {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0 8px;
-  font-size: 12px;
-  color: var(--ui-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.stripFigure {
-  font-family: var(--font-display);
-  font-size: 17px;
-  line-height: 1;
-  color: var(--ink-strong);
-  margin-right: 1px;
-}
-
-.stripDot {
-  color: var(--ui-faint);
-}
-
-.strip .presenceDot {
-  margin-right: -1px;
-}

@@ -94,40 +94,59 @@
   gap: 8px;
 }
 
-/* A pointer at one of the utility controls, shown once on a reader's first
-   book. Sized to the words it holds and anchored to the side its control
-   sits on, so the tail lands on the button rather than near it. */
+/* A sign, not a whisper: it waits to be tapped, so it has to be worth
+   tapping and impossible to mistake for part of the page. Filled in the
+   accent for the same reason the primary button is. */
 .hint {
   position: absolute;
-  bottom: calc(100% + 12px);
-  max-width: 62%;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: var(--raised);
-  border: 1px solid var(--hairline);
+  bottom: calc(100% + 14px);
+  max-width: 86%;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--on-accent);
   box-shadow: var(--shadow-lift);
-  color: var(--ui);
-  font-size: 12.5px;
-  line-height: 1.35;
-  text-align: left;
-  text-wrap: pretty;
-  animation: hintIn 260ms var(--ease-soft) both;
+  animation: hintIn 300ms var(--ease-soft) both;
 }
 
-.hint:hover {
-  color: var(--ink-strong);
+.hintBody {
+  flex: 1;
+  padding: 13px 6px 13px 16px;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  text-wrap: pretty;
+}
+
+.hintClose {
+  flex: none;
+  width: 38px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  color: inherit;
+  opacity: 0.6;
+  border-radius: 0 16px 16px 0;
+  transition: opacity var(--dur-ui) var(--ease-soft);
+}
+
+.hintClose:hover {
+  opacity: 1;
 }
 
 .hint::after {
   content: "";
   position: absolute;
   top: 100%;
-  width: 9px;
-  height: 9px;
-  background: var(--raised);
-  border-right: 1px solid var(--hairline);
-  border-bottom: 1px solid var(--hairline);
-  transform: translateY(-5px) rotate(45deg);
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  transform: translateY(-7px) rotate(45deg);
+  border-radius: 0 0 3px 0;
 }
 
 .hint[data-at="appearance"] {
@@ -135,17 +154,16 @@
 }
 
 .hint[data-at="appearance"]::after {
-  left: 16px;
+  left: 14px;
 }
 
 .hint[data-at="playback"] {
   right: 0;
-  text-align: right;
 }
 
 /* Two utility buttons sit at this end; the voice one is the inner of them. */
 .hint[data-at="playback"]::after {
-  right: 55px;
+  right: 53px;
 }
 
 @keyframes hintIn {

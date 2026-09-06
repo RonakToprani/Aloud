@@ -13,9 +13,9 @@ import styles from "./Home.module.css";
 export function StatsHero() {
   const stats = useReadingStats();
   const seconds = useCountUp(stats.totalSeconds);
-  // Nothing yet, or nothing cached to hold while the real figure arrives:
-  // an eyebrow over "0 minutes, by 0 readers" reads as a broken page.
-  if (!stats.available || (!stats.totalSeconds && !stats.readers)) return null;
+  // Only ever hidden where there is no server to count anything. A slow or
+  // failed fetch holds the last cached figure instead of vanishing.
+  if (!stats.available) return null;
   const { figure, unit } = formatListened(seconds);
 
   return (
@@ -50,32 +50,4 @@ function Presence({ listeningNow, activeReaders }: { listeningNow: number; activ
     );
   }
   return null;
-}
-
-/** The same figures, one quiet line, above a populated library. */
-export function StatsStrip() {
-  const stats = useReadingStats();
-  if (!stats.available || (stats.totalSeconds === 0 && stats.readers === 0)) return null;
-  const { figure, unit } = formatListened(stats.totalSeconds);
-
-  return (
-    <p className={styles.strip}>
-      <span className={styles.stripFigure}>{figure}</span> {unit} read aloud
-      <span className={styles.stripDot}>·</span>
-      {plural(stats.readers, "reader", "readers")}
-      {stats.listeningNow > 0 && (
-        <>
-          <span className={styles.stripDot}>·</span>
-          <span className={styles.presenceDot} data-live="true" aria-hidden="true" />
-          {formatInteger(stats.listeningNow)} listening now
-        </>
-      )}
-      {stats.listeningNow === 0 && stats.activeReaders > 0 && (
-        <>
-          <span className={styles.stripDot}>·</span>
-          {formatInteger(stats.activeReaders)} active this week
-        </>
-      )}
-    </p>
-  );
 }
