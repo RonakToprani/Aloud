@@ -45,7 +45,10 @@ screen, and timelines of how cloud audio is scheduled through the real player.
 
 The README's "How it works" section explains the design decisions that are
 easy to undo by accident, particularly around highlight timing and cloud
-audio. Read it before changing either.
+audio. `CLAUDE.md` goes further: it lists the invariants that look like they
+could be simplified and cannot, the backend rules, every client storage key,
+and how to drive the app in a headless browser. Read it before changing the
+speech, sync or parsing code.
 
 ## Pull requests
 
