@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { AppleIcon, BackIcon, CheckIcon, GoogleIcon } from "@/components/ui/Icons";
+import { hasHadAccount } from "@/lib/storage/prefs";
 import styles from "./SignIn.module.css";
 
 /** How long before the link can be sent again. */
@@ -50,6 +51,13 @@ export function SignInView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(0);
+  /** Someone who has signed in on this device before is coming back to
+   *  something; everyone else is being offered it for the first time. */
+  const [returning, setReturning] = useState(false);
+
+  useEffect(() => {
+    setReturning(hasHadAccount());
+  }, []);
 
   useEffect(() => {
     if (status === "signed-in") router.replace("/signin/done");
@@ -189,8 +197,12 @@ export function SignInView() {
       ) : (
         <div className={styles.body}>
           <div className={styles.heading}>
-            <h1 className={styles.title}>Welcome back</h1>
-            <p className={styles.subtitle}>Your library and your place in it, on every device.</p>
+            <h1 className={styles.title}>{returning ? "Welcome back" : "Keep your place"}</h1>
+            <p className={styles.subtitle}>
+              {returning
+                ? "Your library and your place in it, on every device."
+                : "Your books and your place in them, on every device you read from."}
+            </p>
           </div>
 
           <form
@@ -215,7 +227,11 @@ export function SignInView() {
             <button type="submit" className={styles.primary} disabled={busy || !validEmail(email)}>
               {busy ? "Sending…" : "Email me a link"}
             </button>
-            <p className={styles.caption}>No password. We send a one-time link that signs you in.</p>
+            <p className={styles.caption}>
+              {returning
+                ? "No password. We send a one-time link that signs you in."
+                : "No password to make up. We send a one-time link, and that is your account."}
+            </p>
             {error && <p className={styles.error} role="alert">{error}</p>}
           </form>
 

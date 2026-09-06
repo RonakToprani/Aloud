@@ -43,6 +43,7 @@ export const RATE_STEPS = [
 const SETTINGS_KEY = "aloud.settings.v1";
 const POSITION_PREFIX = "aloud.position.";
 const VOICE_CHOSEN_KEY = "aloud.voiceChosen.v1";
+const ACCOUNT_KEY = "aloud.hasAccount.v1";
 
 function readJson<T>(key: string): T | null {
   if (typeof localStorage === "undefined") return null;
@@ -125,6 +126,29 @@ export function loadPosition(bookId: string): Position | null {
 
 export function savePosition(bookId: string, position: Position): void {
   writeJson(POSITION_PREFIX + bookId, position);
+}
+
+/** Whether anyone has signed in on this device before. Sign-up and sign-in
+ *  are the same magic link here, so this is the only way the screen can tell
+ *  a returning reader from someone arriving for the first time. A reader on
+ *  a device they have never used before is greeted as new, which is the
+ *  friendlier way to be wrong. */
+export function hasHadAccount(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem(ACCOUNT_KEY) === "yes";
+  } catch {
+    return false;
+  }
+}
+
+export function rememberAccount(): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(ACCOUNT_KEY, "yes");
+  } catch {
+    /* they are greeted as new next time, which is harmless */
+  }
 }
 
 /** Books this device has picked a reading voice for. A book opened for the

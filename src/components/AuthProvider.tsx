@@ -2,6 +2,7 @@
 
 import type { Provider, Session, User } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { rememberAccount } from "@/lib/storage/prefs";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
 
 export type AuthStatus =
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (next.user.is_anonymous) {
         setStatus("anonymous");
       } else {
+        rememberAccount();
         setStatus("signed-in");
       }
     };
