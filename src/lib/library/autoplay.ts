@@ -19,12 +19,25 @@ export function requestAutoplay(bookId: string): void {
   }
 }
 
-/** True once, and only for the book that asked. */
+/** Whether a request is waiting for this book, without spending it. */
+export function peekAutoplay(bookId: string): boolean {
+  try {
+    return sessionStorage.getItem(AUTOPLAY_KEY) === bookId;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True once, and only for the book that asked. Spent on any read, matching
+ * or not: a request left behind by a trip that never arrived would otherwise
+ * sit there and start playback the next time that book was opened on purpose.
+ */
 export function takeAutoplay(bookId: string): boolean {
   try {
-    if (sessionStorage.getItem(AUTOPLAY_KEY) !== bookId) return false;
-    sessionStorage.removeItem(AUTOPLAY_KEY);
-    return true;
+    const waiting = sessionStorage.getItem(AUTOPLAY_KEY);
+    if (waiting !== null) sessionStorage.removeItem(AUTOPLAY_KEY);
+    return waiting === bookId;
   } catch {
     return false;
   }

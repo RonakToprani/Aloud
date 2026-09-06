@@ -6,4 +6,12 @@ const store = new Map<string, string>();
   removeItem: (key: string) => void store.delete(key),
   clear: () => store.clear(),
 };
+const session = new Map<string, string>();
+(globalThis as Record<string, unknown>).sessionStorage = {
+  getItem: (key: string) => session.get(key) ?? null,
+  setItem: (key: string, value: string) => void session.set(key, value),
+  removeItem: (key: string) => void session.delete(key),
+  clear: () => session.clear(),
+};
+
 export const testStore = store;

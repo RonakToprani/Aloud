@@ -109,6 +109,17 @@
   animation: tipLife 7000ms var(--ease-soft) forwards;
 }
 
+/* A tall sheet on a short screen leaves little above it. Tighten the tip
+   rather than let it run off the top. */
+@media (max-height: 720px) {
+  .tip {
+    bottom: calc(100% + 6px);
+    padding: 10px 13px;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+}
+
 @keyframes tipLife {
   0% {
     opacity: 0;

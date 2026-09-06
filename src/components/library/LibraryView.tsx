@@ -176,8 +176,11 @@ export function LibraryView() {
     } catch {
       return;
     }
-    noticeShown.current = true;
     const timer = setTimeout(() => {
+      // Claimed here rather than above: this effect re-runs as the account
+      // and the shelf settle, and claiming it early let a re-run cancel the
+      // timer and then refuse to set another.
+      noticeShown.current = true;
       try {
         localStorage.setItem(DEVICE_ONLY_KEY, "seen");
       } catch {

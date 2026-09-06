@@ -15,6 +15,8 @@ export function bookFraction(meta: Counted, chapterIndex: number, sentenceIndex:
   let before = 0;
   for (let i = 0; i < chapterIndex; i++) before += meta.chapterSentenceCounts[i] ?? 0;
   const done = before + sentenceIndex;
-  if (done >= meta.sentenceCount - 1) return 1;
+  // A book of one sentence has no "last sentence but one" to be short of, so
+  // this rule would call it finished before it had been read at all.
+  if (meta.sentenceCount > 1 && done >= meta.sentenceCount - 1) return 1;
   return Math.min(1, Math.max(0, done / meta.sentenceCount));
 }

@@ -11,7 +11,7 @@ import { useMediaSession } from "@/lib/hooks/useMediaSession";
 import { useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
-import { takeAutoplay } from "@/lib/library/autoplay";
+import { peekAutoplay, takeAutoplay } from "@/lib/library/autoplay";
 import { bookFraction } from "@/lib/library/progress";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
 import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
@@ -60,7 +60,7 @@ const COACH_SHEET_TEXT = {
   appearance:
     "Pick a theme, then set the size and spacing. Everything changes behind the sheet as you go.",
   voice:
-    "Tap the speaker beside a voice to hear it, then its name to keep it. Speed is at the top.",
+    "Tap a speaker to hear that voice, then its name to keep it. Speed is at the top.",
 };
 
 function storedCoachStep(): CoachStep {
@@ -169,6 +169,13 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const showToast = useCallback((text: string, action?: ToastMessage["action"]) => {
     setToast({ id: Date.now(), text, action });
   }, []);
+
+  // Arriving to play: claim the audio session straight away, while the tap
+  // that navigated here still counts as a gesture. Waiting until the book
+  // has been read out of storage can miss that window on iOS.
+  useEffect(() => {
+    if (peekAutoplay(bookId)) engine.unlock();
+  }, [bookId, engine]);
 
   /* ---------------- loading ---------------- */
 
@@ -527,19 +534,27 @@ export function ReaderView({ bookId }: { bookId: string }) {
     setCoachStep("done");
   }, []);
 
-  // Opening a sheet by hand counts too: the sign has done its job.
+  // Finding a control unaided counts, and counts even before its sign has
+  // appeared: a reader who already opened Appearance must not be told about
+  // it five seconds later. The stored step advances either way; the visible
+  // step only moves if a sign was actually on screen, so the next one is
+  // still paced rather than appearing the instant a sheet closes.
   useEffect(() => {
-    if (sheet === "appearance" && coachStep === "appearance") {
+    if (!sheet) {
+      setCoachNote(null);
+      return;
+    }
+    const stored = storedCoachStep();
+    if (sheet === "appearance" && stored === "appearance") {
       rememberCoachStep("voice");
-      setCoachStep("voice");
+      setCoachStep((current) => (current ? "voice" : current));
       setCoachNote("appearance");
     }
-    if (sheet === "playback" && coachStep === "voice") {
+    if (sheet === "playback" && stored === "voice") {
       rememberCoachStep("done");
-      setCoachStep("done");
+      setCoachStep((current) => (current ? "done" : current));
       setCoachNote("voice");
     }
-    if (!sheet) setCoachNote(null);
   }, [sheet, coachStep]);
 
   /** The sign on screen right now, if any. A sheet hides it. */

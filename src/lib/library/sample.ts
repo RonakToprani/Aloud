@@ -11,21 +11,26 @@ import type { BookMeta } from "@/lib/types";
  */
 const SAMPLE_ID_KEY = "aloud.sampleId.v1";
 
+/** Falls back to this when storage refuses, so a session still settles on
+ *  one id rather than shelving a new copy on every tap. */
+let sessionSampleId: string | null = null;
+
 function sampleId(): string {
   try {
     const existing = localStorage.getItem(SAMPLE_ID_KEY);
     if (existing) return existing;
   } catch {
-    /* private browsing: a fresh copy each time is the worst that happens */
+    if (sessionSampleId) return sessionSampleId;
   }
   const id =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? `sample-${crypto.randomUUID()}`
       : `sample-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  sessionSampleId = id;
   try {
     localStorage.setItem(SAMPLE_ID_KEY, id);
   } catch {
-    /* ignore */
+    /* private browsing: the session id above carries it instead */
   }
   return id;
 }

@@ -2,6 +2,7 @@ import "./setup";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parsePlainText } from "@/lib/epub/parse";
+import { peekAutoplay, requestAutoplay, takeAutoplay } from "@/lib/library/autoplay";
 import { bookFraction } from "@/lib/library/progress";
 import { SAMPLE_AUTHOR, SAMPLE_TEXT, SAMPLE_TITLE } from "@/lib/library/sample";
 import { segmentChapter } from "@/lib/text/segment";
@@ -54,5 +55,34 @@ describe("finishing a book", () => {
 
   it("survives a book with nothing in it", () => {
     assert.equal(bookFraction({ sentenceCount: 0, chapterSentenceCounts: [] }, 0, 0), 0);
+  });
+});
+
+describe("a one-sentence book", () => {
+  const one = { sentenceCount: 1, chapterSentenceCounts: [1] };
+
+  it("is not finished the moment it is added", () => {
+    assert.equal(bookFraction(one, 0, 0), 0);
+  });
+});
+
+describe("the request to start reading on arrival", () => {
+  it("is answered once, for the book that asked", () => {
+    requestAutoplay("book-a");
+    assert.equal(takeAutoplay("book-a"), true);
+    assert.equal(takeAutoplay("book-a"), false, "a second reader does not inherit it");
+  });
+
+  it("is spent even when another book reads it, so it cannot fire later", () => {
+    requestAutoplay("book-a");
+    assert.equal(takeAutoplay("book-b"), false);
+    assert.equal(takeAutoplay("book-a"), false, "the stale request is gone, not waiting");
+  });
+
+  it("can be seen without being spent", () => {
+    requestAutoplay("book-c");
+    assert.equal(peekAutoplay("book-c"), true);
+    assert.equal(peekAutoplay("book-c"), true, "peeking twice is still true");
+    assert.equal(takeAutoplay("book-c"), true);
   });
 });
