@@ -29,6 +29,7 @@ import {
 } from "@/lib/sync/remote";
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { requestAutoplay } from "@/lib/library/autoplay";
+import { bookFraction } from "@/lib/library/progress";
 import { addSampleBook } from "@/lib/library/sample";
 import { BookCover } from "./BookCover";
 import type { BookBody, BookMeta } from "@/lib/types";
@@ -66,9 +67,7 @@ function readingOf(meta: BookMeta): Reading {
   if (!position || !meta.sentenceCount) {
     return { fraction: 0, updatedAt: 0, chapterIndex: 0, minutesLeft: meta.wordCount / 165 };
   }
-  let before = 0;
-  for (let i = 0; i < position.chapterIndex; i++) before += meta.chapterSentenceCounts[i] ?? 0;
-  const fraction = Math.min(1, (before + position.sentenceIndex) / meta.sentenceCount);
+  const fraction = bookFraction(meta, position.chapterIndex, position.sentenceIndex);
   return {
     fraction,
     updatedAt: position.updatedAt ?? 0,

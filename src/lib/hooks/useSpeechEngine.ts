@@ -106,6 +106,36 @@ export function useSpeechEngine(): SpeechEngineState {
   return { engine, voices, groups, ready, supported: engine.supported, preferredLang };
 }
 
+/** Traits a provider uses for voices built to narrate long-form prose. */
+const NARRATION_TRAITS = new Set(["novel", "audiobook", "narration"]);
+
+/**
+ * The voice a first-time listener should hear.
+ *
+ * Some voices are tagged by their provider as built for narrating books,
+ * and those are the ones worth leading with. They hold up over a chapter
+ * rather than a sentence, and they are the same on every device, so what a
+ * new reader hears is what the app is supposed to sound like rather than
+ * whatever their operating system happens to ship. Where none is offered,
+ * this is just the ordinary default.
+ */
+export function pickShowcaseVoice(voices: EngineVoice[], preferredLang: string): EngineVoice | null {
+  const lang = preferredLang.toLowerCase();
+  const base = lang.split("-")[0];
+  const narration = voices.filter(
+    (voice) =>
+      voice.lang.toLowerCase().startsWith(base) &&
+      (voice.traits ?? []).some((trait) => NARRATION_TRAITS.has(trait.toLowerCase())),
+  );
+  if (!narration.length) return pickDefaultVoice(voices, preferredLang);
+  return [...narration].sort(
+    (a, b) =>
+      Number(b.lang.toLowerCase() === lang) - Number(a.lang.toLowerCase() === lang) ||
+      b.quality - a.quality ||
+      a.name.localeCompare(b.name),
+  )[0];
+}
+
 /** The voice we pick when the reader hasn't chosen one. */
 export function pickDefaultVoice(voices: EngineVoice[], preferredLang: string): EngineVoice | null {
   if (!voices.length) return null;

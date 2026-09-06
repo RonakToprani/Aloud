@@ -2,6 +2,7 @@ import "./setup";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parsePlainText } from "@/lib/epub/parse";
+import { bookFraction } from "@/lib/library/progress";
 import { SAMPLE_AUTHOR, SAMPLE_TEXT, SAMPLE_TITLE } from "@/lib/library/sample";
 import { segmentChapter } from "@/lib/text/segment";
 
@@ -30,5 +31,28 @@ describe("the sample book", () => {
 
   it("names its author", () => {
     assert.equal(SAMPLE_AUTHOR, "Virginia Woolf");
+  });
+});
+
+describe("finishing a book", () => {
+  const meta = { sentenceCount: 13, chapterSentenceCounts: [13] };
+
+  it("reads as complete once the last sentence is reached", () => {
+    assert.equal(bookFraction(meta, 0, 12), 1);
+  });
+
+  it("counts sentences finished, not the one being read", () => {
+    assert.equal(bookFraction(meta, 0, 0), 0);
+    assert.equal(bookFraction(meta, 0, 6), 6 / 13);
+  });
+
+  it("carries earlier chapters into the total", () => {
+    const many = { sentenceCount: 30, chapterSentenceCounts: [10, 10, 10] };
+    assert.equal(bookFraction(many, 1, 5), 15 / 30);
+    assert.equal(bookFraction(many, 2, 9), 1, "the last sentence of the last chapter");
+  });
+
+  it("survives a book with nothing in it", () => {
+    assert.equal(bookFraction({ sentenceCount: 0, chapterSentenceCounts: [] }, 0, 0), 0);
   });
 });

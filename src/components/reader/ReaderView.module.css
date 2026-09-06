@@ -146,13 +146,41 @@
 
 .finished {
   max-width: var(--column);
-  margin: 40px auto 0;
+  /* Clear of the control dock, which is what the reader is looking past. */
+  margin: 40px auto 96px;
   padding: 0 var(--column-gutter);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   text-align: center;
+}
+
+.finishedBody {
+  margin: 0;
+  max-width: 32ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ui-muted);
+}
+
+.finishedActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.finishedSignIn {
+  font-size: 12.5px;
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.finishedSignIn:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .finishedTitle {

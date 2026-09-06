@@ -87,10 +87,71 @@
 }
 
 .row {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* A pointer at one of the utility controls, shown once on a reader's first
+   book. Sized to the words it holds and anchored to the side its control
+   sits on, so the tail lands on the button rather than near it. */
+.hint {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  max-width: 62%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-lift);
+  color: var(--ui);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-wrap: pretty;
+  animation: hintIn 260ms var(--ease-soft) both;
+}
+
+.hint::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  width: 9px;
+  height: 9px;
+  background: var(--raised);
+  border-right: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  transform: translateY(-5px) rotate(45deg);
+}
+
+.hint[data-at="appearance"] {
+  left: 0;
+}
+
+.hint[data-at="appearance"]::after {
+  left: 16px;
+}
+
+.hint[data-at="playback"] {
+  right: 0;
+  text-align: right;
+}
+
+/* Two utility buttons sit at this end; the voice one is the inner of them. */
+.hint[data-at="playback"]::after {
+  right: 55px;
+}
+
+@keyframes hintIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .transport {

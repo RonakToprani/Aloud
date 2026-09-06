@@ -12,6 +12,12 @@ import {
 } from "@/components/ui/Icons";
 import styles from "./ControlBar.module.css";
 
+/** A one-line pointer at one of the utility controls. */
+export interface ControlHint {
+  at: "appearance" | "playback";
+  text: string;
+}
+
 interface Props {
   playing: boolean;
   expanded: boolean;
@@ -27,6 +33,8 @@ interface Props {
   minutesLeft: number | null;
   rate: number;
   sleepRemainingMs: number | null;
+  /** Shown above the row, pointing down at the control it names. */
+  hint?: ControlHint | null;
 }
 
 function formatRate(rate: number): string {
@@ -56,6 +64,7 @@ export function ControlBar({
   minutesLeft,
   rate,
   sleepRemainingMs,
+  hint,
 }: Props) {
   const sleepLabel =
     sleepRemainingMs === null ? null : `sleep ${Math.max(1, Math.ceil(sleepRemainingMs / 60000))}m`;
@@ -94,6 +103,11 @@ export function ControlBar({
         </div>
 
         <div className={styles.row}>
+          {hint && (
+            <span className={styles.hint} data-at={hint.at} role="note">
+              {hint.text}
+            </span>
+          )}
           <button
             type="button"
             className={styles.utility}

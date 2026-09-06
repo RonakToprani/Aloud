@@ -6,12 +6,13 @@ import { useAuth } from "@/components/AuthProvider";
 import { useSettings } from "@/components/SettingsProvider";
 import { BackIcon } from "@/components/ui/Icons";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
-import { pickDefaultVoice, useSpeechEngine } from "@/lib/hooks/useSpeechEngine";
+import { pickDefaultVoice, pickShowcaseVoice, useSpeechEngine } from "@/lib/hooks/useSpeechEngine";
 import { useMediaSession } from "@/lib/hooks/useMediaSession";
 import { useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { takeAutoplay } from "@/lib/library/autoplay";
+import { bookFraction } from "@/lib/library/progress";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
 import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
 import { useListeningClock } from "@/lib/sync/listening";
@@ -28,11 +29,25 @@ import { segmentChapter, type SegmentedChapter } from "@/lib/text/segment";
 import type { Bookmark, BookMeta, Chapter, Position } from "@/lib/types";
 import { AppearanceSheet } from "./AppearanceSheet";
 import { ContentsSheet } from "./ContentsSheet";
-import { ControlBar } from "./ControlBar";
+import { ControlBar, type ControlHint } from "./ControlBar";
 import { PlaybackSheet } from "./PlaybackSheet";
 import { ReaderSurface } from "./ReaderSurface";
 import { VoiceChooser } from "./VoiceChooser";
 import styles from "./ReaderView.module.css";
+
+/**
+ * Two quiet pointers at the controls, shown once on the first book anyone
+ * plays and never again. The settings are the reason people stay: the wrong
+ * voice or 19px of text in a bright theme is the difference between a reader
+ * who carries on and one who closes the tab. Nobody opens a sheet to find
+ * that out on their own.
+ */
+const TIPS_KEY = "aloud.tips.v1";
+const TIP_VISIBLE_MS = 6500;
+const TIPS: (ControlHint & { afterMs: number })[] = [
+  { at: "appearance", text: "Text size, spacing and colour", afterMs: 7000 },
+  { at: "playback", text: "Another voice, or a different speed", afterMs: 21000 },
+];
 
 /** How long the chrome stays up after the last touch while reading. */
 const CHROME_IDLE_MS = 3600;
@@ -75,7 +90,7 @@ function fitPosition(position: Position, meta: BookMeta): Position | null {
 export function ReaderView({ bookId }: { bookId: string }) {
   const { settings, update } = useSettings();
   const { engine, ready: voicesReady, supported, voices, preferredLang } = useSpeechEngine();
-  const { userId, epoch: authEpoch, ensureAccount } = useAuth();
+  const { status: authStatus, userId, epoch: authEpoch, ensureAccount } = useAuth();
 
   const [book, setBook] = useState<LoadedBook | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -100,6 +115,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const [needsVoice, setNeedsVoice] = useState(false);
   /** Set when the reader arrived here expecting the book to start itself. */
   const [autoplay, setAutoplay] = useState(false);
+  const [tip, setTip] = useState<ControlHint | null>(null);
+  const tipsScheduled = useRef(false);
+  const finishedRef = useRef<HTMLDivElement>(null);
   /** Where another device left off, if newer than this one. */
   const [remotePosition, setRemotePosition] = useState<Position | null>(null);
 
@@ -319,7 +337,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
     const usable = stored && stored.tier !== "siri";
     if (settings.voiceId && usable) return;
 
-    const preferred = pickDefaultVoice(voices, preferredLang);
+    // Never chosen a voice before: this is the first thing they will hear,
+    // so lead with one built for reading books. A stored voice this device
+    // cannot speak is a repair, and takes the ordinary default.
+    const preferred = settings.voiceId
+      ? pickDefaultVoice(voices, preferredLang)
+      : pickShowcaseVoice(voices, preferredLang);
     if (!preferred || preferred.id === settings.voiceId) return;
     update({ voiceId: preferred.id });
     if (settings.voiceId) {
@@ -418,19 +441,55 @@ export function ReaderView({ bookId }: { bookId: string }) {
     playerRef.current?.play();
   }, [engine, stopPreview, bookId]);
 
+  // The end of a book arrives below the last line of it, under the controls.
+  // Bring it into view, or the reader is left staring at a page that simply
+  // stopped.
+  useEffect(() => {
+    if (playerState.status !== "ended") return;
+    const timer = setTimeout(
+      () => finishedRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }),
+      140,
+    );
+    return () => clearTimeout(timer);
+  }, [playerState.status]);
+
+  /* ---------------- first-time pointers ---------------- */
+
+  useEffect(() => {
+    if (!playing || tipsScheduled.current) return;
+    tipsScheduled.current = true;
+    try {
+      if (localStorage.getItem(TIPS_KEY)) return;
+      localStorage.setItem(TIPS_KEY, "seen");
+    } catch {
+      return; // no memory of having shown them means never showing them
+    }
+    const timers = TIPS.flatMap((entry) => [
+      setTimeout(() => setTip({ at: entry.at, text: entry.text }), entry.afterMs),
+      setTimeout(() => setTip((current) => (current?.at === entry.at ? null : current)), entry.afterMs + TIP_VISIBLE_MS),
+    ]);
+    return () => timers.forEach(clearTimeout);
+  }, [playing]);
+
+  // A pointer at a control the reader has already opened is noise.
+  useEffect(() => {
+    if (sheet) setTip(null);
+  }, [sheet]);
+
   /* ---------------- chrome ---------------- */
 
   const wakeChrome = useCallback(() => setChromeExpanded(true), []);
 
   useEffect(() => {
-    if (!playing || sheet) {
+    // A pointer at a hidden control points at nothing.
+    if (!playing || sheet || tip) {
       setChromeExpanded(true);
       return;
     }
     if (!chromeExpanded) return;
     const timer = setTimeout(() => setChromeExpanded(false), CHROME_IDLE_MS);
     return () => clearTimeout(timer);
-  }, [playing, chromeExpanded, sheet, playerState.sentenceIndex]);
+  }, [playing, chromeExpanded, sheet, tip, playerState.sentenceIndex]);
 
   /* ---------------- transport ---------------- */
 
@@ -594,12 +653,10 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const chapter = getChapter(playerState.chapterIndex);
   const meta = book?.meta;
 
-  const progress = useMemo(() => {
-    if (!meta || !meta.sentenceCount) return 0;
-    let before = 0;
-    for (let i = 0; i < playerState.chapterIndex; i++) before += meta.chapterSentenceCounts[i] ?? 0;
-    return (before + playerState.sentenceIndex) / meta.sentenceCount;
-  }, [meta, playerState.chapterIndex, playerState.sentenceIndex]);
+  const progress = useMemo(
+    () => (meta ? bookFraction(meta, playerState.chapterIndex, playerState.sentenceIndex) : 0),
+    [meta, playerState.chapterIndex, playerState.sentenceIndex],
+  );
 
   const minutesLeft = useMemo(() => {
     if (!meta || !chapter) return null;
@@ -677,6 +734,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
     book.meta.chapterTitles[playerState.chapterIndex] ?? `Chapter ${playerState.chapterIndex + 1}`;
 
   const chooseVoice = needsVoice && supported && voicesReady && voices.length > 0;
+  // The sample carries a per-device id of its own; see lib/library/sample.
+  const isSample = book.meta.id.startsWith("sample-");
+  const canSignIn = authStatus !== "unavailable" && authStatus !== "signed-in";
 
   return (
     <>
@@ -740,11 +800,25 @@ export function ReaderView({ bookId }: { bookId: string }) {
         />
 
         {playerState.status === "ended" && (
-          <div className={styles.finished}>
-            <p className={styles.finishedTitle}>That&rsquo;s the end of {book.meta.title}.</p>
-            <Link className={styles.noticeAction} href="/">
-              Back to your library
-            </Link>
+          <div className={styles.finished} ref={finishedRef}>
+            <p className={styles.finishedTitle}>
+              {isSample ? "That\u2019s the end of the sample." : `That\u2019s the end of ${book.meta.title}.`}
+            </p>
+            {isSample && (
+              <p className={styles.finishedBody}>
+                Add a book of your own and it will be read to you the same way.
+              </p>
+            )}
+            <div className={styles.finishedActions}>
+              <Link className={styles.noticeAction} href="/">
+                {isSample ? "Add a book" : "Back to your library"}
+              </Link>
+              {canSignIn && (
+                <Link className={styles.finishedSignIn} href="/signin">
+                  Keep your place on every device
+                </Link>
+              )}
+            </div>
           </div>
         )}
       </main>
@@ -760,9 +834,11 @@ export function ReaderView({ bookId }: { bookId: string }) {
         onPlayback={() => setSheet("playback")}
         onContents={() => setSheet("contents")}
         progress={progress}
-        minutesLeft={minutesLeft}
+        // A book that has ended has nothing left to count down.
+        minutesLeft={playerState.status === "ended" ? null : minutesLeft}
         rate={settings.rate}
         sleepRemainingMs={sleepRemaining}
+        hint={tip}
       />
 
       <AppearanceSheet
