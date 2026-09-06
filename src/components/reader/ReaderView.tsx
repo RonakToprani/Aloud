@@ -578,7 +578,11 @@ export function ReaderView({ bookId }: { bookId: string }) {
     if (!chromeExpanded) return;
     const timer = setTimeout(() => setChromeExpanded(false), CHROME_IDLE_MS);
     return () => clearTimeout(timer);
-  }, [playing, chromeExpanded, sheet, coachHint, playerState.sentenceIndex]);
+    // Deliberately not restarted by the sentence advancing. The controls
+    // hide when the *reader* has been idle, and a sentence turning over is
+    // the book working, not a touch: with sentences shorter than the timeout
+    // the countdown never finished and the chrome never withdrew.
+  }, [playing, chromeExpanded, sheet, coachHint]);
 
   /* ---------------- transport ---------------- */
 
