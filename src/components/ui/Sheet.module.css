@@ -12,6 +12,7 @@
 }
 
 .panel {
+  position: relative;
   width: min(460px, 100%);
   max-height: min(78svh, 640px);
   display: flex;
@@ -84,6 +85,44 @@
 .close:hover {
   color: var(--ui);
   background: var(--inset);
+}
+
+/* Sits above the sheet, on the dimmed page: nothing in the sheet moves when
+   it arrives, and nothing in the sheet is hidden while it is there. */
+.tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 14px;
+  right: 14px;
+  z-index: 2;
+  margin: 0;
+  padding: 12px 15px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-lift);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-wrap: pretty;
+  pointer-events: none;
+  animation: tipLife 7000ms var(--ease-soft) forwards;
+}
+
+@keyframes tipLife {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  6%,
+  86% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 .body {

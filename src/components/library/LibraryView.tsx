@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountSheet } from "@/components/auth/AccountSheet";
 import { useAuth } from "@/components/AuthProvider";
-import { StatsHero } from "@/components/home/Stats";
+import { StatsHero, StatsStrip } from "@/components/home/Stats";
 import { Sheet } from "@/components/ui/Sheet";
 import { CloudIcon, PlusIcon, TrashIcon } from "@/components/ui/Icons";
 import { Logo } from "@/components/ui/Logo";
@@ -40,6 +40,8 @@ const UNDO_MS = 6000;
 /** Books the account knows about but this device doesn't, kept so the
  *  library paints them before the network answers. */
 const REMOTE_CACHE_KEY = "aloud.remoteBooks.v1";
+/** Shown once, then never again on this device. */
+const DEVICE_ONLY_KEY = "aloud.deviceOnly.v1";
 
 const STAGE_LABEL: Record<ImportProgress["stage"], string> = {
   reading: "Reading the file",
@@ -116,6 +118,7 @@ export function LibraryView() {
   const [pasteBody, setPasteBody] = useState("");
   const [dragging, setDragging] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const noticeShown = useRef(false);
   /** The account-only book the reader tapped, waiting for its text. */
   const [missingBook, setMissingBook] = useState<BookMeta | null>(null);
 
@@ -161,6 +164,34 @@ export function LibraryView() {
       window.removeEventListener("pageshow", onShow);
     };
   }, [refresh]);
+
+  // Said once, as a passing note rather than a line of the page: a standing
+  // paragraph on a shelf you visit every day stops being read after the
+  // second visit and is furniture by the fifth.
+  useEffect(() => {
+    if (noticeShown.current || authStatus === "unavailable" || authStatus === "signed-in") return;
+    if (!books?.length) return;
+    try {
+      if (localStorage.getItem(DEVICE_ONLY_KEY)) return;
+    } catch {
+      return;
+    }
+    noticeShown.current = true;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(DEVICE_ONLY_KEY, "seen");
+      } catch {
+        /* it offers again next time */
+      }
+      setToast({
+        id: Date.now(),
+        text: "These books live on this device only.",
+        durationMs: 9000,
+        action: { label: "Sign in", onAction: () => router.push("/signin") },
+      });
+    }, 1600);
+    return () => clearTimeout(timer);
+  }, [books, authStatus, router]);
 
   /* ---------------- sync with the account ---------------- */
 
@@ -548,16 +579,7 @@ export function LibraryView() {
         </>
       ) : (
         <>
-          <div className={styles.libraryHero}>
-            <StatsHero />
-          </div>
-          {showAccount && !signedIn && (
-            <p className={styles.nudge}>
-              These books live on this device only.{" "}
-              <Link href="/signin" prefetch={false}>Sign in</Link> to keep your library and your place in it on every
-              device.
-            </p>
-          )}
+          <StatsStrip />
 
           {continuing && (
             <section className={styles.continue} aria-labelledby="continue-heading">

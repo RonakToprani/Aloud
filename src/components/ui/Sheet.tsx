@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CloseIcon } from "./Icons";
 import styles from "./Sheet.module.css";
 
@@ -11,11 +11,30 @@ interface Props {
   children: React.ReactNode;
   /** Extra room for tall content such as the voice list. */
   tall?: boolean;
+  /** A line of orientation that floats over the top of the sheet and then
+   *  leaves. Never part of the layout: advice that stays becomes furniture. */
+  tip?: string | null;
+}
+
+const TIP_LIFE_MS = 7000;
+
+function SheetTip({ text }: { text: string }) {
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setGone(true), TIP_LIFE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (gone) return null;
+  return (
+    <p className={styles.tip} role="status">
+      {text}
+    </p>
+  );
 }
 
 /** A soft-edged bottom sheet. Escape closes it, focus is kept inside while
  *  it's open, and it returns focus where it came from. */
-export function Sheet({ open, title, onClose, children, tall }: Props) {
+export function Sheet({ open, title, onClose, children, tall, tip }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
 
@@ -91,6 +110,7 @@ export function Sheet({ open, title, onClose, children, tall }: Props) {
             <CloseIcon size={18} />
           </button>
         </div>
+        {tip && <SheetTip key={tip} text={tip} />}
         <div className={styles.body}>{children}</div>
       </div>
     </div>

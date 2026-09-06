@@ -55,6 +55,14 @@ const COACH_TEXT: Record<"appearance" | "voice", string> = {
   voice: "Now tap here to pick a different voice, or change the speed",
 };
 
+/** Said once inside each sheet, floating over it, then gone. */
+const COACH_SHEET_TEXT = {
+  appearance:
+    "Pick a theme, then set the size and spacing. Everything changes behind the sheet as you go.",
+  voice:
+    "Tap the speaker beside a voice to hear it, then its name to keep it. Speed is at the top.",
+};
+
 function storedCoachStep(): CoachStep {
   try {
     const raw = localStorage.getItem(COACH_KEY);
@@ -140,8 +148,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const [autoplay, setAutoplay] = useState(false);
   /** Which sign is due, or null before the walkthrough has begun. */
   const [coachStep, setCoachStep] = useState<CoachStep | null>(null);
-  /** True while the voice sheet is open because a sign sent them there. */
-  const [coachNote, setCoachNote] = useState(false);
+  /** Which sheet the walkthrough has just opened, if any. */
+  const [coachNote, setCoachNote] = useState<"appearance" | "voice" | null>(null);
   /** Reading time, in ms, with nothing open over the top of it. */
   const coachClock = useRef(0);
   const finishedRef = useRef<HTMLDivElement>(null);
@@ -504,11 +512,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
     if (at === "appearance") {
       rememberCoachStep("voice");
       setCoachStep("voice");
+      setCoachNote("appearance");
       setSheet("appearance");
     } else {
       rememberCoachStep("done");
       setCoachStep("done");
-      setCoachNote(true);
+      setCoachNote("voice");
       setSheet("playback");
     }
   }, []);
@@ -523,13 +532,14 @@ export function ReaderView({ bookId }: { bookId: string }) {
     if (sheet === "appearance" && coachStep === "appearance") {
       rememberCoachStep("voice");
       setCoachStep("voice");
+      setCoachNote("appearance");
     }
     if (sheet === "playback" && coachStep === "voice") {
       rememberCoachStep("done");
       setCoachStep("done");
-      setCoachNote(true);
+      setCoachNote("voice");
     }
-    if (!sheet) setCoachNote(false);
+    if (!sheet) setCoachNote(null);
   }, [sheet, coachStep]);
 
   /** The sign on screen right now, if any. A sheet hides it. */
@@ -912,6 +922,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
         onClose={() => setSheet(null)}
         settings={settings}
         update={update}
+        tip={coachNote === "appearance" ? COACH_SHEET_TEXT.appearance : null}
       />
       <PlaybackSheet
         open={sheet === "playback"}
@@ -923,7 +934,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
         voices={voices}
         preferredLang={preferredLang}
         voicesReady={voicesReady}
-        note={coachNote}
+        tip={coachNote === "voice" ? COACH_SHEET_TEXT.voice : null}
         previewing={previewing}
         onPreview={onPreview}
         sleepMinutes={sleepMinutes}

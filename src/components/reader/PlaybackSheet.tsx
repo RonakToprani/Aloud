@@ -18,7 +18,7 @@ interface Props {
   preferredLang: string;
   voicesReady: boolean;
   /** Shown when the walkthrough sent the reader here. */
-  note?: boolean;
+  tip?: string | null;
   previewing: string | null;
   onPreview: (voiceId: string) => void;
   sleepMinutes: number | null;
@@ -51,7 +51,7 @@ export function PlaybackSheet({
   voices,
   preferredLang,
   voicesReady,
-  note,
+  tip,
   previewing,
   onPreview,
   sleepMinutes,
@@ -61,13 +61,7 @@ export function PlaybackSheet({
   const rateIndex = nearestRateIndex(rate);
 
   return (
-    <Sheet open={open} title="Voice & speed" onClose={onClose} tall>
-      {note && (
-        <p className={styles.note}>
-          Drag the speed to read faster or slower. Below it, tap the speaker beside any voice to
-          hear it read a line, then tap the name to keep it. Whatever you pick reads every book.
-        </p>
-      )}
+    <Sheet open={open} title="Voice & speed" onClose={onClose} tall tip={tip}>
       <Field label={`Speed ${rate.toFixed(2).replace(/0$/, "")}×`}>
         <Slider
           label="Reading speed"

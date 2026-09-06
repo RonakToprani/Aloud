@@ -18,6 +18,7 @@ interface Props {
   onClose: () => void;
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
+  tip?: string | null;
 }
 
 const THEMES: { value: ThemeName; label: string }[] = [
@@ -38,9 +39,9 @@ const ACCENTS: { value: AccentName; label: string }[] = [
   { value: "moss", label: "Moss" },
 ];
 
-export function AppearanceSheet({ open, onClose, settings, update }: Props) {
+export function AppearanceSheet({ open, onClose, settings, update, tip }: Props) {
   return (
-    <Sheet open={open} title="Appearance" onClose={onClose}>
+    <Sheet open={open} title="Appearance" onClose={onClose} tip={tip}>
       <Field label="Theme">
         <div className={styles.themeGrid}>
           {THEMES.map((theme) => (
