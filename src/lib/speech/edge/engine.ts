@@ -426,6 +426,12 @@ class EdgeUtterance implements UtteranceHandle {
       if (ctx.state === "suspended") await ctx.resume().catch(() => {});
       if (this.cancelled) return;
 
+      // Paused while the audio was still on its way: hold it, and let
+      // resume() start it from the beginning rather than playing now.
+      if (this.pausedAt !== null) {
+        this.callbacks.onStart?.();
+        return;
+      }
       this.playFrom(0);
       this.output.keepSessionAlive();
       this.callbacks.onStart?.();
@@ -566,7 +572,14 @@ class EdgeUtterance implements UtteranceHandle {
     this.output.keepSessionAlive();
     void this.output.resumeContext().then(() => {
       if (this.cancelled || this.finished || this.pausedAt === null) return;
+      // The audio may not have arrived yet; start() will see pausedAt cleared
+      // by playFrom and carry on as normal once it does.
+      if (!this.buffer) {
+        this.pausedAt = null;
+        return;
+      }
       this.playFrom(offset);
+      this.scheduleBoundaries();
     });
   }
 
@@ -885,13 +898,21 @@ class AwaitedUtterance implements UtteranceHandle {
           return;
         }
         this.inner = new PassageUtterance(found.playback, found.index, this.callbacks);
-        this.inner.start();
-        if (this.wantPaused) this.inner.pause();
+        // Paused while the passage was on its way: hold it until resume.
+        if (!this.wantPaused) this.startInner();
       },
       () => {
         if (!this.cancelled) this.fail();
       },
     );
+  }
+
+  private started = false;
+
+  private startInner(): void {
+    if (!this.inner || this.started) return;
+    this.started = true;
+    this.inner.start();
   }
 
   private fail(): void {
@@ -922,7 +943,8 @@ class AwaitedUtterance implements UtteranceHandle {
 
   resume(): void {
     this.wantPaused = false;
-    this.inner?.resume();
+    if (this.inner && !this.started) this.startInner();
+    else this.inner?.resume();
   }
 
   cancel(): void {

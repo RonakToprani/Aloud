@@ -60,6 +60,8 @@ export class Player {
   private recoveries = 0;
   private verifyTimer: ReturnType<typeof setTimeout> | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the current utterance has reported starting. */
+  private started = false;
   private destroyed = false;
 
   constructor(private options: PlayerOptions) {
@@ -142,6 +144,9 @@ export class Player {
   pause(): void {
     if (this.state.status !== "playing") return;
     this.clearVerify();
+    // A voice that hasn't started yet is not a silent voice; it is waiting,
+    // as the reader has asked. Judging it now would restart playback later.
+    this.clearStartTimer();
     this.sync?.pause();
     this.options.engine.pause();
     this.emit({ status: "paused" });
@@ -171,6 +176,7 @@ export class Player {
     this.sync?.resume();
     this.options.engine.resume();
     this.emit({ status: "playing" });
+    if (!this.started) this.armStartTimer();
 
     // If resume() silently failed, re-speak the current sentence from where
     // the highlight stopped rather than leaving the reader in silence.
@@ -294,6 +300,20 @@ export class Player {
     this.verifyTimer = null;
   }
 
+  /** Give the engine a bounded time to begin speaking the current sentence. */
+  private armStartTimer(): void {
+    this.clearStartTimer();
+    const sync = this.sync;
+    if (!sync) return;
+    this.startTimer = setTimeout(
+      () => {
+        if (this.destroyed || this.sync !== sync || this.state.status !== "playing") return;
+        this.recover("silent");
+      },
+      this.voiceId?.startsWith("edge:") ? CLOUD_START_TIMEOUT_MS : START_TIMEOUT_MS,
+    );
+  }
+
   private clearStartTimer(): void {
     if (this.startTimer) clearTimeout(this.startTimer);
     this.startTimer = null;
@@ -360,14 +380,8 @@ export class Player {
     // A voice the system lists but will not actually speak — Siri's, on iOS —
     // produces no events at all: no start, no end, no error. Without this the
     // reader just sees the highlight parked on the first word in silence.
-    this.clearStartTimer();
-    this.startTimer = setTimeout(
-      () => {
-        if (this.destroyed || this.sync !== sync) return;
-        this.recover("silent");
-      },
-      this.voiceId?.startsWith("edge:") ? CLOUD_START_TIMEOUT_MS : START_TIMEOUT_MS,
-    );
+    this.started = false;
+    this.armStartTimer();
 
     // Offered before speak(), so that an engine which synthesises passages
     // can answer the very first sentence from one — the alternative is a
@@ -379,6 +393,7 @@ export class Player {
       {
         onStart: () => {
           if (this.sync !== sync) return;
+          this.started = true;
           this.clearStartTimer();
           sync.start();
         },
@@ -512,7 +527,9 @@ export class Player {
     }
     this.recoveries += 1;
     setTimeout(() => {
-      if (this.destroyed || this.state.status === "idle") return;
+      // Only a reader still expecting sound gets it back; a pause that
+      // arrived meanwhile stands.
+      if (this.destroyed || this.state.status !== "playing") return;
       this.speakCurrent();
     }, 220);
   }
