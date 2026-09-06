@@ -44,6 +44,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* The row wraps under the wordmark on a phone; keep it flush right there
+     rather than adrift in the middle. */
+  margin-left: auto;
 }
 
 .signInLink {
@@ -258,6 +261,11 @@
 .nudge a:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* The counter given room, for a reader who has not brought a book yet. */
+.libraryHero {
+  margin: 14px 0 20px;
 }
 
 /* ---------- Section headings ---------- */

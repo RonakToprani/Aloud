@@ -385,6 +385,9 @@ export function LibraryView() {
 
   const loaded = books !== null;
   const empty = loaded && entries.length === 0;
+  // The sample is not a library. Until someone brings a book of their own,
+  // the counter keeps the whole page rather than a line at the top of it.
+  const hasOwnBooks = entries.some((entry) => !entry.meta.id.startsWith("sample-"));
   const showAccount = authStatus !== "unavailable";
   const signedIn = authStatus === "signed-in";
 
@@ -548,7 +551,13 @@ export function LibraryView() {
         </>
       ) : (
         <>
-          <StatsStrip />
+          {hasOwnBooks ? (
+            <StatsStrip />
+          ) : (
+            <div className={styles.libraryHero}>
+              <StatsHero />
+            </div>
+          )}
           {showAccount && !signedIn && (
             <p className={styles.nudge}>
               These books live on this device only.{" "}

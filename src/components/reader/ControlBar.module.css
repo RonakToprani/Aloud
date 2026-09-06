@@ -109,8 +109,13 @@
   color: var(--ui);
   font-size: 12.5px;
   line-height: 1.35;
+  text-align: left;
   text-wrap: pretty;
   animation: hintIn 260ms var(--ease-soft) both;
+}
+
+.hint:hover {
+  color: var(--ink-strong);
 }
 
 .hint::after {

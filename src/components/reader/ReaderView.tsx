@@ -42,12 +42,22 @@ import styles from "./ReaderView.module.css";
  * who carries on and one who closes the tab. Nobody opens a sheet to find
  * that out on their own.
  */
-const TIPS_KEY = "aloud.tips.v1";
-const TIP_VISIBLE_MS = 6500;
+const TIPS_KEY = "aloud.tips.v2";
+const TIP_VISIBLE_MS = 8000;
+const TIP_TICK_MS = 500;
 const TIPS: (ControlHint & { afterMs: number })[] = [
-  { at: "appearance", text: "Text size, spacing and colour", afterMs: 7000 },
-  { at: "playback", text: "Another voice, or a different speed", afterMs: 21000 },
+  { at: "appearance", text: "Text size, spacing and colour", afterMs: 6000 },
+  { at: "playback", text: "Another voice, or a different speed", afterMs: 18000 },
 ];
+
+function tipsAlreadyShown(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TIPS_KEY) ?? "[]");
+    return new Set(Array.isArray(raw) ? (raw as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
 
 /** How long the chrome stays up after the last touch while reading. */
 const CHROME_IDLE_MS = 3600;
@@ -116,7 +126,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
   /** Set when the reader arrived here expecting the book to start itself. */
   const [autoplay, setAutoplay] = useState(false);
   const [tip, setTip] = useState<ControlHint | null>(null);
-  const tipsScheduled = useRef(false);
+  /** Reading time, in ms, with nothing open over the top of it. */
+  const tipClock = useRef(0);
+  const tipsShown = useRef<Set<string>>(new Set());
   const finishedRef = useRef<HTMLDivElement>(null);
   /** Where another device left off, if newer than this one. */
   const [remotePosition, setRemotePosition] = useState<Position | null>(null);
@@ -456,25 +468,49 @@ export function ReaderView({ bookId }: { bookId: string }) {
   /* ---------------- first-time pointers ---------------- */
 
   useEffect(() => {
-    if (!playing || tipsScheduled.current) return;
-    tipsScheduled.current = true;
-    try {
-      if (localStorage.getItem(TIPS_KEY)) return;
-      localStorage.setItem(TIPS_KEY, "seen");
-    } catch {
-      return; // no memory of having shown them means never showing them
-    }
-    const timers = TIPS.flatMap((entry) => [
-      setTimeout(() => setTip({ at: entry.at, text: entry.text }), entry.afterMs),
-      setTimeout(() => setTip((current) => (current?.at === entry.at ? null : current)), entry.afterMs + TIP_VISIBLE_MS),
-    ]);
-    return () => timers.forEach(clearTimeout);
-  }, [playing]);
+    tipsShown.current = tipsAlreadyShown();
+  }, []);
+
+  // Paced by time actually spent reading, not by the wall clock: a reader
+  // who pauses to look through a sheet has not missed their turn. Each is
+  // remembered the moment it appears, so leaving early costs the one that
+  // was on screen rather than both of them.
+  useEffect(() => {
+    if (!playing || sheet || tip) return;
+    if (tipsShown.current.size >= TIPS.length) return;
+    const timer = setInterval(() => {
+      tipClock.current += TIP_TICK_MS;
+      const due = TIPS.find(
+        (entry) => !tipsShown.current.has(entry.at) && tipClock.current >= entry.afterMs,
+      );
+      if (!due) return;
+      tipsShown.current.add(due.at);
+      try {
+        localStorage.setItem(TIPS_KEY, JSON.stringify([...tipsShown.current]));
+      } catch {
+        /* it simply offers again next time */
+      }
+      setTip({ at: due.at, text: due.text });
+    }, TIP_TICK_MS);
+    return () => clearInterval(timer);
+  }, [playing, sheet, tip]);
+
+  useEffect(() => {
+    if (!tip) return;
+    const timer = setTimeout(() => setTip(null), TIP_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [tip]);
 
   // A pointer at a control the reader has already opened is noise.
   useEffect(() => {
     if (sheet) setTip(null);
   }, [sheet]);
+
+  /** Tapping the pointer opens the thing it is pointing at. */
+  const onTip = useCallback((at: ControlHint["at"]) => {
+    setTip(null);
+    setSheet(at);
+  }, []);
 
   /* ---------------- chrome ---------------- */
 
@@ -839,6 +875,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
         rate={settings.rate}
         sleepRemainingMs={sleepRemaining}
         hint={tip}
+        onHint={onTip}
       />
 
       <AppearanceSheet

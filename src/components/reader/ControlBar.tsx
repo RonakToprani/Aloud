@@ -35,6 +35,8 @@ interface Props {
   sleepRemainingMs: number | null;
   /** Shown above the row, pointing down at the control it names. */
   hint?: ControlHint | null;
+  /** Tapping the pointer opens what it points at. */
+  onHint?: (at: ControlHint["at"]) => void;
 }
 
 function formatRate(rate: number): string {
@@ -65,6 +67,7 @@ export function ControlBar({
   rate,
   sleepRemainingMs,
   hint,
+  onHint,
 }: Props) {
   const sleepLabel =
     sleepRemainingMs === null ? null : `sleep ${Math.max(1, Math.ceil(sleepRemainingMs / 60000))}m`;
@@ -104,9 +107,14 @@ export function ControlBar({
 
         <div className={styles.row}>
           {hint && (
-            <span className={styles.hint} data-at={hint.at} role="note">
+            <button
+              type="button"
+              className={styles.hint}
+              data-at={hint.at}
+              onClick={() => onHint?.(hint.at)}
+            >
               {hint.text}
-            </span>
+            </button>
           )}
           <button
             type="button"
