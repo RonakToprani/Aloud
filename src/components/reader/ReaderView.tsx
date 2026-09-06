@@ -11,6 +11,7 @@ import { useMediaSession } from "@/lib/hooks/useMediaSession";
 import { useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
+import { takeAutoplay } from "@/lib/library/autoplay";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
 import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
 import { useListeningClock } from "@/lib/sync/listening";
@@ -19,6 +20,7 @@ import {
   pullBookmarks,
   pullPosition,
   pushBookmarks,
+  pushBooks,
   pushPosition,
   pushPositionNow,
 } from "@/lib/sync/remote";
@@ -96,6 +98,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
   /** True until this book has a saved place: its first opening on this device
    *  begins by choosing the voice that will read it. */
   const [needsVoice, setNeedsVoice] = useState(false);
+  /** Set when the reader arrived here expecting the book to start itself. */
+  const [autoplay, setAutoplay] = useState(false);
   /** Where another device left off, if newer than this one. */
   const [remotePosition, setRemotePosition] = useState<Position | null>(null);
 
@@ -131,7 +135,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
         // whose voice was chosen before, goes straight to the text.
         const stored = loadPosition(bookId);
         const underway = !!stored && (stored.chapterIndex > 0 || stored.sentenceIndex > 0 || stored.wordIndex > 0);
-        setNeedsVoice(!underway && !hasChosenVoice(bookId));
+        // Arriving from the sample: the point was to hear it, so the voice
+        // question waits until the reader has a reason to care about it.
+        const wantsAutoplay = takeAutoplay(bookId);
+        if (wantsAutoplay) markVoiceChosen(bookId);
+        setAutoplay(wantsAutoplay);
+        setNeedsVoice(!wantsAutoplay && !underway && !hasChosenVoice(bookId));
         loaded.current = true;
         setBook({ meta, chapters: body.chapters });
         setBookmarks(await listBookmarks(bookId).catch(() => []));
@@ -175,6 +184,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
     if (!book || !userId) return;
     let alive = true;
     (async () => {
+      // The account has to know the book before anything can point at it:
+      // positions and listening sessions are keyed to it, and a write for a
+      // book the account has never seen is rejected. This also refreshes
+      // metadata for a book re-imported with better chapter detection.
+      await pushBooks([book.meta]).catch(() => {});
+      if (!alive) return;
       const [theirs, remoteMarks] = await Promise.all([
         pullPosition(bookId).catch(() => null),
         pullBookmarks(bookId).catch(() => null),
@@ -273,6 +288,18 @@ export function ReaderView({ bookId }: { bookId: string }) {
     // Rate and voice are pushed in below rather than rebuilding the player.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book, engine, getChapter, bookId]);
+
+  // Declared after the player exists, so playerRef is populated by now.
+  useEffect(() => {
+    if (!autoplay || !book || !voicesReady || !settings.voiceId) return;
+    const player = playerRef.current;
+    if (!player) return;
+    setAutoplay(false);
+    // Still inside the activation from the tap that navigated here, so iOS
+    // allows this; where it does not, the play button is already on screen.
+    engine.unlock();
+    player.play();
+  }, [autoplay, book, voicesReady, settings.voiceId, engine]);
 
   useEffect(() => {
     playerRef.current?.setRate(settings.rate);

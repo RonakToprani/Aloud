@@ -172,6 +172,26 @@
   cursor: default;
 }
 
+/* The third action is a word, not a button: three stacked buttons would
+   make the first two look like a choice rather than an invitation. */
+.landingQuiet {
+  align-self: center;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--ui-muted);
+  transition: color var(--dur-ui) var(--ease-soft);
+}
+
+.landingQuiet:hover:not(:disabled) {
+  color: var(--ui);
+}
+
+.landingQuiet:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .landingCaption {
   margin: 4px 0 0;
   text-align: center;

@@ -1,0 +1,34 @@
+import "./setup";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { parsePlainText } from "@/lib/epub/parse";
+import { SAMPLE_AUTHOR, SAMPLE_TEXT, SAMPLE_TITLE } from "@/lib/library/sample";
+import { segmentChapter } from "@/lib/text/segment";
+
+describe("the sample book", () => {
+  const parsed = parsePlainText(SAMPLE_TEXT, SAMPLE_TITLE);
+
+  it("is one chapter of several paragraphs", () => {
+    assert.equal(parsed.chapters.length, 1);
+    assert.ok(parsed.chapters[0].blocks.length >= 4, "reads as prose, not one wall of text");
+  });
+
+  it("opens on the line people know", () => {
+    assert.match(parsed.chapters[0].blocks[0].text, /^Mrs\. Dalloway said she would buy the flowers herself\.$/);
+  });
+
+  it("varies its sentence lengths, which is what shows the highlight working", () => {
+    const lengths = segmentChapter(parsed.chapters[0]).sentences.map((s) => s.words.length);
+    assert.ok(lengths.length >= 8, `expected a handful of sentences, got ${lengths.length}`);
+    assert.ok(Math.min(...lengths) <= 4, "needs a short sentence");
+    assert.ok(Math.max(...lengths) >= 30, "needs a long one");
+  });
+
+  it("is short enough to import in a blink", () => {
+    assert.ok(SAMPLE_TEXT.length < 2000, `${SAMPLE_TEXT.length} characters`);
+  });
+
+  it("names its author", () => {
+    assert.equal(SAMPLE_AUTHOR, "Virginia Woolf");
+  });
+});

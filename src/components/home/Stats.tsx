@@ -13,7 +13,9 @@ import styles from "./Home.module.css";
 export function StatsHero() {
   const stats = useReadingStats();
   const seconds = useCountUp(stats.totalSeconds);
-  if (!stats.available) return null;
+  // Nothing yet, or nothing cached to hold while the real figure arrives:
+  // an eyebrow over "0 minutes, by 0 readers" reads as a broken page.
+  if (!stats.available || (!stats.totalSeconds && !stats.readers)) return null;
   const { figure, unit } = formatListened(seconds);
 
   return (

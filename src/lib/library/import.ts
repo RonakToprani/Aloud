@@ -55,6 +55,8 @@ async function measure(book: ParsedBook, onProgress?: (fraction: number) => void
 export interface ImportOptions {
   id?: string;
   addedAt?: number;
+  /** Overrides the author, for text that carries no metadata of its own. */
+  author?: string;
 }
 
 async function persist(
@@ -71,7 +73,7 @@ async function persist(
   const meta: BookMeta = {
     id: options?.id ?? makeId(),
     title: book.title,
-    author: book.author,
+    author: options?.author ?? book.author,
     source,
     addedAt: options?.addedAt ?? Date.now(),
     chapterTitles: book.chapters.map((chapter) => chapter.title),

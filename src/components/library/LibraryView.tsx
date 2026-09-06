@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountSheet } from "@/components/auth/AccountSheet";
 import { useAuth } from "@/components/AuthProvider";
@@ -27,6 +28,8 @@ import {
   type RemoteBook,
 } from "@/lib/sync/remote";
 import { supabaseConfigured } from "@/lib/supabase/client";
+import { requestAutoplay } from "@/lib/library/autoplay";
+import { addSampleBook } from "@/lib/library/sample";
 import { BookCover } from "./BookCover";
 import type { BookBody, BookMeta } from "@/lib/types";
 import styles from "./Library.module.css";
@@ -100,6 +103,7 @@ function writeRemoteCache(books: RemoteBook[]): void {
 
 export function LibraryView() {
   const { status: authStatus, userId, epoch, email, ensureAccount } = useAuth();
+  const router = useRouter();
 
   const [books, setBooks] = useState<BookMeta[] | null>(null);
   const [remoteBooks, setRemoteBooks] = useState<RemoteBook[]>([]);
@@ -260,6 +264,25 @@ export function LibraryView() {
     },
     [runImport],
   );
+
+  /**
+   * The whole product in one tap, for someone who has never seen it. No
+   * account, no file, no explanation: a page of Mrs Dalloway that starts
+   * reading itself. It stays on the shelf afterwards as an ordinary book,
+   * and the reader pushes it to an account if one ever exists.
+   */
+  const onSample = useCallback(async () => {
+    setError(null);
+    setProgress({ stage: "parsing", fraction: 0.6 });
+    try {
+      const meta = await addSampleBook();
+      requestAutoplay(meta.id);
+      router.push(`/read/${meta.id}`);
+    } catch (failure) {
+      setError(describeImportError(failure));
+      setProgress(null);
+    }
+  }, [router]);
 
   const pickFile = useCallback((options?: ImportOptions) => {
     importTarget.current = options ?? null;
@@ -494,6 +517,14 @@ export function LibraryView() {
             <button
               type="button"
               className={styles.landingPrimary}
+              onClick={() => void onSample()}
+              disabled={busy}
+            >
+              Listen to a sample
+            </button>
+            <button
+              type="button"
+              className={styles.landingSecondary}
               onClick={() => pickFile()}
               disabled={busy}
             >
@@ -501,7 +532,7 @@ export function LibraryView() {
             </button>
             <button
               type="button"
-              className={styles.landingSecondary}
+              className={styles.landingQuiet}
               onClick={() => setPasteOpen(true)}
               disabled={busy}
             >
