@@ -98,8 +98,52 @@ function kindOf(tag: string): BlockKind {
 
 /** Walk the document in order, flushing loose inline text into paragraphs so
  *  nothing readable is dropped and nothing is emitted twice. */
-function extractBlocks(root: Element): Block[] {
+/**
+ * Chapter openings in converted books are rarely real headings: a bold or
+ * centred paragraph reading "CHAPTER SEVEN", a lone roman numeral, a line in
+ * capitals. A short paragraph that looks like one is treated as one, which
+ * is what lets a single-file book be split into chapters at all.
+ */
+const CHAPTER_WORD =
+  /^(chapter|part|book|prologue|epilogue|interlude|intermission|act|scene|canto|letter|section)\b/i;
+const ROMAN = /^[IVXLCDM]{1,8}$/;
+const HEADING_CLASS = /chap|title|head|ttl|heading/i;
+
+function looksLikeHeading(text: string, element: Element): boolean {
+  if (text.length > 60) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 8) return false;
+  const bare = text.replace(/[.:\-–—]+$/, "").trim();
+  if (CHAPTER_WORD.test(bare)) return true;
+  if (ROMAN.test(bare) || /^\d{1,3}$/.test(bare)) return true;
+  // Anything below needs a line that does not read as a sentence.
+  if (/[.!?,;]$/.test(text)) return false;
+  const letters = bare.replace(/[^\p{L}]/gu, "");
+  if (letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()) return true;
+  const className = element.getAttribute("class") ?? "";
+  if (HEADING_CLASS.test(className)) return true;
+  const style = element.getAttribute("style") ?? "";
+  if (/text-align:\s*center/i.test(style) && words.length <= 6) return true;
+  // The whole paragraph wrapped in bold is a heading someone styled by hand.
+  const only = element.children.length === 1 ? element.children[0] : null;
+  if (only && /^(B|STRONG)$/i.test(only.tagName) && clean(only.textContent ?? "") === text) return true;
+  return false;
+}
+
+interface Extracted {
+  blocks: Block[];
+  /** Element id → index of the block it begins, for anchors in a TOC. */
+  anchors: Map<string, number>;
+}
+
+function extractBlocks(root: Element): Extracted {
   const out: Block[] = [];
+  const anchors = new Map<string, number>();
+
+  const note = (element: Element) => {
+    const id = element.getAttribute("id") ?? element.getAttribute("name");
+    if (id && !anchors.has(id)) anchors.set(id, out.length);
+  };
 
   const walk = (node: Element): void => {
     let pending = "";
@@ -126,6 +170,7 @@ function extractBlocks(root: Element): Block[] {
 
       if (BLOCK_TAGS.has(tag) || CONTAINER_TAGS.has(tag)) {
         flush();
+        note(element);
         if (element.querySelector(BLOCK_SELECTOR)) {
           walk(element);
         } else if (
@@ -137,10 +182,16 @@ function extractBlocks(root: Element): Block[] {
           walk(element);
         } else {
           const text = clean(flatText(element));
-          if (text) out.push({ kind: kindOf(tag), text });
+          if (text) {
+            const kind = kindOf(tag);
+            out.push({ kind: kind === "p" && looksLikeHeading(text, element) ? "h2" : kind, text });
+          }
         }
         continue;
       }
+      // Inline anchors sit inside the paragraph being built.
+      note(element);
+      for (const inner of Array.from(element.querySelectorAll("[id],[name]"))) note(inner);
       if (FLOW_TAGS.has(tag)) {
         flush();
         const text = clean(flatText(element));
@@ -155,7 +206,7 @@ function extractBlocks(root: Element): Block[] {
   };
 
   walk(root);
-  return out;
+  return { blocks: out, anchors };
 }
 
 /** EPUB XML is namespaced, and prefixes vary between producers, so every
@@ -228,21 +279,40 @@ function detectDrm(encryptionXml: string, spinePaths: Set<string>): boolean {
 }
 
 /** Map spine hrefs to human titles using the EPUB 3 nav doc or EPUB 2 NCX. */
-function buildTocTitles(doc: Document, basePath: string): Map<string, string> {
+interface TocEntry {
+  path: string;
+  /** Anchor within the file, when the entry points inside one. */
+  id: string | null;
+  title: string;
+}
+
+/** The first entry per file names the file. */
+function firstPerPath(entries: TocEntry[]): Map<string, string> {
   const titles = new Map<string, string>();
+  for (const entry of entries) if (!titles.has(entry.path)) titles.set(entry.path, entry.title);
+  return titles;
+}
+
+function splitHref(basePath: string, href: string): { path: string; id: string | null } {
+  const hash = href.indexOf("#");
+  const file = hash >= 0 ? href.slice(0, hash) : href;
+  const id = hash >= 0 ? safeDecode(href.slice(hash + 1)) : null;
+  return { path: file ? resolvePath(basePath, file) : basePath, id: id || null };
+}
+
+/** Every entry, in reading order. */
+function buildTocEntries(doc: Document, basePath: string): TocEntry[] {
+  const entries: TocEntry[] = [];
 
   for (const point of named(doc, "navPoint")) {
     const label = firstNamed(point, "text");
     const content = firstNamed(point, "content");
     const src = content?.getAttribute("src");
     const text = clean(label?.textContent ?? "");
-    // The first entry pointing at a file names it; nested sections and
-    // page markers that follow must not overwrite that.
-    const path = src ? resolvePath(basePath, src) : "";
-    if (path && text && !titles.has(path)) titles.set(path, text);
+    if (src && text) entries.push({ ...splitHref(basePath, src), title: text });
   }
 
-  if (!titles.size) {
+  if (!entries.length) {
     // Only the table of contents: an EPUB3 nav file also carries page lists
     // and landmarks, whose anchors would turn every title into a number.
     const navs = Array.from(doc.querySelectorAll("nav"));
@@ -253,12 +323,26 @@ function buildTocTitles(doc: Document, basePath: string): Map<string, string> {
     for (const anchor of anchors) {
       const href = anchor.getAttribute("href");
       const text = clean(anchor.textContent ?? "");
-      const path = href ? resolvePath(basePath, href) : "";
-      if (path && text && !titles.has(path)) titles.set(path, text);
+      if (href && text) entries.push({ ...splitHref(basePath, href), title: text });
     }
   }
-  return titles;
+  return entries;
 }
+
+/** A page that is itself a table of contents has nothing to read. */
+const CONTENTS_TITLE = /^(table of )?contents$/i;
+
+/** Titles a chapter should be split at even without a table of contents. */
+function isChapterHeading(text: string): boolean {
+  const bare = text.replace(/[.:\-–—]+$/, "").trim();
+  return CHAPTER_WORD.test(bare) || ROMAN.test(bare) || /^\d{1,3}$/.test(bare);
+}
+
+/** Files shorter than this without a title of their own are the tail of the
+ *  previous chapter, split across pages by a converter. */
+const FRAGMENT_WORDS = 600;
+/** A file this long is split at its headings whatever they look like. */
+const SPLIT_WORDS = 4000;
 
 function wordCount(blocks: Block[]): number {
   let count = 0;
@@ -339,13 +423,13 @@ export async function parseEpub(
   // Chapter titles from the navigation document, which is then excluded.
   const navItem = [...manifest.values()].find((item) => item.properties.includes("nav"));
   const ncxItem = [...manifest.values()].find((item) => item.type.includes("x-dtbncx"));
-  let titles = new Map<string, string>();
+  let tocEntries: TocEntry[] = [];
   for (const source of [navItem, ncxItem]) {
-    if (!source || titles.size) continue;
+    if (!source || tocEntries.length) continue;
     const file = zip.file(source.path);
     if (!file) continue;
     try {
-      titles = buildTocTitles(parseXml(await file.async("text")), source.path);
+      tocEntries = buildTocEntries(parseXml(await file.async("text")), source.path);
     } catch {
       /* a broken table of contents just costs us nicer chapter names */
     }
@@ -380,6 +464,8 @@ export async function parseEpub(
     [navItem?.path, ncxItem?.path].filter((p): p is string => Boolean(p)),
   );
 
+  const titles = firstPerPath(tocEntries);
+
   for (let i = 0; i < spineIds.length; i++) {
     const entry = manifest.get(spineIds[i]);
     onProgress?.(spineIds.length ? i / spineIds.length : 1);
@@ -390,15 +476,18 @@ export async function parseEpub(
     const file = zip.file(entry.path);
     if (!file) continue;
 
-    let blocks: Block[];
+    let extracted: Extracted;
+    let pageTitle = "";
     try {
       const doc = parseXml(await file.async("text"), "application/xhtml+xml");
       const body = doc.body ?? doc.documentElement;
       if (!body) continue;
-      blocks = extractBlocks(body);
+      extracted = extractBlocks(body);
+      pageTitle = clean(doc.querySelector("title")?.textContent ?? "");
     } catch {
       continue;
     }
+    const { blocks } = extracted;
     if (!blocks.length) continue;
 
     const words = wordCount(blocks);
@@ -406,19 +495,61 @@ export async function parseEpub(
       /cover|title-?page|halftitle/i.test(entry.path) && words < 25;
     if (looksLikeCover || words < 3) continue;
 
-    // A leading heading becomes the chapter title rather than body text.
     const tocTitle = titles.get(entry.path);
     const leadHeading = /^h[1-3]$/.test(blocks[0].kind) ? blocks[0].text : null;
-    const chapterTitle = tocTitle ?? leadHeading ?? `Chapter ${chapters.length + 1}`;
-    // Not read twice when the table of contents already names it.
-    const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-    if (leadHeading && (!tocTitle || same(leadHeading, tocTitle))) blocks = blocks.slice(1);
+    // A contents page reads as a list of chapter names; skip it.
+    if (CONTENTS_TITLE.test(tocTitle ?? leadHeading ?? "") && words < 600) continue;
 
-    chapters.push({
-      id: entry.path,
-      title: chapterTitle,
-      blocks: [{ kind: "h1", text: chapterTitle }, ...blocks],
-    });
+    // Where this file splits into chapters: anchors the table of contents
+    // points at, or failing that its own chapter-like headings.
+    const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+    let points: { index: number; title: string | null }[] = tocEntries
+      .filter((e) => e.path === entry.path && e.id && (extracted.anchors.get(e.id) ?? 0) > 0)
+      .map((e) => ({ index: extracted.anchors.get(e.id!)!, title: e.title }))
+      .filter((p, idx, all) => all.findIndex((q) => q.index === p.index) === idx)
+      .sort((a, b) => a.index - b.index);
+    if (!points.length) {
+      const headings = blocks
+        .map((block, index) => ({ block, index }))
+        .filter(({ block, index }) => index > 0 && /^h[12]$/.test(block.kind));
+      const chapterLike = headings.filter(({ block }) => isChapterHeading(block.text));
+      const chosen = chapterLike.length ? chapterLike : words > SPLIT_WORDS ? headings : [];
+      points = chosen.map(({ index }) => ({ index, title: null }));
+    }
+
+    // A small untitled file that picks up mid-sentence continues the
+    // previous chapter: converters paginate, and a page is not a chapter.
+    const previous = chapters[chapters.length - 1];
+    if (!tocTitle && !leadHeading && !points.length && previous && words < FRAGMENT_WORDS) {
+      const lastText = previous.blocks[previous.blocks.length - 1]?.text ?? "";
+      const openEnded = !/[.!?…"'”’)\]]$/.test(lastText);
+      const continues = /^[\p{Ll}]/u.test(blocks[0].text);
+      if (openEnded || continues) {
+        previous.blocks.push(...blocks);
+        continue;
+      }
+    }
+
+    const fallbackTitle =
+      pageTitle.length >= 3 && pageTitle.length <= 80 && !same(pageTitle, title) && !/\.x?html?$/i.test(pageTitle)
+        ? pageTitle
+        : null;
+
+    const bounds = [0, ...points.map((p) => p.index), blocks.length];
+    for (let seg = 0; seg + 1 < bounds.length; seg++) {
+      let part = blocks.slice(bounds[seg], bounds[seg + 1]);
+      if (!part.length) continue;
+      const heading = /^h[1-3]$/.test(part[0].kind) ? part[0].text : null;
+      const named = seg === 0 ? (tocTitle ?? null) : points[seg - 1].title;
+      const chapterTitle = named ?? heading ?? (seg === 0 ? fallbackTitle : null) ?? `Chapter ${chapters.length + 1}`;
+      // Not read twice when the title already names it.
+      if (heading && (!named || same(heading, named))) part = part.slice(1);
+      chapters.push({
+        id: seg === 0 ? entry.path : `${entry.path}#${bounds[seg]}`,
+        title: chapterTitle,
+        blocks: [{ kind: "h1", text: chapterTitle }, ...part],
+      });
+    }
 
     if (i % 12 === 11) await yieldToUi();
   }

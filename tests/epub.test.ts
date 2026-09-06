@@ -10,6 +10,8 @@ interface EpubParts {
   chapters?: { href: string; body: string; id: string }[];
   extraManifest?: string;
   extraSpine?: string;
+  /** Extra files under OEBPS/, e.g. a nav document. */
+  extraFiles?: Record<string, string>;
 }
 
 async function makeEpub(parts: EpubParts = {}): Promise<Uint8Array> {
@@ -45,6 +47,7 @@ async function makeEpub(parts: EpubParts = {}): Promise<Uint8Array> {
     `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Mrs Dalloway</dc:title><dc:creator>Virginia Woolf</dc:creator></metadata><manifest>${manifest}${parts.extraManifest ?? ""}</manifest><spine>${spine}${parts.extraSpine ?? ""}</spine></package>`,
   );
 
+  for (const [name, content] of Object.entries(parts.extraFiles ?? {})) zip.file(`OEBPS/${name}`, content);
   for (const c of chapters) {
     zip.file(
       `OEBPS/${c.href}`,
@@ -123,4 +126,54 @@ test("pasted text splits on blank lines", () => {
   const book = parsePlainText("One paragraph.\n\nAnother one.\nSame paragraph.", "Notes");
   assert.equal(book.chapters[0].blocks.length, 2);
   assert.equal(book.chapters[0].blocks[1].text, "Another one. Same paragraph.");
+});
+
+const filler = (n: number) => Array.from({ length: n }, (_, i) => `<p>Sentence number ${i + 1} of the chapter goes here.</p>`).join("");
+
+test("splits a single-file book at chapter-like paragraphs", async () => {
+  const body =
+    `<p class="c"><b>CHAPTER ONE</b></p>${filler(5)}<p>CHAPTER TWO</p>${filler(5)}<p style="text-align:center">III</p>${filler(5)}`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "book.xhtml", body }] }));
+  assert.deepEqual(book.chapters.map((c) => c.title), ["CHAPTER ONE", "CHAPTER TWO", "III"]);
+  // The heading is the title, not also the first thing read.
+  assert.equal(book.chapters[1].blocks[1].text, "Sentence number 1 of the chapter goes here.");
+});
+
+test("splits a file at the anchors its table of contents points to", async () => {
+  const nav = `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="book.xhtml">The Window</a></li><li><a href="book.xhtml#part2">Time Passes</a></li></ol></nav></body></html>`;
+  const body = `<h1>The Window</h1>${filler(4)}<div id="part2"><p>Time Passes</p>${filler(4)}</div>`;
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [{ id: "c1", href: "book.xhtml", body }],
+      extraFiles: { "nav.xhtml": nav },
+      extraManifest: `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    }),
+  );
+  assert.deepEqual(book.chapters.map((c) => c.title), ["The Window", "Time Passes"]);
+});
+
+test("a small untitled page continues the previous chapter", async () => {
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [
+        { id: "c1", href: "ch1.xhtml", body: `<h1>One</h1>${filler(3)}<p>The page ends in the middle of a</p>` },
+        { id: "c1b", href: "ch1b.xhtml", body: `<p>sentence, as paginated books do.</p>${filler(2)}` },
+        { id: "c2", href: "ch2.xhtml", body: `<h1>Two</h1>${filler(3)}` },
+      ],
+    }),
+  );
+  assert.deepEqual(book.chapters.map((c) => c.title), ["One", "Two"]);
+  assert.equal(book.chapters[0].blocks.length, 1 + 4 + 3);
+});
+
+test("a contents page is not a chapter", async () => {
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [
+        { id: "toc", href: "toc.xhtml", body: `<h1>Contents</h1><p>One</p><p>Two</p><p>Three</p>` },
+        { id: "c1", href: "ch1.xhtml", body: `<h1>One</h1>${filler(3)}` },
+      ],
+    }),
+  );
+  assert.deepEqual(book.chapters.map((c) => c.title), ["One"]);
 });
