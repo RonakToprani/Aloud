@@ -10,9 +10,9 @@
 
 <p align="center">
   <a href="https://aloud-red.vercel.app"><img alt="Open Aloud" src="https://img.shields.io/badge/open-aloud--red.vercel.app-5b7fa6?style=flat-square" /></a>
-  <img alt="Hours listened" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=hours%20listened&query=%24.hours_listened_label&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
-  <img alt="Readers" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=readers&query=%24.readers&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
-  <img alt="Active this week" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=active%20this%20week&query=%24.active_readers_7d&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
+  <img alt="Hours listened" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=hours%20listened&query=%24.hours_listened_label&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats&cacheSeconds=300" />
+  <img alt="Readers" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=readers&query=%24.readers&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats&cacheSeconds=300" />
+  <img alt="Active this week" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=active%20this%20week&query=%24.active_readers_7d&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats&cacheSeconds=300" />
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-8b8f99?style=flat-square" /></a>
 </p>
 
@@ -23,7 +23,8 @@ you bring, nothing else. No store, no feed, no social layer.
 
 It's built for a phone, one-handed, often at night. Save it to the home
 screen and it opens full-screen, keeps reading with the screen locked, and
-puts play and pause on the lock screen.
+puts play and pause on the lock screen. Finish a book on a phone and it
+offers to show you how.
 
 **Try it:** [aloud-red.vercel.app](https://aloud-red.vercel.app). Reading
 works without an account; sign in to keep your library and your place in it
@@ -35,14 +36,21 @@ on every device.
   the text is never uploaded anywhere.
 - **Lights every word.** A single pill glides from word to word as it's
   spoken, with the current sentence washed behind it. Tap any word to start
-  reading from there. Hold a sentence to bookmark it.
+  reading from there. Hold a sentence to bookmark it. Read ahead and the
+  voice carries on without you, and a "Back to reading" button appears to
+  return you to the line being spoken.
 - **Sounds like narration.** Sentences are synthesised together as passages
   so the intonation carries across a paragraph, the silences between
   sentences are trimmed to a natural length, and passages join on the audio
   clock with no seam.
-- **Chooses a voice with you.** Open a book for the first time and each voice
-  introduces itself before you pick one. Dozens of natural cloud voices, plus
-  whatever your device has installed.
+- **Chooses a voice with you.** A first listen opens in Christopher, a cloud
+  voice that sounds like someone reading you a book. Open a book of your own
+  and every voice introduces itself before you pick one. Dozens of natural
+  cloud voices, plus whatever your device has installed.
+- **Shows you around once.** The first time you read, two signs dim the page
+  and point at the two controls worth knowing: the one that sets type size
+  and colour, and the one that sets the voice and the speed. Skip them and
+  they don't come back.
 - **Reads the way you like.** Four themes (dark, warm, light, sepia), three
   accents (slate, violet, moss), two highlight styles, type size, line height,
   serif or sans, speed from 0.5× to 2.5×, and a sleep timer.
@@ -98,7 +106,9 @@ no account, and a small service worker keeps the shell available offline.
 On top of that, `src/lib/sync/` keeps book metadata, places,
 bookmarks, settings and listening time on the account: newest copy wins,
 positions are written on pause and as the page closes, and the home counter
-reads one pre-aggregated row rather than scanning sessions.
+reads one pre-aggregated row rather than scanning sessions. Vercel Analytics
+counts page views where Vercel is serving the app; it sees no book text and
+no reader.
 
 **Design tokens are one ladder.** Every theme in `src/app/globals.css` is the
 same lightness and chroma ladder with a different hue, and the accent is a
