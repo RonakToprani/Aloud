@@ -574,7 +574,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
 
   /** The sign on screen right now, if any. A sheet hides it. */
   const coachHint: ControlHint | null =
-    sheet || needsVoice || coachStep === null || coachStep === "done"
+    sheet ||
+    needsVoice ||
+    // A sign left standing at the end dims the one thing left to do.
+    playerState.status === "ended" ||
+    coachStep === null ||
+    coachStep === "done"
       ? null
       : coachStep === "appearance"
         ? { at: "appearance", text: COACH_TEXT.appearance, step: 1, of: 2 }
@@ -902,6 +907,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
           highlight={settings.highlight}
           following={playing}
           controlsExpanded={chromeExpanded}
+          hintShowing={coachHint !== null}
           onWordTap={onWordTap}
           onSentenceHold={onSentenceHold}
           bookmarkedSentences={bookmarkedInChapter}

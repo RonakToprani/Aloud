@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { HighlightStyle } from "@/lib/storage/prefs";
 import { wordAtCharIndex, type SegmentedChapter, type Sentence } from "@/lib/text/segment";
 import type { Block } from "@/lib/types";
@@ -18,6 +19,9 @@ interface Props {
   following: boolean;
   /** The way back has to clear the dock, which is two different heights. */
   controlsExpanded: boolean;
+  /** A walkthrough sign owns the same corner of the screen, and is a moment.
+   *  The way back waits for it. */
+  hintShowing: boolean;
   onWordTap: (sentenceIndex: number, wordIndex: number) => void;
   onSentenceHold: (sentenceIndex: number) => void;
   bookmarkedSentences: Set<number>;
@@ -28,6 +32,9 @@ const YIELD_MS = 10000;
 /** How far the current sentence must sit outside the viewport before the way
  *  back is offered. A line half off the edge is still being read. */
 const AWAY_SLACK_PX = 40;
+/** The dock is opaque over the foot of the page, so a line behind it is as
+ *  lost as one below the fold. Two heights, matching the two dock states. */
+const DOCK_COVER_PX = { bar: 170, capsule: 100 } as const;
 const HOLD_MS = 480;
 const HOLD_SLOP_PX = 10;
 
@@ -103,6 +110,7 @@ export function ReaderSurface({
   highlight,
   following,
   controlsExpanded,
+  hintShowing,
   onWordTap,
   onSentenceHold,
   bookmarkedSentences,
@@ -210,7 +218,7 @@ export function ReaderSurface({
   // Reading ahead or back is normal, and losing the voice is the cost of it.
   // While the spoken line is off screen there is one way back to it.
   useEffect(() => {
-    if (!following) {
+    if (!following || hintShowing) {
       setAway(null);
       return;
     }
@@ -220,8 +228,10 @@ export function ReaderSurface({
       const el = surfaceRef.current?.querySelector<HTMLElement>(`[data-s="${currentSentence}"]`);
       if (!el) return setAway(null);
       const rect = el.getBoundingClientRect();
+      const floor =
+        window.innerHeight - (controlsExpanded ? DOCK_COVER_PX.bar : DOCK_COVER_PX.capsule);
       if (rect.bottom < AWAY_SLACK_PX) return setAway("up");
-      if (rect.top > window.innerHeight - AWAY_SLACK_PX) return setAway("down");
+      if (rect.top > floor - AWAY_SLACK_PX) return setAway("down");
       setAway(null);
     };
     const onScroll = () => {
@@ -235,7 +245,7 @@ export function ReaderSurface({
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [currentSentence, following]);
+  }, [currentSentence, following, controlsExpanded, hintShowing]);
 
   const onBackToReading = useCallback(() => {
     yieldUntil.current = 0; // the reader asked for the voice back; stop yielding to the scroll
@@ -343,18 +353,22 @@ export function ReaderSurface({
         })}
       </div>
 
-      {away && (
-        <button
-          type="button"
-          className={styles.backToReading}
-          data-at={away}
-          data-clear={controlsExpanded ? "bar" : "capsule"}
-          onClick={onBackToReading}
-        >
-          <ArrowDownIcon size={15} className={styles.backArrow} />
-          Back to reading
-        </button>
-      )}
+      {/* Portalled out of the surface, which isolates its own stacking
+          context: a z-index inside it can never clear the control dock. */}
+      {away &&
+        createPortal(
+          <button
+            type="button"
+            className={styles.backToReading}
+            data-at={away}
+            data-clear={controlsExpanded ? "bar" : "capsule"}
+            onClick={onBackToReading}
+          >
+            <ArrowDownIcon size={15} className={styles.backArrow} />
+            Back to reading
+          </button>,
+          document.body,
+        )}
     </div>
   );
 }

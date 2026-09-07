@@ -130,7 +130,9 @@ const SHOWCASE_FIRST = "edge:en-US-ChristopherNeural";
 export function pickShowcaseVoice(voices: EngineVoice[], preferredLang: string): EngineVoice | null {
   const lang = preferredLang.toLowerCase();
   const base = lang.split("-")[0];
-  if (base === "en") {
+  // American only: a British or Australian reader is better served by the
+  // narration voice in their own locale, which the sort below finds.
+  if (lang === "en" || lang.startsWith("en-us")) {
     const first = voices.find((voice) => voice.id === SHOWCASE_FIRST);
     if (first) return first;
   }
