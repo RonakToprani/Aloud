@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Instrument_Sans, Instrument_Serif, Newsreader } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -111,6 +112,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <InstallPromptCatcher />
             <ServiceWorker />
             {children}
+            {/* Page views only, and only where Vercel is serving: the script
+                no-ops elsewhere, so local and self-hosted runs stay silent. */}
+            <Analytics />
           </SettingsProvider>
         </AuthProvider>
       </body>
