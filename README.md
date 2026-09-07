@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://aloud-red.vercel.app"><img alt="Open Aloud" src="https://img.shields.io/badge/open-aloud--red.vercel.app-5b7fa6?style=flat-square" /></a>
+  <a href="https://aloudreader.vercel.app"><img alt="Open Aloud" src="https://img.shields.io/badge/open-aloud--red.vercel.app-5b7fa6?style=flat-square" /></a>
   <img alt="Hours listened" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=hours%20listened&query=%24.hours_listened_label&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
   <img alt="Readers" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=readers&query=%24.readers&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
   <img alt="Active this week" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=active%20this%20week&query=%24.active_readers_7d&url=https%3A%2F%2Faloud-red.vercel.app%2Fapi%2Fstats" />
