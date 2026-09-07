@@ -110,18 +110,32 @@ export function useSpeechEngine(): SpeechEngineState {
 const NARRATION_TRAITS = new Set(["novel", "audiobook", "narration"]);
 
 /**
+ * The voice the sample opens in, when the device can reach it. Chosen by ear
+ * rather than by the provider's tags: several voices are tagged for narration
+ * and this is the one that sounds like someone reading you a book.
+ */
+const SHOWCASE_FIRST = "edge:en-US-ChristopherNeural";
+
+/**
  * The voice a first-time listener should hear.
  *
  * Some voices are tagged by their provider as built for narrating books,
  * and those are the ones worth leading with. They hold up over a chapter
  * rather than a sentence, and they are the same on every device, so what a
  * new reader hears is what the app is supposed to sound like rather than
- * whatever their operating system happens to ship. Where none is offered,
- * this is just the ordinary default.
+ * whatever their operating system happens to ship. One of them is named
+ * outright; where neither it nor any narration voice is offered, this is
+ * just the ordinary default.
  */
 export function pickShowcaseVoice(voices: EngineVoice[], preferredLang: string): EngineVoice | null {
   const lang = preferredLang.toLowerCase();
   const base = lang.split("-")[0];
+  // American only: a British or Australian reader is better served by the
+  // narration voice in their own locale, which the sort below finds.
+  if (lang === "en" || lang.startsWith("en-us")) {
+    const first = voices.find((voice) => voice.id === SHOWCASE_FIRST);
+    if (first) return first;
+  }
   const narration = voices.filter(
     (voice) =>
       voice.lang.toLowerCase().startsWith(base) &&

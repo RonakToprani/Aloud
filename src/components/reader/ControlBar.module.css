@@ -97,45 +97,81 @@
 /* A sign, not a whisper: it waits to be tapped, so it has to be worth
    tapping and impossible to mistake for part of the page. Filled in the
    accent for the same reason the primary button is. */
+.hintScrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  pointer-events: none;
+  animation: hintIn 300ms var(--ease-soft) both;
+}
+
+/* A sign, not a whisper: it waits to be tapped, so it has to be worth
+   tapping and impossible to mistake for part of the page. Filled in the
+   accent for the same reason the primary button is. */
 .hint {
   position: absolute;
   bottom: calc(100% + 14px);
-  max-width: 86%;
+  width: min(320px, 92%);
+  padding: 14px 16px 12px;
   display: flex;
-  align-items: flex-start;
-  gap: 2px;
-  border-radius: 16px;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 18px;
   background: var(--accent);
   color: var(--on-accent);
   box-shadow: var(--shadow-lift);
   animation: hintIn 300ms var(--ease-soft) both;
+  pointer-events: auto;
+}
+
+.hintStep {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  opacity: 0.62;
 }
 
 .hintBody {
-  flex: 1;
-  padding: 13px 6px 13px 16px;
-  color: inherit;
-  font-size: 14px;
+  margin: 0;
+  font-size: 14.5px;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.45;
   text-align: left;
   text-wrap: pretty;
 }
 
-.hintClose {
-  flex: none;
-  width: 38px;
-  align-self: stretch;
-  display: grid;
-  place-items: center;
+.hintActions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Skipping stays possible and stops being the easiest thing on the card. */
+.hintSkip {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 12px;
   color: inherit;
   opacity: 0.6;
-  border-radius: 0 16px 16px 0;
+  font-size: 13px;
   transition: opacity var(--dur-ui) var(--ease-soft);
 }
 
-.hintClose:hover {
-  opacity: 1;
+.hintSkip:hover {
+  opacity: 0.85;
+}
+
+.hintGo {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--on-accent);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .hint::after {
@@ -166,6 +202,26 @@
   right: 53px;
 }
 
+/* The control the sign names is lifted out of the dimmed page with it, so
+   the reader can see what they are being pointed at. */
+.utility[data-pointed="true"] {
+  position: relative;
+  z-index: 1;
+  color: var(--on-accent);
+  background: var(--accent);
+  animation: hintPulse 2200ms var(--ease-soft) infinite;
+}
+
+@keyframes hintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 50%, transparent);
+  }
+  55% {
+    box-shadow: 0 0 0 9px color-mix(in oklch, var(--accent) 0%, transparent);
+  }
+}
+
 @keyframes hintIn {
   from {
     opacity: 0;
@@ -174,6 +230,12 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .utility[data-pointed="true"] {
+    animation: none;
   }
 }
 

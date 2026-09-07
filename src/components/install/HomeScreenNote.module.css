@@ -1,0 +1,110 @@
+.note {
+  width: 100%;
+  max-width: 34ch;
+  margin: 6px auto 2px;
+  padding: 16px 18px 14px;
+  border-radius: var(--radius-card);
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  text-align: left;
+  animation: noteIn 320ms var(--ease-soft) both;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  color: var(--ink-strong);
+}
+
+.body {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ui-muted);
+}
+
+.steps {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.step svg {
+  vertical-align: -3px;
+}
+
+.stepNumber {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--inset);
+  color: var(--ui-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.primary {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dismiss {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  color: var(--ui-faint);
+  font-size: 13px;
+  transition: color var(--dur-ui) var(--ease-soft);
+}
+
+.dismiss:hover {
+  color: var(--ui-muted);
+}
+
+@keyframes noteIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note {
+    animation: none;
+  }
+}
