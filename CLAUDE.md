@@ -132,6 +132,7 @@ localStorage, all prefixed `aloud.`:
 | `hasAccount.v1` | someone has signed in here, so the sign-in page greets them back |
 | `sampleId.v1` | this device's copy of the sample |
 | `homescreen.v1` | the add-to-home-screen step is done |
+| `homescreenNote.v1` | the end-of-book home screen note has been waved away |
 | `listened.v1` | seconds listened on this device |
 
 `sessionStorage`: `aloud.autoplay` (one-shot request to start reading on
