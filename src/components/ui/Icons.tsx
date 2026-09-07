@@ -196,3 +196,10 @@ export const StopIcon = ({ size = 18, className }: IconProps) => (
     <rect x="6.5" y="6.5" width="11" height="11" rx="2.5" />
   </svg>
 );
+
+export const ArrowDownIcon = ({ size = 16, className }: IconProps) => (
+  <svg {...base(size)} className={className}>
+    <path d="M12 5.4v13.2" />
+    <path d="m6.6 13.2 5.4 5.4 5.4-5.4" />
+  </svg>
+);

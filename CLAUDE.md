@@ -170,8 +170,11 @@ Selectors worth knowing:
 - landing: the button whose text is exactly `Listen to a sample`
 - reader controls: `button[aria-label="Pause" | "Play" | "Next sentence" |
   "Previous sentence" | "Appearance" | "Voice and speed" | "Contents"]`
-- walkthrough sign: `[class*="hintBody"]`; floating sheet tip:
-  `[class*="Sheet_tip"]`; toast: `[role="status"]`
+- walkthrough sign: `[class*="hintStep"]` for the step label, and the two
+  buttons whose text is exactly `Show me` and `Skip`. The body is a `<p>`, so
+  clicking it does nothing
+- the way back to the spoken line: `[class*="backToReading"]`
+- floating sheet tip: `[class*="Sheet_tip"]`; toast: `[role="status"]`
 - the highlight is drawn as measured rectangles, not styled spans, so there is
   no "current word" element to query
 

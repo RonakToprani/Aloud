@@ -193,3 +193,54 @@
     animation: none;
   }
 }
+
+/* The way back to the spoken line, offered only while it is off screen.
+   Fixed, so it clears the control dock however far the reader has scrolled. */
+.backToReading {
+  position: fixed;
+  left: 50%;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  transition: bottom var(--dur-ui) var(--ease-soft);
+  z-index: 41;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  box-shadow: var(--shadow-lift);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  animation: backIn 240ms var(--ease-soft) both;
+}
+
+.backToReading[data-clear="bar"] {
+  bottom: calc(158px + env(safe-area-inset-bottom));
+}
+
+/* Pointing the way the reader has to travel, not the way they scrolled. */
+.backToReading[data-at="up"] .backArrow {
+  transform: rotate(180deg);
+}
+
+@keyframes backIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backToReading {
+    animation: none;
+  }
+}

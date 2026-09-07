@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CloseIcon,
   ContentsIcon,
   LevelIcon,
   NextIcon,
@@ -17,6 +16,9 @@ import styles from "./ControlBar.module.css";
 export interface ControlHint {
   at: "appearance" | "playback";
   text: string;
+  /** Which of how many, so the reader can see the end of it before starting. */
+  step: number;
+  of: number;
 }
 
 interface Props {
@@ -78,6 +80,11 @@ export function ControlBar({
 
   return (
     <div className={styles.dock} data-expanded={expanded ? "true" : "false"}>
+      {/* A sign competes with the page it sits on, so the page steps back for
+          it. Dimming only: the scrim takes no taps, because tapping a word to
+          jump there and holding a sentence to bookmark it are how the page is
+          read, and a walkthrough that eats them teaches the wrong lesson. */}
+      {hint && <div className={styles.hintScrim} aria-hidden="true" />}
       <div className={styles.fade} aria-hidden="true" />
 
       {/* While reading, the chrome recedes to a single quiet capsule. */}
@@ -112,22 +119,28 @@ export function ControlBar({
         <div className={styles.row}>
           {hint && (
             <div className={styles.hint} data-at={hint.at}>
-              <button type="button" className={styles.hintBody} onClick={() => onHint?.(hint.at)}>
-                {hint.text}
-              </button>
-              <button
-                type="button"
-                className={styles.hintClose}
-                onClick={onHintDismiss}
-                aria-label="Dismiss"
-              >
-                <CloseIcon size={15} />
-              </button>
+              <span className={styles.hintStep}>
+                Step {hint.step} of {hint.of}
+              </span>
+              <p className={styles.hintBody}>{hint.text}</p>
+              <div className={styles.hintActions}>
+                <button type="button" className={styles.hintSkip} onClick={onHintDismiss}>
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  className={styles.hintGo}
+                  onClick={() => onHint?.(hint.at)}
+                >
+                  Show me
+                </button>
+              </div>
             </div>
           )}
           <button
             type="button"
             className={styles.utility}
+            data-pointed={hint?.at === "appearance" ? "true" : undefined}
             onClick={onAppearance}
             tabIndex={expanded ? 0 : -1}
             aria-label="Appearance"
@@ -169,6 +182,7 @@ export function ControlBar({
             <button
               type="button"
               className={styles.utility}
+              data-pointed={hint?.at === "playback" ? "true" : undefined}
               onClick={onPlayback}
               tabIndex={expanded ? 0 : -1}
               aria-label="Voice and speed"

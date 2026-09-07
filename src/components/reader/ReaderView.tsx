@@ -33,6 +33,7 @@ import { ControlBar, type ControlHint } from "./ControlBar";
 import { PlaybackSheet } from "./PlaybackSheet";
 import { ReaderSurface } from "./ReaderSurface";
 import { VoiceChooser } from "./VoiceChooser";
+import { HomeScreenNote } from "@/components/install/HomeScreenNote";
 import styles from "./ReaderView.module.css";
 
 /**
@@ -43,16 +44,23 @@ import styles from "./ReaderView.module.css";
  * that vanishes while you are reading the sentence under it has taught
  * nobody anything. Tapping opens what it points at, and the next sign
  * appears once that is closed. Shown once, then never again.
+ *
+ * The page dims behind a sign and the control it names is lit. Without that
+ * it read as one more thing in the way, and skipping was the fastest way
+ * back to the book.
  */
 const COACH_KEY = "aloud.coach.v1";
 type CoachStep = "appearance" | "voice" | "done";
 /** Reading time before the first sign, so it lands after the voice has settled. */
 const COACH_AFTER_MS = 5000;
+/** A reader who never presses play still gets shown around, just later: the
+ *  walkthrough is the only thing that explains the two controls that matter. */
+const COACH_WAIT_MS = 14000;
 const COACH_TICK_MS = 500;
 
 const COACH_TEXT: Record<"appearance" | "voice", string> = {
-  appearance: "Tap here to change the text size, spacing and colour",
-  voice: "Now tap here to pick a different voice, or change the speed",
+  appearance: "Reading is easier when the page suits you. Set the text size, spacing and colour here.",
+  voice: "The voice is the thing you will hear for hours. Pick one you like, and the speed to match.",
 };
 
 /** Said once inside each sheet, floating over it, then gone. */
@@ -152,6 +160,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const [coachNote, setCoachNote] = useState<"appearance" | "voice" | null>(null);
   /** Reading time, in ms, with nothing open over the top of it. */
   const coachClock = useRef(0);
+  const coachWait = useRef(0);
   const finishedRef = useRef<HTMLDivElement>(null);
   /** Where another device left off, if newer than this one. */
   const [remotePosition, setRemotePosition] = useState<Position | null>(null);
@@ -503,16 +512,22 @@ export function ReaderView({ bookId }: { bookId: string }) {
   }, []);
 
   // Paced by time actually spent reading, so a reader who pauses to look at
-  // something has not missed their turn.
+  // something has not missed their turn. Time on the screen counts too, more
+  // slowly, or a reader who never starts the voice is never shown anything.
   useEffect(() => {
-    if (!playing || sheet || coachStep) return;
+    if (sheet || coachStep) return;
+    if (needsVoice) return; // the voice chooser owns the screen, and covers the dock
+    if (playerState.status === "ended") return; // nothing left to point at
     if (storedCoachStep() === "done") return;
     const timer = setInterval(() => {
-      coachClock.current += COACH_TICK_MS;
-      if (coachClock.current >= COACH_AFTER_MS) setCoachStep(storedCoachStep());
+      if (playing) coachClock.current += COACH_TICK_MS;
+      coachWait.current += COACH_TICK_MS;
+      if (coachClock.current >= COACH_AFTER_MS || coachWait.current >= COACH_WAIT_MS) {
+        setCoachStep(storedCoachStep());
+      }
     }, COACH_TICK_MS);
     return () => clearInterval(timer);
-  }, [playing, sheet, coachStep]);
+  }, [playing, sheet, coachStep, needsVoice, playerState.status]);
 
   /** Tapping a sign opens what it points at and arms the next one. */
   const onCoach = useCallback((at: ControlHint["at"]) => {
@@ -559,11 +574,11 @@ export function ReaderView({ bookId }: { bookId: string }) {
 
   /** The sign on screen right now, if any. A sheet hides it. */
   const coachHint: ControlHint | null =
-    sheet || coachStep === null || coachStep === "done"
+    sheet || needsVoice || coachStep === null || coachStep === "done"
       ? null
       : coachStep === "appearance"
-        ? { at: "appearance", text: COACH_TEXT.appearance }
-        : { at: "playback", text: COACH_TEXT.voice };
+        ? { at: "appearance", text: COACH_TEXT.appearance, step: 1, of: 2 }
+        : { at: "playback", text: COACH_TEXT.voice, step: 2, of: 2 };
 
   /* ---------------- chrome ---------------- */
 
@@ -886,6 +901,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
           currentWord={playerState.wordIndex}
           highlight={settings.highlight}
           following={playing}
+          controlsExpanded={chromeExpanded}
           onWordTap={onWordTap}
           onSentenceHold={onSentenceHold}
           bookmarkedSentences={bookmarkedInChapter}
@@ -901,6 +917,10 @@ export function ReaderView({ bookId }: { bookId: string }) {
                 Add a book of your own and it will be read to you the same way.
               </p>
             )}
+            {/* The end of a book is when someone knows whether they want it on
+                their phone, so the offer is made here rather than buried in
+                sign-up, where a first-time reader has not heard it read yet. */}
+            <HomeScreenNote />
             <Link className={styles.noticeAction} href="/">
               {isSample ? "Add a book" : "Back to your library"}
             </Link>
