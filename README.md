@@ -25,7 +25,7 @@ It's built for a phone, one-handed, often at night. Save it to the home
 screen and it opens full-screen, keeps reading with the screen locked, and
 puts play and pause on the lock screen.
 
-**Try it:** [aloud-red.vercel.app](https://aloud-red.vercel.app). Reading
+**Try it:** [aloudreader.vercel.app](https://aloudreader.vercel.app). Reading
 works without an account; sign in to keep your library and your place in it
 on every device.
 
