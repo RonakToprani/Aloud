@@ -6,6 +6,10 @@
  */
 
 const DONE_KEY = "aloud.homescreen.v1";
+/** The end-of-book note keeps its own memory, so waving it away there still
+ *  leaves the offer standing in sign-up. Two asks, in two different moods:
+ *  one just after finishing something, one while setting an account up. */
+const NOTE_KEY = "aloud.homescreenNote.v1";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -81,6 +85,22 @@ export function markHomeScreenDone(): void {
     localStorage.setItem(DONE_KEY, "done");
   } catch {
     /* ignore */
+  }
+}
+
+export function homeScreenNoteDone(): boolean {
+  try {
+    return localStorage.getItem(NOTE_KEY) === "done";
+  } catch {
+    return false;
+  }
+}
+
+export function markHomeScreenNoteDone(): void {
+  try {
+    localStorage.setItem(NOTE_KEY, "done");
+  } catch {
+    /* it simply offers again next time */
   }
 }
 

@@ -5,8 +5,10 @@ import { AddSquareIcon, MoreIcon, ShareIcon } from "@/components/ui/Icons";
 import styles from "./HomeScreenNote.module.css";
 import {
   canPromptInstall,
+  homeScreenNoteDone,
   isInAppBrowser,
   markHomeScreenDone,
+  markHomeScreenNoteDone,
   platform,
   promptInstall,
   shouldShowHomeScreenStep,
@@ -34,7 +36,7 @@ export function HomeScreenNote({ title = "Keep Aloud on your home screen" }: Pro
   const [installable, setInstallable] = useState(false);
 
   useEffect(() => {
-    if (!shouldShowHomeScreenStep()) return;
+    if (!shouldShowHomeScreenStep() || homeScreenNoteDone()) return;
     setOs(platform());
     setInApp(isInAppBrowser());
     setInstallable(canPromptInstall());
@@ -47,15 +49,21 @@ export function HomeScreenNote({ title = "Keep Aloud on your home screen" }: Pro
   // whatever a stray beforeinstallprompt may have said.
   const canInstall = installable && !inApp && os !== "ios";
 
+  // Waving this away only closes this one. Adding it to the home screen is
+  // the thing that settles the question, and that closes both.
   const dismiss = () => {
-    markHomeScreenDone();
+    markHomeScreenNoteDone();
     setShow(false);
   };
 
   const install = async () => {
     const outcome = await promptInstall();
-    if (outcome === "accepted") dismiss();
-    else setInstallable(canPromptInstall());
+    if (outcome === "accepted") {
+      markHomeScreenDone();
+      dismiss();
+    } else {
+      setInstallable(canPromptInstall());
+    }
   };
 
   return (
