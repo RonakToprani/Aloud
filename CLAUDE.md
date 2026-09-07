@@ -166,6 +166,21 @@ a dev dependency; Chrome is at
 `['--no-sandbox','--autoplay-policy=no-user-gesture-required','--mute-audio']`
 and warm `/read/x` first so the route is compiled.
 
+**Serve it with `npm run dev:local`, never `npm run dev`.** `.env.local`
+points at the production Supabase project, and anonymous sign-ins happen on
+the first book added or the first play, so a driven browser mints real
+accounts and real listening time in the live database and the public counter
+climbs. `dev:local` blanks the two Supabase variables, which the client reads
+as unconfigured, so the run is local-only. Check before driving anything:
+
+```bash
+curl -s localhost:3000/api/stats   # {"error":"Stats aren't configured."}
+```
+
+Live numbers coming back from that means the app is talking to production.
+Stop and restart with `dev:local`. Two rounds of testing put 41 fake readers
+into the live count before this existed.
+
 Selectors worth knowing:
 
 - landing: the button whose text is exactly `Listen to a sample`
