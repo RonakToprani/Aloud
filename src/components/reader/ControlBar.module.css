@@ -94,6 +94,18 @@
   gap: 8px;
 }
 
+/* One button on the left, two on the right: laid out end to end, the
+   transport lands 23px left of centre, which is visible under your thumb.
+   Equal side tracks put play on the middle of the screen instead. Below this
+   width the sides cannot both hold their content, and the row falls back to
+   sharing out what there is rather than letting the groups overlap. */
+@media (min-width: 375px) {
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+}
+
 /* A sign, not a whisper: it waits to be tapped, so it has to be worth
    tapping and impossible to mistake for part of the page. Filled in the
    accent for the same reason the primary button is. */
@@ -246,6 +258,7 @@
 }
 
 .utilityGroup {
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -255,6 +268,7 @@
 }
 
 .row > .utility:first-child {
+  justify-self: start;
   margin-left: -10px;
 }
 
