@@ -43,6 +43,9 @@ const REMOTE_CACHE_KEY = "aloud.remoteBooks.v1";
 /** Shown once, then never again on this device. */
 const DEVICE_ONLY_KEY = "aloud.deviceOnly.v1";
 
+/** What to call the file when asking for it back. */
+const SOURCE_NAME: Partial<Record<BookMeta["source"], string>> = { epub: "EPUB", pdf: "PDF" };
+
 const STAGE_LABEL: Record<ImportProgress["stage"], string> = {
   reading: "Reading the file",
   parsing: "Unpacking the chapters",
@@ -492,7 +495,7 @@ export function LibraryView() {
       <input
         ref={fileInput}
         type="file"
-        accept=".epub,.txt,.md,application/epub+zip,text/plain"
+        accept=".epub,.pdf,.txt,.md,application/epub+zip,application/pdf,text/plain"
         className="srOnly"
         onChange={(event) => {
           onFiles(event.target.files);
@@ -767,7 +770,7 @@ export function LibraryView() {
                 onClick={() => pickFile({ id: missingBook.id, addedAt: missingBook.addedAt })}
               >
                 <PlusIcon size={17} />
-                Choose the {missingBook.source === "epub" ? "EPUB" : "file"}
+                Choose the {SOURCE_NAME[missingBook.source] ?? "file"}
               </button>
             )}
             <button

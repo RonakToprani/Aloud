@@ -21,7 +21,7 @@ export interface BookMeta {
   title: string;
   author: string | null;
   /** Source of the text, for the library subtitle. */
-  source: "epub" | "txt" | "paste";
+  source: "epub" | "pdf" | "txt" | "paste";
   addedAt: number;
   /** Total sentences across the whole book — the denominator for progress. */
   sentenceCount: number;
