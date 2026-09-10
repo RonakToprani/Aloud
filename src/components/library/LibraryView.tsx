@@ -575,7 +575,7 @@ export function LibraryView() {
                 if (busy) event.preventDefault();
               }}
             >
-              Browse free books
+              Browse classics
             </Link>
             <button
               type="button"

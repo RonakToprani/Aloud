@@ -69,7 +69,9 @@
 
 .lede {
   margin: 8px 0 0;
-  max-width: 34ch;
+  /* Wide enough to sit under the search field as one block on a desktop,
+     rather than a narrow column beside a lot of empty canvas. */
+  max-width: 56ch;
   font-size: 14px;
   line-height: 1.55;
   color: var(--ui-muted);

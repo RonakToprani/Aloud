@@ -310,9 +310,9 @@ export function BrowseView() {
           <span className={styles.eyebrow}>Project Gutenberg</span>
         </div>
         <div>
-          <h1 className={styles.title}>Free books</h1>
+          <h1 className={styles.title}>Classics</h1>
           <p className={styles.lede}>
-            Classics that have outlived their copyright. Add one and it stays on this device, read
+            The books that have outlived their copyright. Add one and it stays on this device, read
             aloud like everything else on your shelf.
           </p>
         </div>
