@@ -34,6 +34,9 @@ on every device.
 
 - **Reads any book you own.** EPUB and plain text. Books stay on your device;
   the text is never uploaded anywhere.
+- **Comes with a library.** Browse the most-read books on Project Gutenberg
+  by genre or by name, with their covers, and add one in a tap. It arrives
+  as an ordinary EPUB, parsed and kept on the device like a book of your own.
 - **Lights every word.** A single pill glides from word to word as it's
   spoken, with the current sentence washed behind it. Tap any word to start
   reading from there. Hold a sentence to bookmark it. Read ahead and the

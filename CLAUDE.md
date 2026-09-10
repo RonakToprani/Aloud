@@ -17,6 +17,7 @@ npm run build
 node scripts/icons.mjs        # regenerate app icons from the logo geometry
 node scripts/screenshots.mjs  # every screen and theme (needs Chrome)
 node scripts/measure-gap.mjs  # how cloud audio is scheduled, through the real player
+npx tsx scripts/gutenberg-shelf.ts  # re-bake the public library catalogue (a few times a year)
 ```
 
 CI runs typecheck, tests and build on every push and PR. `main` is protected:
@@ -34,7 +35,13 @@ contributors need a PR plus a review, though the owner can push directly.
 - `src/lib/storage/` — IndexedDB for book text, localStorage for settings and
   places.
 - `src/lib/sync/` — the account layer. Never book text.
-- `src/lib/library/` — import, the sample, progress, the autoplay handoff.
+- `src/lib/library/` — import, the sample, progress, the autoplay handoff,
+  and `gutenberg.ts`, which fetches a public-library book and shelves it
+  through the same import as an uploaded EPUB.
+- `src/lib/gutenberg/` — the public library. `shelf.json` is the catalogue,
+  baked by `scripts/gutenberg-shelf.ts`; `src/app/api/gutenberg/` serves it
+  and proxies the EPUB and cover, which gutenberg.org will not serve
+  cross-origin.
 - `src/components/` — UI by screen. `reader/`, `library/`, `auth/`, `ui/`.
 - `supabase/` — migrations and project config.
 
@@ -77,6 +84,17 @@ highlight styles stops being one product.
 
 **Controls hide when the *reader* is idle,** not when the book advances. The
 sentence index is deliberately absent from that effect's dependencies.
+
+**The public library never goes to Gutendex at request time.** Its
+popularity list answers in a fifth of a second; its topic and search
+queries take half a minute or time out. So the front page, every genre and
+search are answered from `shelf.json`, baked from the popularity list and
+sorted into genres by Gutenberg's own subject headings. Only the EPUB and
+cover are fetched live, from gutenberg.org, through the proxies. A Gutenberg
+book is shelved exactly as an uploaded EPUB is: parsed text in IndexedDB,
+metadata to the account, never the text. `gutenbergId` on `BookMeta` is
+local only, for the shelf tick and for adding twice to open the same copy;
+the sync layer maps book columns by name so it cannot leak.
 
 **Safari closes IndexedDB behind a backgrounded tab.** `storage/db.ts` retries
 the open and reconnects on a stale handle. Without it, one failure poisons
