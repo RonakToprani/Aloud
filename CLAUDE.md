@@ -150,6 +150,20 @@ Tables: `profiles` (settings), `books` (metadata only), `reading_positions`,
 `bookmarks`, `reading_sessions`, `reading_stats` (one pre-aggregated row).
 RLS on everything reader-owned; `reading_stats` is readable by anon.
 
+**A migration goes up before the deploy that needs it.** `books.source` is a
+check constraint (`epub`, `pdf`, `txt`, `paste`) and `books.gutenberg_id` is
+a nullable integer; a client that writes a value the live schema does not
+know has its row rejected and that book, its place and its bookmarks stop
+syncing silently. `supabase db push` first, then merge.
+
+**The catalogue is not in the database, and should not be.** The public
+library (`src/lib/gutenberg/shelf.json`) lives in the deployed app, where
+storage and bandwidth cost nothing. The free Supabase tier is 500 MB and
+5 GB egress a month; the full Gutenberg catalogue with search indexes would
+take 60 to 90 MB of it before the first reader, and every search would meter
+egress. Readers, their metadata, positions and bookmarks are all the
+database holds. See "Next" below.
+
 **`books.source` is a check constraint,** so a new kind of book needs a
 migration up before the deploy that can create one. A rejected row fails
 silently on a fire-and-forget push, and that book's position and bookmarks
@@ -271,6 +285,56 @@ Reset first-run state by clearing the `aloud.*` keys.
 To watch audio scheduling, wrap `AudioContext.prototype.createBufferSource` in
 `evaluateOnNewDocument` and log `start(when, offset)`; skip nodes with
 `loop === true`, which are the silent keep-alive feed.
+
+## The public library, as learned
+
+- Gutendex (gutendex.com) is one volunteer's mirror of the catalogue.
+  `sort=popular` pages answer in 0.2 s, any page. `topic=` and `search=`
+  took 15 to 30 s or timed out on every try. The by-number lookup
+  (`/books/{id}`) and `languages=es` on the popular sort are untimed but
+  should be fast; confirm before relying on either.
+- `scripts/gutenberg-shelf.ts` pulls 100 popular pages (3,200 records),
+  drops entries with no EPUB and Gutenberg's own "Index of the works of"
+  lists, dedupes editions on title + subtitle + author keeping the most
+  downloaded, sorts into twelve genres by subject headings (rules in the
+  script), caps each at 96, trims summaries to 600 characters, and writes
+  ~2.3 MB. Gutendex can crawl for ten minutes on a bad hour; a page that
+  fails six tries is skipped rather than failing the run.
+- `pg{id}.epub` (the `.epub.noimages` redirect) is about half a megabyte;
+  the images edition is twenty times that. Covers are hotlinked from
+  `gutenberg.org/cache/epub/{id}/pg{id}.cover.medium.jpg` in `<img>` tags;
+  fetching one as data needs the proxy, since gutenberg.org sends no CORS
+  headers at all.
+- Catalogue names are filed "Austen, Jane", and what follows the comma is
+  sometimes an epithet ("Marcus Aurelius, Emperor of Rome"); some titles
+  carry MARC subfield codes (`$b`). `catalogue.ts` handles both, with tests.
+- Every Gutenberg EPUB opens on a page about Project Gutenberg and closes
+  with the licence, between `*** START OF` and `*** END OF` markers, with
+  notes about the file just inside the first. `gutenberg/trim.ts` takes
+  all of it off. Chapter splitting inside the book is the EPUB's own.
+
+## Next: the whole catalogue, still free
+
+Agreed on 10 Sep 2026, not started. The shelf knows the 2,896 most-read
+English books; a Spanish reader sees nothing, and *Don Quijote* is not
+findable though it would import in a second (the proxies take any number).
+
+- Bake Gutenberg's own `pg_catalog.csv` (every book: number, title,
+  author, language, subjects; ~75,000 rows, no download counts, no
+  summaries) into the function the same way as `shelf.json`: 5 to 6 MB
+  compact, loaded per cold start, linear-scanned in milliseconds. Search
+  then covers everything in every language with no live dependency.
+- Keep the popularity bake for `downloads` and for the summaries of the
+  popular pool. For the long tail, fetch the summary live from Gutendex
+  when the sheet opens, 3 to 4 s timeout, slotted in if it comes; the sheet
+  is complete without it. No write-back anywhere.
+- Store `language` on `BookMeta` (the CSV and the EPUB both carry it). The
+  voice does not need special handling: the cloud voices include good
+  multilingual ones.
+- Per-language front pages from the fast popular endpoint with
+  `languages=`, defaulting from the browser locale.
+- Function memory goes from ~5 MB to ~40 MB with the index loaded. Fine,
+  but the route should not grow much else.
 
 ## Conventions
 
