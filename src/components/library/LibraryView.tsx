@@ -471,6 +471,9 @@ export function LibraryView() {
               >
                 Paste text
               </button>
+              <Link href="/browse" className={styles.ghostButton}>
+                Browse
+              </Link>
               <button
                 type="button"
                 className={styles.primaryButton}
@@ -564,6 +567,9 @@ export function LibraryView() {
             >
               Add a book
             </button>
+            <Link href="/browse" className={styles.landingSecondary} aria-disabled={busy || undefined}>
+              Browse free books
+            </Link>
             <button
               type="button"
               className={styles.landingQuiet}

@@ -57,6 +57,11 @@ export interface ImportOptions {
   addedAt?: number;
   /** Overrides the author, for text that carries no metadata of its own. */
   author?: string;
+  /** Overrides the title, where the catalogue's is cleaner than the file's. */
+  title?: string;
+  /** A cover from elsewhere, for a file that ships without one. */
+  cover?: Blob;
+  gutenbergId?: number;
 }
 
 async function persist(
@@ -72,14 +77,15 @@ async function persist(
 
   const meta: BookMeta = {
     id: options?.id ?? makeId(),
-    title: book.title,
+    title: options?.title ?? book.title,
     author: options?.author ?? book.author,
     source,
     addedAt: options?.addedAt ?? Date.now(),
     chapterTitles: book.chapters.map((chapter) => chapter.title),
     ...counts,
-    cover: book.cover,
+    cover: options?.cover ?? book.cover,
   };
+  if (options?.gutenbergId !== undefined) meta.gutenbergId = options.gutenbergId;
 
   onProgress?.({ stage: "saving", fraction: 0 });
   await putBook(meta, { id: meta.id, chapters: book.chapters });
@@ -201,6 +207,9 @@ export function describeImportError(error: unknown): { title: string; detail: st
   }
   if (error instanceof Error && error.name === "StorageUnavailableError") {
     return { title: "Storage isn't available", detail: error.message };
+  }
+  if (error instanceof Error && error.name === "DownloadError") {
+    return { title: "That book couldn't be fetched", detail: error.message };
   }
   return {
     title: "That file couldn't be opened",

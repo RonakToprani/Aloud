@@ -32,6 +32,10 @@ export interface BookMeta {
   chapterWordCounts: number[];
   wordCount: number;
   cover?: Blob;
+  /** Set on a book fetched from Project Gutenberg, so browsing can tell
+   *  what is already on the shelf and adding twice opens the same copy.
+   *  Stays on the device: the sync layer maps book columns by name. */
+  gutenbergId?: number;
 }
 
 export interface BookBody {

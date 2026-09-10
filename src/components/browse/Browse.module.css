@@ -1,0 +1,573 @@
+.page {
+  min-height: 100svh;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: max(26px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right))
+    calc(60px + env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  animation: pageIn 420ms var(--ease-soft) both;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- Head ---------- */
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.headRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -10px;
+}
+
+.back {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: var(--ui-muted);
+  transition: color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
+}
+
+.back:hover {
+  color: var(--ui);
+  background: var(--inset);
+}
+
+.eyebrow {
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+}
+
+.lede {
+  margin: 8px 0 0;
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ui-muted);
+  text-wrap: pretty;
+}
+
+/* ---------- Search ---------- */
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 15px;
+  color: var(--ui-faint);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 44px 0 42px;
+  border-radius: 14px;
+  border: 1px solid var(--control-border);
+  background: var(--inset);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  transition: border-color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
+}
+
+.searchInput::placeholder {
+  color: var(--ui-faint);
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.searchClear {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--ui-muted);
+}
+
+/* ---------- Sections ---------- */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sectionLabel {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.sectionCount {
+  font-size: 11.5px;
+  color: var(--ui-faint);
+}
+
+.resultsTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--ink-strong);
+}
+
+.clear {
+  min-height: 32px;
+  padding: 0 10px;
+  margin-right: -10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--ui-muted);
+  transition: color var(--dur-ui) var(--ease-soft);
+}
+
+.clear:hover {
+  color: var(--ui);
+}
+
+/* A row you slide, with the page edge as its frame. */
+.rail {
+  display: flex;
+  gap: 16px;
+  margin: 0 calc(-1 * max(22px, env(safe-area-inset-right))) 0
+    calc(-1 * max(22px, env(safe-area-inset-left)));
+  padding: 4px max(22px, env(safe-area-inset-right)) 14px max(22px, env(safe-area-inset-left));
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rail > * {
+  flex: 0 0 116px;
+  scroll-snap-align: start;
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 24px 16px;
+}
+
+/* ---------- A book on the shelf ---------- */
+
+.book {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  text-align: left;
+  color: inherit;
+  border-radius: 10px;
+  transition: transform var(--dur-ui) var(--ease-soft);
+}
+
+.book:active {
+  transform: scale(0.98);
+}
+
+.bookCoverWrap {
+  position: relative;
+}
+
+.owned {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.3);
+}
+
+.bookTitle {
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  line-height: 1.3;
+  color: var(--ink-strong);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bookAuthor {
+  margin-top: -4px;
+  font-size: 11px;
+  color: var(--ui-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Waiting shapes in the size of what is coming. */
+.ghost {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ghostCover {
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  background: var(--inset);
+  animation: breathe 1.6s var(--ease-soft) infinite;
+}
+
+.ghostLine {
+  height: 10px;
+  width: 80%;
+  border-radius: 5px;
+  background: var(--inset);
+  animation: breathe 1.6s var(--ease-soft) infinite;
+}
+
+.ghostLine + .ghostLine {
+  width: 50%;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---------- Genres ---------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-height: 38px;
+  padding: 0 15px;
+  border-radius: 19px;
+  background: var(--inset);
+  color: var(--ink-dim);
+  font-size: 13.5px;
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft);
+}
+
+.chip:hover {
+  background: var(--segment);
+  color: var(--ink);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* ---------- Feedback ---------- */
+
+.note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ui-faint);
+  text-wrap: pretty;
+}
+
+.note a {
+  color: var(--ui-muted);
+}
+
+.empty {
+  padding: 28px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--ui-muted);
+}
+
+.errorCard,
+.progressCard {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.errorCard strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ui);
+}
+
+.errorCard p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ui-muted);
+}
+
+.retry {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 12px;
+  margin-left: -12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--ui-muted);
+}
+
+.progressLabel {
+  font-size: 12.5px;
+  color: var(--ui-muted);
+}
+
+.progressTrack {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 320ms var(--ease-soft);
+}
+
+.sentinel {
+  height: 1px;
+}
+
+.more {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid var(--control-border);
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+/* ---------- The book sheet ---------- */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.detailTop {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.detailCover {
+  flex: 0 0 104px;
+}
+
+.detailText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 4px;
+}
+
+.detailTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ink-strong);
+  text-wrap: balance;
+}
+
+.detailSubtitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.detailAuthor {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--ui-muted);
+}
+
+.detailSubjects {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ui-faint);
+}
+
+.summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-wrap: pretty;
+}
+
+.summary[data-open="true"] {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.summaryMore {
+  align-self: flex-start;
+  margin: -10px 0 0;
+  min-height: 32px;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--ui-muted);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft);
+}
+
+.primary:hover {
+  background: var(--accent-strong);
+}
+
+.secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 16px;
+  border: 1px solid var(--control-border);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color var(--dur-ui) var(--ease-soft);
+}
+
+.secondary:hover {
+  background: var(--inset);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.55;
+}
+
+.ownedNote {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  justify-content: center;
+  font-size: 12.5px;
+  color: var(--ui-muted);
+}
+
+.ownedNote svg {
+  color: var(--accent-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page,
+  .ghostCover,
+  .ghostLine {
+    animation: none;
+  }
+}
