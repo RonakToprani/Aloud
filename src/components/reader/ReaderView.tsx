@@ -930,6 +930,11 @@ export function ReaderView({ bookId }: { bookId: string }) {
             <Link className={styles.noticeAction} href="/">
               {isSample ? "Add a book" : "Back to your library"}
             </Link>
+            {authStatus !== "unavailable" && authStatus !== "signed-in" && (
+              <Link className={styles.finishedSignIn} href="/signin" prefetch={false}>
+                Sign in to keep your place on every device
+              </Link>
+            )}
           </div>
         )}
       </main>

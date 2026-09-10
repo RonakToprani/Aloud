@@ -205,11 +205,11 @@ localStorage, all prefixed `aloud.`:
 | `remoteBooks.v1` | books the account knows about that this device lacks |
 | `voiceChosen.v1` | books whose voice has been picked |
 | `coach.v1` | walkthrough step: appearance / voice / done |
-| `deviceOnly.v1` | the sign-up notice has been shown |
 | `hasAccount.v1` | someone has signed in here, so the sign-in page greets them back |
 | `sampleId.v1` | this device's copy of the sample |
 | `homescreen.v1` | the add-to-home-screen step is done |
 | `homescreenNote.v1` | the end-of-book home screen note has been waved away |
+| `signupNudge.v1` | when the shelf last asked for an account; it asks again a week later |
 | `listened.v1` | seconds listened on this device |
 
 `sessionStorage`: `aloud.autoplay` (one-shot request to start reading on

@@ -335,6 +335,20 @@ client_id = "320872251079-ehevbl976i608689uqnlqhq63ag62sms.apps.googleuserconten
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 skip_nonce_check = false
 
+# Facebook is offered beside Google on the sign-in screen once its app
+# exists: a free developer app at developers.facebook.com with the Supabase
+# callback URL registered, the id here, the secret in the environment, and
+# "facebook" added to NEXT_PUBLIC_AUTH_PROVIDERS. Only providers that cost
+# nothing are offered; Apple and X are not, see SignInView.tsx.
+# Off until Meta verifies a business portfolio for the app. Without that,
+# Advanced Access is refused, the app stays unpublished, and only its admins
+# can sign in. NEXT_PUBLIC_AUTH_PROVIDERS lists "google" alone, so no button
+# ships that cannot work.
+[auth.external.facebook]
+enabled = false
+client_id = "1299405615490899"
+secret = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_SECRET)"
+
 [auth.external.apple]
 enabled = false
 client_id = ""

@@ -31,9 +31,12 @@ interface AuthContextValue {
   ensureAccount: () => Promise<void>;
   sendLink: (email: string) => Promise<{ error: string | null }>;
   verifyCode: (email: string, code: string) => Promise<{ error: string | null }>;
-  signInWith: (provider: "apple" | "google") => Promise<{ error: string | null }>;
+  signInWith: (provider: OAuthProviderId) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
+
+/** The providers the sign-in screen may offer, by Supabase's names. */
+export type OAuthProviderId = "google" | "facebook";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -135,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: describe(error) };
   }, []);
 
-  const signInWith = useCallback(async (provider: "apple" | "google") => {
+  const signInWith = useCallback(async (provider: OAuthProviderId) => {
     const supabase = getSupabase();
     if (!supabase) return { error: "Sign-in isn't available in this build." };
     const { error } = await supabase.auth.signInWithOAuth({

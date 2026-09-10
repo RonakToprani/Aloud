@@ -210,3 +210,9 @@ export const SearchIcon = ({ size = 16, className }: IconProps) => (
     <path d="m19 19-3.4-3.4" />
   </svg>
 );
+
+export const FacebookIcon = ({ size = 16, className }: IconProps) => (
+  <svg {...base(size)} className={className} fill="currentColor" stroke="none">
+    <path d="M13.5 21v-7.2h2.4l.4-2.9h-2.8V9.1c0-.8.3-1.4 1.4-1.4h1.5V5.1c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2.1H8v2.9h2.5V21h3Z" />
+  </svg>
+);

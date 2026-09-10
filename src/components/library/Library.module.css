@@ -43,9 +43,9 @@
 .headActions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  /* The row wraps under the wordmark on a phone; keep it flush right there
-     rather than adrift in the middle. */
+  gap: 10px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
   margin-left: auto;
 }
 
@@ -385,13 +385,15 @@
 
 /* ---------- Shelf ---------- */
 
+/* Three across on a phone. Two made each cover the size of a hand, which
+   is a poster, not a shelf. */
 .shelf {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 26px 18px;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 22px 14px;
 }
 
 .tile {
@@ -425,10 +427,10 @@
 
 .tileBadge {
   position: absolute;
-  left: 8px;
-  bottom: 8px;
-  width: 28px;
-  height: 28px;
+  left: 6px;
+  bottom: 6px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -439,8 +441,8 @@
 
 .tileTitle {
   font-family: var(--font-serif);
-  font-size: 14.5px;
-  line-height: 1.35;
+  font-size: 13.5px;
+  line-height: 1.3;
   color: var(--ink-strong);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -470,10 +472,10 @@
 
 .remove {
   position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 30px;
-  height: 30px;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -500,6 +502,101 @@
   .remove {
     opacity: 0.85;
   }
+}
+
+/* ---------- Keep your place ---------- */
+
+.nudge {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+}
+
+.nudgeText {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.nudgeTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  color: var(--ink-strong);
+}
+
+.nudgeBody {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ui-muted);
+  text-wrap: pretty;
+}
+
+.nudgeActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- Add a book ---------- */
+
+.addList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addOption {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 16px;
+  background: var(--inset);
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color var(--dur-ui) var(--ease-soft);
+}
+
+.addOption:hover {
+  background: var(--segment);
+}
+
+.addIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--accent-strong);
+}
+
+.addText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.addTitle {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink-strong);
+}
+
+.addHint {
+  font-size: 12.5px;
+  color: var(--ui-muted);
 }
 
 /* ---------- Empty, progress, errors ---------- */
