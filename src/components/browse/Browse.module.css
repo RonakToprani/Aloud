@@ -185,6 +185,9 @@
   padding: 4px max(22px, env(safe-area-inset-right)) 14px max(22px, env(safe-area-inset-left));
   overflow-x: auto;
   scroll-snap-type: x proximity;
+  /* Snapping measures from the scrollport, not the padding, and without
+     this the first cover parks itself under the page edge. */
+  scroll-padding-inline: max(22px, env(safe-area-inset-left));
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }

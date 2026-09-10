@@ -27,12 +27,15 @@ export interface GutendexPage {
   results: GutendexBook[];
 }
 
-/** Catalogue subjects read "Courtship -- Fiction"; a person wants "Courtship". */
+/** Catalogue subjects read "Detective and mystery stories, English" and
+ *  "Holmes, Sherlock (Fictitious character) -- Fiction"; a person wants
+ *  "Detective and mystery stories" and nothing about Holmes, Sherlock. */
 function tidySubjects(subjects: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of subjects) {
-    const head = raw.split(" -- ")[0].trim();
+    if (/fictitious|\(.*\)/i.test(raw)) continue;
+    const head = raw.split(" -- ")[0].split(",")[0].trim();
     const key = head.toLowerCase();
     if (!head || seen.has(key) || key === "fiction") continue;
     seen.add(key);

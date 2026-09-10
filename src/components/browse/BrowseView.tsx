@@ -453,7 +453,7 @@ export function BrowseView() {
         </section>
       )}
 
-      <Sheet open={selected !== null} title={owned ? "In your library" : "Free book"} onClose={close}>
+      <Sheet open={selected !== null} title={owned ? "In your library" : "From Project Gutenberg"} onClose={close}>
         {selected && (
           <div className={styles.detail}>
             <div className={styles.detailTop}>
