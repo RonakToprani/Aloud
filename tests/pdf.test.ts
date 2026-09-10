@@ -121,6 +121,21 @@ test("outline entries landing on one page make one chapter, named by the last", 
   ]);
 });
 
+test("a long copyright page is still not read", async () => {
+  // Short front matter was already skipped. A printing history and a list of
+  // the publisher's offices runs to hundreds of words, and is the worst
+  // thing a book can open on.
+  const pdf = makePdf([bodyPage(SENTENCES), bodyPage(SENTENCES), bodyPage(SENTENCES)], {
+    outline: [
+      { title: "Title Page", page: 0 },
+      { title: "Copyright Page", page: 1 },
+      { title: "Chapter One", page: 2 },
+    ],
+  });
+  const book = await parsePdf(pdf, "Fallback");
+  assert.deepEqual(book.chapters.map((chapter) => chapter.title), ["Chapter One"]);
+});
+
 test("a running head and a page number are left out of the reading", async () => {
   const pages = [0, 1, 2, 3].map((index) =>
     bodyPage(SENTENCES, [

@@ -232,13 +232,23 @@ function titleFromFirstPage(blocks: LaidOutBlock[]): string | null {
   return candidates.find((block) => block.kind === "h1")?.text ?? candidates[0]?.text ?? null;
 }
 
-/** Front matter the outline names but nobody wants read to them. An EPUB's
- *  cover page is skipped the same way, and for the same reason: a few words
- *  of jacket copy are not a chapter. */
-const FRONT_MATTER = /^(cover|title|half[- ]?title|title page|copyright|copyright page|colophon)$/i;
+/**
+ * Front matter the outline names but nobody wants read to them. An EPUB's
+ * cover page is skipped the same way, and for the same reason.
+ *
+ * A copyright page is not front matter because it is short. It is front
+ * matter because of what it is, and a long one — the printing history, the
+ * cataloguing data, the list of cities the publisher has an office in — is
+ * the worst thing a book can open on. So length only decides the names that
+ * could honestly be a chapter.
+ */
+const NEVER_READ = /^(title page|half[- ]?title( page)?|copyright( page| notice)?|colophon)$/i;
+const ONLY_IF_SHORT = /^(cover|title|frontispiece)$/i;
 
 function isFrontMatter(chapter: Chapter): boolean {
-  if (!FRONT_MATTER.test(chapter.title.trim())) return false;
+  const title = chapter.title.trim();
+  if (NEVER_READ.test(title)) return true;
+  if (!ONLY_IF_SHORT.test(title)) return false;
   let words = 0;
   for (const block of chapter.blocks) words += block.text.split(/\s+/).length;
   return words < 60;
