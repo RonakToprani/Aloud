@@ -7,7 +7,7 @@ import { AccountSheet } from "@/components/auth/AccountSheet";
 import { useAuth } from "@/components/AuthProvider";
 import { StatsHero, StatsStrip } from "@/components/home/Stats";
 import { Sheet } from "@/components/ui/Sheet";
-import { CloudIcon, PlusIcon, TrashIcon } from "@/components/ui/Icons";
+import { AddSquareIcon, CloudIcon, ContentsIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/ui/Icons";
 import { Logo } from "@/components/ui/Logo";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
 import {
@@ -118,6 +118,8 @@ export function LibraryView() {
   const [storageError, setStorageError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
+  /** The three ways in, offered from one button once the shelf exists. */
+  const [addOpen, setAddOpen] = useState(false);
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteBody, setPasteBody] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -466,28 +468,15 @@ export function LibraryView() {
         </h1>
         <div className={styles.headActions}>
           {!empty && (
-            <>
-              <button
-                type="button"
-                className={styles.ghostButton}
-                onClick={() => setPasteOpen(true)}
-                disabled={busy}
-              >
-                Paste text
-              </button>
-              <Link href="/browse" className={styles.ghostButton}>
-                Browse
-              </Link>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                onClick={() => pickFile()}
-                disabled={busy}
-              >
-                <PlusIcon size={17} />
-                Add a book
-              </button>
-            </>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() => setAddOpen(true)}
+              disabled={busy}
+            >
+              <PlusIcon size={17} />
+              Add a book
+            </button>
           )}
           {accountControl}
         </div>
@@ -689,6 +678,52 @@ export function LibraryView() {
           )}
         </>
       )}
+
+      <Sheet open={addOpen} title="Add a book" onClose={() => setAddOpen(false)}>
+        <div className={styles.addList}>
+          <button
+            type="button"
+            className={styles.addOption}
+            onClick={() => {
+              setAddOpen(false);
+              pickFile();
+            }}
+          >
+            <span className={styles.addIcon}>
+              <AddSquareIcon size={18} />
+            </span>
+            <span className={styles.addText}>
+              <span className={styles.addTitle}>Choose a file</span>
+              <span className={styles.addHint}>An EPUB, a PDF or plain text</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={styles.addOption}
+            onClick={() => {
+              setAddOpen(false);
+              setPasteOpen(true);
+            }}
+          >
+            <span className={styles.addIcon}>
+              <ContentsIcon size={18} />
+            </span>
+            <span className={styles.addText}>
+              <span className={styles.addTitle}>Paste text</span>
+              <span className={styles.addHint}>An article, a chapter, a letter</span>
+            </span>
+          </button>
+          <Link href="/browse" className={styles.addOption} onClick={() => setAddOpen(false)}>
+            <span className={styles.addIcon}>
+              <SearchIcon size={18} />
+            </span>
+            <span className={styles.addText}>
+              <span className={styles.addTitle}>Browse classics</span>
+              <span className={styles.addHint}>Thousands of free books, read aloud</span>
+            </span>
+          </Link>
+        </div>
+      </Sheet>
 
       <Sheet open={pasteOpen} title="Paste text" onClose={() => setPasteOpen(false)}>
         <label className={styles.pasteField}>
