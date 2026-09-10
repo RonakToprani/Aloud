@@ -30,6 +30,7 @@ import {
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { requestAutoplay } from "@/lib/library/autoplay";
 import { bookFraction } from "@/lib/library/progress";
+import { addGutenbergBook } from "@/lib/library/gutenberg";
 import { addSampleBook } from "@/lib/library/sample";
 import { BookCover } from "./BookCover";
 import type { BookBody, BookMeta } from "@/lib/types";
@@ -741,8 +742,11 @@ export function LibraryView() {
             </div>
             <p className={styles.missingBody}>
               Your place and bookmarks are saved to your account, but the text stays on the device
-              you added it from. Add the same {missingBook.source === "paste" ? "text" : "file"}{" "}
-              here and you&rsquo;ll carry on
+              you added it from.{" "}
+              {missingBook.gutenbergId !== undefined
+                ? "Fetch it from Project Gutenberg again"
+                : `Add the same ${missingBook.source === "paste" ? "text" : "file"} here`}{" "}
+              and you&rsquo;ll carry on
               {readingOf(missingBook).fraction > 0
                 ? missingBook.chapterTitles.length > 1
                   ? ` in ${missingBook.chapterTitles[readingOf(missingBook).chapterIndex] ?? "the same chapter"}`
@@ -750,7 +754,24 @@ export function LibraryView() {
                 : " from the start"}
               .
             </p>
-            {missingBook.source === "paste" ? (
+            {missingBook.gutenbergId !== undefined ? (
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() => {
+                  const ref = {
+                    id: missingBook.gutenbergId as number,
+                    title: missingBook.title,
+                    author: missingBook.author,
+                  };
+                  const options = { id: missingBook.id, addedAt: missingBook.addedAt };
+                  void runImport(() => addGutenbergBook(ref, setProgress, options));
+                }}
+              >
+                <PlusIcon size={17} />
+                Fetch it again
+              </button>
+            ) : missingBook.source === "paste" ? (
               <button
                 type="button"
                 className={styles.primaryButton}

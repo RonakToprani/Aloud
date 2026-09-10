@@ -65,7 +65,9 @@ export interface ImportOptions {
   gutenbergId?: number;
 }
 
-async function persist(
+/** Shelves an already-parsed book. The file importers below all end here,
+ *  and so does anything that has to look at the text before it is kept. */
+export async function importParsedBook(
   book: ParsedBook,
   source: BookMeta["source"],
   onProgress?: (progress: ImportProgress) => void,
@@ -99,7 +101,7 @@ async function persist(
  *
  *  A PDF is mostly fonts and images, none of which is kept: what lands in
  *  storage is the text, which is a fraction of the file. */
-async function assertRoom(bytes: number, expansion: number): Promise<void> {
+export async function assertRoom(bytes: number, expansion: number): Promise<void> {
   const headroom = await storageHeadroom();
   if (headroom === null) return;
   const needed = Math.max(bytes * expansion, 1);
@@ -126,7 +128,7 @@ export async function importFile(
     const parsed = await parseEpub(file, (fraction) =>
       onProgress?.({ stage: "parsing", fraction }),
     );
-    return persist(parsed, "epub", onProgress, options);
+    return importParsedBook(parsed, "epub", onProgress, options);
   }
 
   if (isPdfFile) {
@@ -134,7 +136,7 @@ export async function importFile(
     const parsed = await parsePdf(await file.arrayBuffer(), name, (fraction) =>
       onProgress?.({ stage: "parsing", fraction }),
     );
-    return persist(parsed, "pdf", onProgress, options);
+    return importParsedBook(parsed, "pdf", onProgress, options);
   }
 
   // A saved web page is a book too; it just needs its markup taken off.
@@ -144,7 +146,7 @@ export async function importFile(
     const doc = new DOMParser().parseFromString(await decodeText(file), "text/html");
     const title = doc.title.trim() || name;
     const text = extractText(doc.body);
-    return persist(parsePlainText(text, title), "txt", onProgress, options);
+    return importParsedBook(parsePlainText(text, title), "txt", onProgress, options);
   }
 
   const isText = /\.(txt|md|markdown)$/i.test(file.name) || file.type.startsWith("text/");
@@ -157,7 +159,7 @@ export async function importFile(
   onProgress?.({ stage: "parsing", fraction: 0 });
   let text = await decodeText(file);
   if (/\.(md|markdown)$/i.test(file.name)) text = stripMarkdown(text);
-  return persist(parsePlainText(text, name), "txt", onProgress, options);
+  return importParsedBook(parsePlainText(text, name), "txt", onProgress, options);
 }
 
 /** UTF-8 first; a file that isn't valid UTF-8 is almost always Windows-1252,
@@ -199,7 +201,7 @@ export async function importPastedText(
   onProgress?: (progress: ImportProgress) => void,
   options?: ImportOptions,
 ): Promise<BookMeta> {
-  return persist(parsePlainText(text, title.trim() || "Pasted text"), "paste", onProgress, options);
+  return importParsedBook(parsePlainText(text, title.trim() || "Pasted text"), "paste", onProgress, options);
 }
 
 /** Turns any import failure into something a person can act on. */

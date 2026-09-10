@@ -1,7 +1,17 @@
-import { importFile, type ImportProgress } from "./import";
+import { assertRoom, importParsedBook, type ImportOptions, type ImportProgress } from "./import";
+import { parseEpub } from "@/lib/epub/parse";
+import { trimGutenberg } from "@/lib/gutenberg/trim";
 import { listBooks } from "@/lib/storage/db";
-import type { CatalogueBook } from "@/lib/gutenberg/catalogue";
 import type { BookMeta } from "@/lib/types";
+
+/** What it takes to fetch a book: the catalogue entry has it, and so does a
+ *  shelved book's metadata on another device. */
+export interface GutenbergRef {
+  id: number;
+  title: string;
+  author: string | null;
+  hasCover?: boolean;
+}
 
 export class DownloadError extends Error {
   constructor(message: string) {
@@ -23,8 +33,10 @@ export async function findGutenbergBook(id: number): Promise<BookMeta | undefine
  * nothing else. Asking for a book already on the shelf hands back that copy.
  */
 export async function addGutenbergBook(
-  book: CatalogueBook,
+  book: GutenbergRef,
   onProgress?: (progress: ImportProgress) => void,
+  /** For a book the account knows: the same id, so the saved place lines up. */
+  options?: Pick<ImportOptions, "id" | "addedAt">,
 ): Promise<BookMeta> {
   const existing = await findGutenbergBook(book.id);
   if (existing) return existing;
@@ -34,11 +46,16 @@ export async function addGutenbergBook(
     download(`/api/gutenberg/epub/${book.id}`, (fraction) =>
       onProgress?.({ stage: "reading", fraction }),
     ),
-    book.hasCover ? fetchCover(book.id) : Promise.resolve(undefined),
+    book.hasCover === false ? Promise.resolve(undefined) : fetchCover(book.id),
   ]);
 
-  const file = new File([epub], `${book.title}.epub`, { type: "application/epub+zip" });
-  return importFile(file, onProgress, {
+  // The same road an uploaded EPUB takes, with one stop on the way: the
+  // Gutenberg front matter and licence come off before the book is kept.
+  await assertRoom(epub.size, 4);
+  onProgress?.({ stage: "parsing", fraction: 0 });
+  const parsed = await parseEpub(epub, (fraction) => onProgress?.({ stage: "parsing", fraction }));
+  return importParsedBook(trimGutenberg(parsed), "epub", onProgress, {
+    ...options,
     title: book.title,
     author: book.author ?? undefined,
     cover,

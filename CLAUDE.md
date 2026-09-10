@@ -11,7 +11,7 @@ This file is the things that are expensive to rediscover and easy to break.
 
 ```bash
 npm run dev          # localhost:3000
-npm test             # 117 tests, ~30s
+npm test             # 121 tests, ~30s
 npm run typecheck
 npm run build
 node scripts/pdfjs-assets.mjs # copy the pdf.js worker and data files into public/
@@ -130,9 +130,11 @@ search are answered from `shelf.json`, baked from the popularity list and
 sorted into genres by Gutenberg's own subject headings. Only the EPUB and
 cover are fetched live, from gutenberg.org, through the proxies. A Gutenberg
 book is shelved exactly as an uploaded EPUB is: parsed text in IndexedDB,
-metadata to the account, never the text. `gutenbergId` on `BookMeta` is
-local only, for the shelf tick and for adding twice to open the same copy;
-the sync layer maps book columns by name so it cannot leak.
+metadata to the account, never the text. The Gutenberg front matter and
+licence are cut off before shelving (`gutenberg/trim.ts`), so the book opens
+on its title page. `gutenbergId` goes up with the metadata (`books.gutenberg_id`)
+so a second device can fetch the book again instead of asking for a file;
+the cover never does, and the sync layer maps columns by name.
 
 **Safari closes IndexedDB behind a backgrounded tab.** `storage/db.ts` retries
 the open and reconnects on a stale handle. Without it, one failure poisons

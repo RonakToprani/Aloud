@@ -32,6 +32,7 @@ interface BookRow {
   chapter_titles: string[];
   chapter_sentence_counts: number[];
   chapter_word_counts: number[];
+  gutenberg_id?: number | null;
 }
 
 interface PositionRow {
@@ -79,6 +80,7 @@ function toBookRow(meta: BookMeta, uid: string): BookRow {
     chapter_titles: meta.chapterTitles,
     chapter_sentence_counts: meta.chapterSentenceCounts,
     chapter_word_counts: meta.chapterWordCounts,
+    gutenberg_id: meta.gutenbergId ?? null,
   };
 }
 
@@ -94,6 +96,7 @@ function fromBookRow(row: BookRow): RemoteBook {
     chapterTitles: row.chapter_titles ?? [],
     chapterSentenceCounts: row.chapter_sentence_counts ?? [],
     chapterWordCounts: row.chapter_word_counts ?? [],
+    ...(typeof row.gutenberg_id === "number" ? { gutenbergId: row.gutenberg_id } : {}),
     missing: true,
   };
 }
