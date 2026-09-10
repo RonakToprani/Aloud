@@ -567,7 +567,14 @@ export function LibraryView() {
             >
               Add a book
             </button>
-            <Link href="/browse" className={styles.landingSecondary} aria-disabled={busy || undefined}>
+            <Link
+              href="/browse"
+              className={styles.landingSecondary}
+              aria-disabled={busy || undefined}
+              onClick={(event) => {
+                if (busy) event.preventDefault();
+              }}
+            >
               Browse free books
             </Link>
             <button

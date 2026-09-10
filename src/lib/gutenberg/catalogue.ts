@@ -88,11 +88,17 @@ export function coverUrl(id: number): string {
 
 /** "Austen, Jane" is how a catalogue files a name, not how a person says
  *  it. Parentheticals carry alternate names and are left off. */
+/** What follows the comma when it is a description, not a given name:
+ *  "Marcus Aurelius, Emperor of Rome", "Augustine, of Hippo",
+ *  "Sunzi, active 6th century B.C.", "Henry VIII, King of England". */
+const EPITHET =
+  /^(?:[a-z]|\d|.*\d|(?:Emperor|Empress|King|Queen|Prince|Princess|Duke|Duchess|Earl|Count|Countess|Baron|Baroness|Marquis|Marquess|Lord|Lady|Sir|Saint|St\.?|Pope|Bishop|Archbishop|Cardinal|Abbot|Abbé|Rabbi|Mrs\.?|Mr\.?|Miss|Madame|Mme\.?|Dr\.?|Rev\.?|Captain|Colonel|General|Major)\b)/;
+
 export function displayName(catalogued: string): string {
   const bare = catalogued.replace(/\s*\([^)]*\)\s*/g, " ").trim();
   // "Tolstoy, Leo, graf": family, given, and then honours nobody says aloud.
   const [family, given] = bare.split(",").map((part) => part.trim());
-  if (!given) return family;
+  if (!given || EPITHET.test(given)) return family;
   return `${given} ${family}`;
 }
 
@@ -100,8 +106,14 @@ export function displayName(catalogued: string): string {
  *  for the use of those who cannot read the original" both want cutting at
  *  the first mark, as long as what is left is still a title. */
 export function splitTitle(full: string): { title: string; subtitle: string | null } {
-  const cleaned = full.replace(/\s+/g, " ").trim();
+  // Some records carry their MARC subfield codes: "His Last Bow : $b Some
+  // later reminiscences". The code means nothing to a reader.
+  const cleaned = full
+    .replace(/([:;])\s*\$[a-z]\s+/g, "$1 ")
+    .replace(/\s*\$[a-z]\s+/g, " : ")
+    .replace(/\s+/g, " ")
+    .trim();
   const match = cleaned.match(/^(.{3,}?)\s*[;:]\s+(?:or,?\s+)?(.+)$/i);
   if (!match) return { title: cleaned, subtitle: null };
-  return { title: match[1], subtitle: match[2] };
+  return { title: match[1].trim(), subtitle: match[2].replace(/^or,?\s+/i, "").trim() };
 }

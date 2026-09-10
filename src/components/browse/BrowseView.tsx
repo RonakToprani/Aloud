@@ -112,6 +112,9 @@ export function BrowseView() {
 
   const load = useCallback((next: Mode) => {
     listRequest.current?.abort();
+    // An aborted "show more" never reports back; its flag is cleared here or
+    // the next shelf is stuck on "Loading" for the rest of the visit.
+    setLoadingMore(false);
     if (next.kind === "home") {
       listRequest.current = null;
       setResults(null);
@@ -182,9 +185,7 @@ export function BrowseView() {
         );
       })
       .catch(() => {})
-      .finally(() => {
-        if (!controller.signal.aborted) setLoadingMore(false);
-      });
+      .finally(() => setLoadingMore(false));
   }, [results, loadingMore, mode]);
 
   // The next page arrives as the reader nears the end of this one.
@@ -270,11 +271,16 @@ export function BrowseView() {
   const tile = (book: CatalogueBook) => {
     const mine = shelf.has(book.id);
     return (
-      <button type="button" className={styles.book} onClick={() => open(book)}>
-        <span className={styles.bookCoverWrap}>
+      <button
+        type="button"
+        className={styles.book}
+        onClick={() => open(book)}
+        aria-label={`${book.title}${book.author ? ` by ${book.author}` : ""}${mine ? ", in your library" : ""}`}
+      >
+        <span className={styles.bookCoverWrap} aria-hidden="true">
           <BookCover meta={coverMeta(book)} src={book.hasCover ? coverUrl(book.id) : undefined} />
           {mine && (
-            <span className={styles.owned} aria-label="In your library">
+            <span className={styles.owned}>
               <CheckIcon size={13} />
             </span>
           )}

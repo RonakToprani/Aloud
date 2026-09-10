@@ -10,20 +10,30 @@
  */
 
 const YEAR = 31536000;
+/** How long to wait for Gutenberg to start answering. The body is streamed
+ *  through afterwards on its own time: a deadline on the fetch would also
+ *  cut the stream, and the browser would get a file short of its stated
+ *  length with no error worth showing. */
+const HEADERS_TIMEOUT_MS = 20000;
+export const maxDuration = 60;
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   if (!/^\d{1,7}$/.test(id)) return new Response("Not found", { status: 404 });
 
+  const control = new AbortController();
+  const deadline = setTimeout(() => control.abort(), HEADERS_TIMEOUT_MS);
   let upstream: Response;
   try {
     upstream = await fetch(`https://www.gutenberg.org/ebooks/${id}.epub.noimages`, {
       redirect: "follow",
       headers: { "user-agent": "Aloud (read-along reader; https://aloudreader.vercel.app)" },
-      signal: AbortSignal.timeout(25000),
+      signal: control.signal,
     });
   } catch {
     return new Response("Project Gutenberg didn't answer.", { status: 502 });
+  } finally {
+    clearTimeout(deadline);
   }
 
   const type = upstream.headers.get("content-type") ?? "";

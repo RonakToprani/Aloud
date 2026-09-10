@@ -71,6 +71,8 @@ async function main() {
     seen.add(record.id);
     const book = slim(record);
     if (!book) continue;
+    // Gutenberg's own indexes of an author's works: a list, not a book.
+    if (/^Index of the Project Gutenberg/i.test(book.title)) continue;
     if (book.summary && book.summary.length > SUMMARY_CHARS) {
       book.summary = `${book.summary.slice(0, SUMMARY_CHARS).replace(/\s+\S*$/, "")}…`;
     }
@@ -84,7 +86,8 @@ async function main() {
   // most people chose.
   const editions = new Set<string>();
   for (let i = 0; i < pool.length; i++) {
-    const key = `${pool[i].title}|${pool[i].author ?? ""}`
+    // The subtitle is part of the key: "Volume 2" lives there.
+    const key = `${pool[i].title}|${pool[i].subtitle ?? ""}|${pool[i].author ?? ""}`
       .toLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();

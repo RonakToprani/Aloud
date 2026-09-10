@@ -65,8 +65,11 @@ export function GET(request: Request) {
   if (query) {
     books = search(query);
   } else if (topic) {
+    // A plain object answers to "constructor" too; only the shelves count.
+    if (!Object.hasOwn(baked.genres, topic)) {
+      return NextResponse.json({ error: "No such shelf." }, { status: 404 });
+    }
     const ids = baked.genres[topic];
-    if (!ids) return NextResponse.json({ error: "No such shelf." }, { status: 404 });
     books = ids.map((id) => byId.get(id)).filter((book): book is CatalogueBook => book !== undefined);
   } else {
     books = baked.pool.slice(0, 96);

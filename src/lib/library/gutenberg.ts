@@ -66,12 +66,20 @@ async function download(url: string, onFraction: (fraction: number) => void): Pr
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.byteLength;
-    if (total) onFraction(Math.min(1, received / total));
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.byteLength;
+      if (total) onFraction(Math.min(1, received / total));
+    }
+  } catch {
+    // The connection went mid-book. That is a download problem, not a file one.
+    throw new DownloadError("The download was interrupted. Check the connection and try again.");
+  }
+  if (total && received < total) {
+    throw new DownloadError("The download stopped short. Try again in a moment.");
   }
   onFraction(1);
   return new Blob(chunks as BlobPart[], { type: "application/epub+zip" });
