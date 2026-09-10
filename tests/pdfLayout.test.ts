@@ -220,6 +220,39 @@ test("a running head that changes every page is still not read", () => {
   );
 });
 
+test("a word in the margin that spells out of roman numerals is still a word", () => {
+  // M, I, L and D are all roman numerals, and "MILD" is not one. Read
+  // loosely it is a folio, and the line goes missing from the book.
+  const pages = [0, 1, 2, 3].map((index) =>
+    page(index, [
+      ...column(120, [
+        { text: `Page ${index + 1} says its piece across the` },
+        { text: "full measure, and then ends.", fill: 0.4 },
+      ]),
+      // On one page only: the same line on four would be a running head.
+      ...(index === 0 ? [{ text: "MILD", y: 700, size: 9, x: 300, fill: 0.02 }] : []),
+    ]),
+  );
+  assert.ok(texts(pages).join(" ").includes("MILD"), texts(pages).join(" | "));
+});
+
+test("a page that opens on an indent starts a new paragraph", () => {
+  // Nothing about the foot of the first page says its paragraph ended: the
+  // last line fills the measure. The indent overleaf is what says so.
+  const first = page(0, column(600, [
+    { text: "The paragraph on this page runs right up to" },
+    { text: "the foot of it and fills the measure exactly" },
+  ]));
+  const second = page(1, column(100, [
+    { text: "A new thought begins overleaf,", x: LEFT + 18 },
+    { text: "indented the way a book indents one.", fill: 0.5 },
+  ]));
+  assert.deepEqual(texts([first, second]), [
+    "The paragraph on this page runs right up to the foot of it and fills the measure exactly",
+    "A new thought begins overleaf, indented the way a book indents one.",
+  ]);
+});
+
 test("two columns read down one and then the other", () => {
   const at = (x: number, texts: string[]): PdfTextItem[] =>
     texts.map((text, i) => ({ str: text, x, y: 100 + i * LEADING, width: 200, size: SIZE, font: "body" }));

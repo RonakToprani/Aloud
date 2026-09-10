@@ -279,12 +279,6 @@ const UNREADABLE = /^[^\p{L}\p{N}]+$/u;
 
 const CONTENTS_TITLE = /^(table of )?contents$/i;
 
-/**
- * A contents page is chapter names against page numbers. Read aloud it is a
- * list of numbers, and the reader has a contents list of its own, so the
- * whole page goes. The leader dots between name and number are usually set
- * as their own text runs, which is why they arrive as lines of punctuation.
- */
 /** "Measuring interest rates ................ 79" — a name, leader dots, and
  *  the page it is on. */
 const CONTENTS_ENTRY = /[.·]{3,}\s*(\d{1,4})$/;

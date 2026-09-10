@@ -11,7 +11,7 @@ This file is the things that are expensive to rediscover and easy to break.
 
 ```bash
 npm run dev          # localhost:3000
-npm test             # 114 tests, ~30s
+npm test             # 116 tests, ~30s
 npm run typecheck
 npm run build
 node scripts/pdfjs-assets.mjs # copy the pdf.js worker and data files into public/
