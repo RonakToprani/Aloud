@@ -80,10 +80,12 @@ export async function fetchCatalogue(
   return (await response.json()) as CataloguePage;
 }
 
-/** Gutenberg's own cover art, sized for a shelf. Fine to show straight from
- *  their server; only fetching it as data needs the proxy. */
+/** Gutenberg's own cover art, sized for a shelf, through the app's proxy
+ *  rather than straight from their server: a page of thirty covers is a
+ *  burst of thirty requests at a volunteer-run site, and through the proxy
+ *  each cover is fetched once and then held at the edge for a year. */
 export function coverUrl(id: number): string {
-  return `https://www.gutenberg.org/cache/epub/${id}/pg${id}.cover.medium.jpg`;
+  return `/api/gutenberg/cover/${id}`;
 }
 
 /** "Austen, Jane" is how a catalogue files a name, not how a person says

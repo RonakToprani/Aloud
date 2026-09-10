@@ -44,7 +44,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const headers = new Headers({
     "content-type": "application/epub+zip",
     // A Gutenberg edition is effectively immutable once published.
-    "cache-control": `public, max-age=${YEAR}, immutable`,
+    "cache-control": `public, max-age=${YEAR}, s-maxage=${YEAR}, immutable`,
   });
   const length = upstream.headers.get("content-length");
   if (length) headers.set("content-length", length);

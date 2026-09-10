@@ -301,10 +301,11 @@ To watch audio scheduling, wrap `AudioContext.prototype.createBufferSource` in
   ~2.3 MB. Gutendex can crawl for ten minutes on a bad hour; a page that
   fails six tries is skipped rather than failing the run.
 - `pg{id}.epub` (the `.epub.noimages` redirect) is about half a megabyte;
-  the images edition is twenty times that. Covers are hotlinked from
-  `gutenberg.org/cache/epub/{id}/pg{id}.cover.medium.jpg` in `<img>` tags;
-  fetching one as data needs the proxy, since gutenberg.org sends no CORS
-  headers at all.
+  the images edition is twenty times that. Covers come from
+  `gutenberg.org/cache/epub/{id}/pg{id}.cover.medium.jpg`, always through
+  `/api/gutenberg/cover/{id}`, held at the edge for a year (`s-maxage`;
+  `max-age` alone only caches in the browser). gutenberg.org sends no CORS
+  headers at all, so nothing in the page fetches it directly.
 - Catalogue names are filed "Austen, Jane", and what follows the comma is
   sometimes an epithet ("Marcus Aurelius, Emperor of Rome"); some titles
   carry MARC subfield codes (`$b`). `catalogue.ts` handles both, with tests.

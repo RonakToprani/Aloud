@@ -1,7 +1,9 @@
 /**
- * The cover as bytes, for keeping with the book. An <img> can show the
- * original straight from gutenberg.org, but storing it needs a fetch, and
- * that needs CORS headers gutenberg.org does not send.
+ * A cover, for the shelf and for keeping with the book. Both go through
+ * here rather than to gutenberg.org: the store needs a fetch, which needs
+ * CORS headers gutenberg.org does not send, and the shelf would otherwise
+ * send a burst of thirty requests to a volunteer-run site for every page
+ * turned. Held at the edge for a year, so each cover is fetched once.
  */
 
 const YEAR = 31536000;
@@ -23,7 +25,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   return new Response(upstream.body, {
     headers: {
       "content-type": upstream.headers.get("content-type") ?? "image/jpeg",
-      "cache-control": `public, max-age=${YEAR}, immutable`,
+      "cache-control": `public, max-age=${YEAR}, s-maxage=${YEAR}, immutable`,
     },
   });
 }
