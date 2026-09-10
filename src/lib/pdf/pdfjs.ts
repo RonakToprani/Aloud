@@ -4,9 +4,10 @@ import type * as PdfJs from "pdfjs-dist/legacy/build/pdf.mjs";
  * pdf.js is a megabyte and a half and most readers never open a PDF, so it
  * is fetched the first time one is added and never before.
  *
- * The legacy build, not the modern one: it carries its own polyfills, which
- * is what lets the same file run in an older iPhone browser and under Node
- * in the tests.
+ * The legacy build, not the modern one: it carries its own polyfills, so the
+ * parser itself runs on an older phone browser and under Node in the tests.
+ * The worker it starts is a module worker either way, and a browser too old
+ * for those drops back to parsing in process.
  */
 let loading: Promise<typeof PdfJs> | null = null;
 
@@ -20,6 +21,12 @@ export function loadPdfJs(): Promise<typeof PdfJs> {
         pdfjs.GlobalWorkerOptions.workerSrc = `${assetBase(pdfjs.version)}pdf.worker.min.mjs`;
       }
       return pdfjs;
+    });
+    // A chunk that failed to arrive is a network away from arriving. Keeping
+    // the rejected promise would make one lost connection mean no PDF ever
+    // opens again on this page.
+    loading.catch(() => {
+      loading = null;
     });
   }
   return loading;

@@ -19,6 +19,18 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+/* /pdfjs/ carries its version in the path, so a new version never overwrites
+   the old one and the old one would otherwise sit in the cache for good.
+   Fetching one is the moment we learn which version is current. */
+async function dropOldPdfjs(cache, pathname) {
+  const version = pathname.split("/")[2];
+  if (!pathname.startsWith("/pdfjs/") || !version) return;
+  for (const request of await cache.keys()) {
+    const path = new URL(request.url).pathname;
+    if (path.startsWith("/pdfjs/") && path.split("/")[2] !== version) await cache.delete(request);
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -53,7 +65,13 @@ self.addEventListener("fetch", (event) => {
           fetch(request).then((response) => {
             if (response.ok) {
               const copy = response.clone();
-              caches.open(ASSETS).then((cache) => cache.put(request, copy)).catch(() => {});
+              caches
+                .open(ASSETS)
+                .then(async (cache) => {
+                  await cache.put(request, copy);
+                  await dropOldPdfjs(cache, url.pathname);
+                })
+                .catch(() => {});
             }
             return response;
           }),

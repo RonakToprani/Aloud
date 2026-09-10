@@ -11,7 +11,7 @@ This file is the things that are expensive to rediscover and easy to break.
 
 ```bash
 npm run dev          # localhost:3000
-npm test             # 112 tests, ~30s
+npm test             # 114 tests, ~30s
 npm run typecheck
 npm run build
 node scripts/pdfjs-assets.mjs # copy the pdf.js worker and data files into public/
@@ -82,7 +82,23 @@ ragged-right text falls short of the margin on every line. Margins are
 per column, so the second column of a paper is a margin and not one long
 indent. Change a threshold here and check it against a real book, not only
 the tests: `tests/pdfLayout.test.ts` states the geometry exactly, which is
-the point, and cannot tell you what actual typesetting does.
+the point, and cannot tell you what actual typesetting does. Measure it by
+counting the pages of a real book that come out with none of their text in
+any block; on a 900-page textbook that number should be the table of
+contents and nothing else.
+
+**Dropping a contents page is the rule most likely to eat a real one.** Half
+a book's pages have numbers on them: axis labels, tables, numbered exercises.
+So a page only goes if it has no prose on it at all *and* its numbers behave
+like page numbers — inside this book's range, mostly distinct, going up as
+the list goes down. Loosening any one of those cost about twenty pages of a
+real textbook, silently. A page between two contents pages goes with them.
+
+**A PDF costs about 350 MB of memory to read.** Measured on a 5.7 MB,
+900-page textbook: peak 350 MB resident, 165 MB heap, about 3 seconds. Most
+of it is pdf.js, not us — `doc.cleanup()` between pages was tried and
+changed nothing. Pages are turned into lines as they are read rather than
+held as text runs, which is the part that is ours to keep small.
 
 **pdf.js ships as files, not as a bundle.** `scripts/pdfjs-assets.mjs` copies
 the worker, the standard fonts and the CMaps into `public/pdfjs/<version>/`,

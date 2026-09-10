@@ -255,15 +255,54 @@ test("a contents page is skipped", () => {
 test("a contents page laid out with leader dots is skipped too", () => {
   const contents = page(0, [
     ...column(140, [
-      { text: "Mechanics of futures markets .................... 24", fill: 0.9 },
-      { text: "Hedging strategies using futures ................ 49", fill: 0.9 },
-      { text: "Interest rates .................................. 79", fill: 0.9 },
-      { text: "Determination of forward prices ................ 111", fill: 0.9 },
-      { text: "Interest rate futures .......................... 133", fill: 0.9 },
+      { text: "Mechanics of futures markets ..................... 2", fill: 0.9 },
+      { text: "Hedging strategies using futures ................. 3", fill: 0.9 },
+      { text: "Interest rates ................................... 4", fill: 0.9 },
+      { text: "Determination of forward prices .................. 5", fill: 0.9 },
+      { text: "Interest rate futures ............................ 6", fill: 0.9 },
     ]),
   ]);
-  const body = page(1, column(100, [{ text: "The book itself starts here.", fill: 0.4 }]));
-  assert.deepEqual(texts([contents, body]), ["The book itself starts here."]);
+  const body = [1, 2, 3, 4, 5, 6].map((n) =>
+    page(n, column(100, [{ text: `Page ${n} of the book itself, which runs the full` }, { text: "measure and then stops.", fill: 0.4 }])),
+  );
+  assert.deepEqual(
+    texts([contents, ...body]),
+    [1, 2, 3, 4, 5, 6].map((n) => `Page ${n} of the book itself, which runs the full measure and then stops.`),
+  );
+});
+
+test("a page in the middle of a contents list goes with it", () => {
+  const entries = (from: number) =>
+    column(140, [0, 1, 2, 3, 4, 5].map((n) => ({ text: `A chapter of the book ......... ${from + n}`, fill: 0.9 })));
+  // The middle page carries chapter names too long to leave room for their
+  // numbers, so nothing on it says "contents" on its own.
+  const middle = page(1, column(140, [
+    { text: "A chapter whose name fills the whole measure and leaves no room", fill: 0.95 },
+    { text: "Another chapter whose name does the same thing again over here", fill: 0.95 },
+  ]));
+  const body = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((n) =>
+    page(n, column(100, [{ text: `Page ${n} runs the whole measure across` }, { text: "and then stops.", fill: 0.3 }])),
+  );
+
+  const said = texts([page(0, entries(4)), middle, page(2, entries(10)), ...body]);
+  assert.ok(!said.some((text) => text.includes("A chapter")), said.slice(0, 2).join(" | "));
+  assert.equal(said.length, body.length);
+});
+
+test("a figure's axis labels are not a contents page", () => {
+  // Numbers going down the page, and larger than the book has pages: an
+  // axis, not a list of chapters.
+  const figure = page(0, [
+    ...column(100, [{ text: "Figure 23.1 The index from 2005 to 2010.", fill: 0.6 }]),
+    ...column(140, [
+      { text: "1800", x: 40, fill: 0.05 },
+      { text: "1600", x: 40, fill: 0.05 },
+      { text: "1400", x: 40, fill: 0.05 },
+      { text: "1200", x: 40, fill: 0.05 },
+      { text: "1000", x: 40, fill: 0.05 },
+    ]),
+  ]);
+  assert.ok(texts([figure]).some((text) => text.includes("Figure 23.1")));
 });
 
 test("an empty page contributes nothing and breaks nothing", () => {

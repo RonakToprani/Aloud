@@ -8,7 +8,7 @@
 
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { ParsedBook } from "@/lib/epub/parse";
-import { layoutPdf, type LaidOutBlock, type PdfPageText, type PdfTextItem } from "@/lib/pdf/layout";
+import { layoutLines, pageLines, type LaidOutBlock, type PdfLine, type PdfTextItem } from "@/lib/pdf/layout";
 import { assetOptions, loadPdfJs } from "@/lib/pdf/pdfjs";
 import { clean, isChapterHeading } from "@/lib/text/headings";
 import type { Block, Chapter } from "@/lib/types";
@@ -28,7 +28,7 @@ const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /** Text runs of one page in device space, page rotation applied, so the
  *  layout code only ever sees upright text with y growing downward. */
-async function readPage(page: PDFPageProxy, index: number): Promise<PdfPageText> {
+async function readPage(page: PDFPageProxy, index: number): Promise<PdfLine[]> {
   const { Util } = await loadPdfJs();
   const viewport = page.getViewport({ scale: 1 });
   const content = await page.getTextContent();
@@ -53,7 +53,10 @@ async function readPage(page: PDFPageProxy, index: number): Promise<PdfPageText>
   }
 
   page.cleanup();
-  return { index, width: viewport.width, height: viewport.height, items };
+  // Lines, not runs: a long book's text items are an order of magnitude more
+  // objects than the lines they collapse into, and holding every page's
+  // worth of them at once is what puts a phone out of memory.
+  return pageLines({ index, width: viewport.width, height: viewport.height, items });
 }
 
 /* --------------------------------------------------------------- chapters */
@@ -293,35 +296,47 @@ export async function parsePdf(
   }
 
   try {
-    const pages: PdfPageText[] = [];
-    let cover: Blob | undefined;
-
-    for (let i = 0; i < doc.numPages; i++) {
-      const page = await doc.getPage(i + 1);
-      if (i === 0) cover = await renderCover(page);
-      pages.push(await readPage(page, i));
-      onProgress?.((i + 1) / doc.numPages);
-      if (i % 8 === 7) await yieldToUi();
-    }
-
-    const { blocks } = layoutPdf(pages);
-    if (!blocks.length) {
-      throw new PdfParseError(
-        "No readable text was found in this PDF. It's most likely a scan: pictures of pages rather than text, which nothing can read aloud until it has been through a text recogniser.",
-      );
-    }
-
-    const info = (await doc.getMetadata().catch(() => null))?.info as Record<string, unknown> | undefined;
-    const title = metadataTitle(info?.Title) ?? titleFromFirstPage(blocks) ?? fallbackTitle;
-    const authorRaw = typeof info?.Author === "string" ? clean(info.Author) : "";
-    const author = authorRaw && authorRaw.length <= 120 && /\p{L}/u.test(authorRaw) ? authorRaw : null;
-
-    const chapters = buildChapters(blocks, await outlineCuts(doc), title);
-    onProgress?.(1);
-    return { title, author, chapters, cover };
+    return await read(doc, fallbackTitle, onProgress);
+  } catch (error) {
+    // A file that opens can still be broken further in: a page whose object
+    // is missing, a font that will not load. Whatever pdf.js says about it,
+    // the reader sees a sentence rather than "Bad (uncompressed) XRef entry".
+    throw describe(error);
   } finally {
     await doc.destroy().catch(() => {});
   }
+}
+
+async function read(
+  doc: PDFDocumentProxy,
+  fallbackTitle: string,
+  onProgress?: (fraction: number) => void,
+): Promise<ParsedBook> {
+  const pages: PdfLine[][] = [];
+  for (let i = 0; i < doc.numPages; i++) {
+    const page = await doc.getPage(i + 1);
+    pages.push(await readPage(page, i));
+    onProgress?.((i + 1) / doc.numPages);
+    if (i % 8 === 7) await yieldToUi();
+  }
+
+  const { blocks } = layoutLines(pages);
+  if (!blocks.length) {
+    throw new PdfParseError(
+      "No readable text was found in this PDF. It's most likely a scan: pictures of pages rather than text, which nothing can read aloud until it has been through a text recogniser.",
+    );
+  }
+
+  const info = (await doc.getMetadata().catch(() => null))?.info as Record<string, unknown> | undefined;
+  const title = metadataTitle(info?.Title) ?? titleFromFirstPage(blocks) ?? fallbackTitle;
+  const authorRaw = typeof info?.Author === "string" ? clean(info.Author) : "";
+  const author = authorRaw && authorRaw.length <= 120 && /\p{L}/u.test(authorRaw) ? authorRaw : null;
+
+  const chapters = buildChapters(blocks, await outlineCuts(doc), title);
+  // Last, not first: a book with no text to read gets no cover drawn for it.
+  const cover = await renderCover(await doc.getPage(1));
+  onProgress?.(1);
+  return { title, author, chapters, cover };
 }
 
 function describe(error: unknown): Error {

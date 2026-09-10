@@ -208,8 +208,14 @@ function findGutter(lines: PdfLine[], width: number): number | null {
 
 const byPosition = (a: PdfLine, b: PdfLine) => a.y - b.y || a.x - b.x;
 
-/** Every line of one page, in reading order. */
-function orderPage(page: PdfPageText): PdfLine[] {
+/**
+ * Every line of one page, in reading order.
+ *
+ * Exported so a book can be read a page at a time: nine hundred pages of
+ * text runs is a million objects held at once, and the lines they collapse
+ * into are a tenth of that. The caller keeps these and lets the runs go.
+ */
+export function pageLines(page: PdfPageText): PdfLine[] {
   const lines = groupIntoLines(page);
   const gutter = findGutter(lines, page.width);
   if (gutter === null) return lines.sort(byPosition);
@@ -227,7 +233,10 @@ function orderPage(page: PdfPageText): PdfLine[] {
  *  lines are compared with their digits blanked out. */
 const shape = (text: string) => text.replace(/\d+/g, "#").toLowerCase().trim();
 
-const PAGE_NUMBER = /^[[(]?(?:page\s*)?(?:\d{1,4}|[ivxlcdm]{1,8})[\])]?$/i;
+/** A folio: a number, or a roman numeral that is actually one. Spelled out
+ *  loosely, "MILD" and "CIVIL" are roman numerals and get read as page
+ *  numbers, and the words go missing from the book. */
+const PAGE_NUMBER = /^[[(]?(?:page\s*)?(?=[\dIVXLCDM])(?:\d{1,4}|M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{1,3}|I?V)?)[\])]?$/i;
 
 /**
  * Drop the furniture. A line in the margin band saying the same thing on
@@ -278,18 +287,67 @@ const CONTENTS_TITLE = /^(table of )?contents$/i;
  */
 /** "Measuring interest rates ................ 79" — a name, leader dots, and
  *  the page it is on. */
-const CONTENTS_ENTRY = /[.·]{3,}\s*\d{1,4}$/;
+const CONTENTS_ENTRY = /[.·]{3,}\s*(\d{1,4})$/;
 
-function isContentsPage(lines: PdfLine[]): boolean {
+/** Longer than a name and a page number, so it is a line of a book. */
+const PROSE = 80;
+
+/**
+ * A contents page is chapter names against page numbers. Read aloud it is a
+ * list of numbers, and the reader has a contents list of its own, so the
+ * whole page goes.
+ *
+ * The hard part is not finding one. It is not throwing away a page of a book
+ * that happens to have numbers on it: a figure's axis labels, a table, a
+ * numbered list of exercises. So the numbers have to behave like page
+ * numbers — pages this book has, going up as the list goes down — and there
+ * has to be no prose on the page at all.
+ */
+function isContentsPage(lines: PdfLine[], pageCount: number): boolean {
   if (lines.length < 5) return false;
   if (lines.some((line) => CONTENTS_TITLE.test(line.text))) return true;
+
+  // Measured without the leader dots, which are padding and not words: a
+  // contents entry runs the full measure and says twenty characters.
+  const prose = lines.filter((line) => line.text.replace(/[.·]{3,}/g, "").length > PROSE);
+  if (prose.length > lines.length * 0.25) return false;
+
   // Right-aligned page numbers arrive as lines of their own, because the gap
   // before them is wide enough to be a gutter. Leader dots keep them
   // attached. Either way, a page that is mostly these is a contents page.
-  const entries = lines.filter(
-    (line) => !line.margin && (/^\d{1,4}$/.test(line.text) || CONTENTS_ENTRY.test(line.text)),
-  ).length;
-  return entries >= 4 && entries >= lines.length * 0.25;
+  const folios: number[] = [];
+  for (const line of lines) {
+    if (line.margin) continue;
+    const match = /^(\d{1,4})$/.exec(line.text) ?? CONTENTS_ENTRY.exec(line.text);
+    if (match) folios.push(Number(match[1]));
+  }
+  if (folios.length < 4 || folios.length < lines.length * 0.25) return false;
+  if (folios.some((folio) => folio < 1 || folio > pageCount)) return false;
+  // A contents list never sends you to the same page four times. A page of
+  // equations says "2" over and over.
+  if (new Set(folios).size < folios.length * 0.8) return false;
+
+  let rising = 0;
+  for (let i = 1; i < folios.length; i++) if (folios[i] >= folios[i - 1]) rising++;
+  return rising >= (folios.length - 1) * 0.8;
+}
+
+/**
+ * A contents list runs over several pages, and one of them may be a spread
+ * of long chapter names with no page numbers reaching the right margin. A
+ * page sitting between two contents pages is one too.
+ */
+function bridgeContents(flags: boolean[]): boolean[] {
+  const out = [...flags];
+  for (let i = 0; i < out.length; i++) {
+    if (out[i]) continue;
+    let before = false;
+    for (let j = i - 1; j >= i - 2 && j >= 0; j--) if (flags[j]) before = true;
+    let after = false;
+    for (let j = i + 1; j <= i + 2 && j < flags.length; j++) if (flags[j]) after = true;
+    out[i] = before && after;
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ blocks */
@@ -381,7 +439,7 @@ function headingKind(line: PdfLine, metrics: LayoutMetrics, bodyFont: string): B
 }
 
 /** A word broken across a line break, which has to be put back together. */
-const HYPHEN_END = /\p{Ll}\p{L}[-‐­]$/u;
+const HYPHEN_END = /\p{Ll}\p{L}[-‐]$/u;
 
 function joinWrapped(previous: string, next: string): string {
   if (HYPHEN_END.test(previous) && /^\p{Ll}/u.test(next)) return `${previous.slice(0, -1)}${next}`;
@@ -396,8 +454,15 @@ const ENDS_SENTENCE = /[.!?…"'”’)\]]$/;
  * that stopped short of the right margin.
  */
 export function layoutPdf(pages: PdfPageText[]): { blocks: LaidOutBlock[]; metrics: LayoutMetrics } {
-  const lines = stripFurniture(pages.map(orderPage))
-    .filter((page) => !isContentsPage(page))
+  return layoutLines(pages.map(pageLines));
+}
+
+/** The same, for a caller that has already turned its pages into lines. */
+export function layoutLines(pages: PdfLine[][]): { blocks: LaidOutBlock[]; metrics: LayoutMetrics } {
+  const stripped = stripFurniture(pages);
+  const contents = bridgeContents(stripped.map((page) => isContentsPage(page, pages.length)));
+  const lines = stripped
+    .filter((_, page) => !contents[page])
     .flat()
     .filter((line) => line.text && !UNREADABLE.test(line.text));
   const metrics = measure(lines);
@@ -466,8 +531,9 @@ export function layoutPdf(pages: PdfPageText[]): { blocks: LaidOutBlock[]; metri
       const ended = isShort(open.right, open.column);
       if (line.page !== previous.page) {
         // A page turn is not a paragraph break: a book runs on across it.
-        // Unless the previous page stopped short, which means it ended one.
-        breaks = ended;
+        // Unless the previous page stopped short, or the new one opens on an
+        // indent, either of which means a paragraph ended at the page foot.
+        breaks = ended || (marked && isIndented(line));
       } else if (marked) {
         breaks = line.y - previous.y > metrics.leading * 1.45 || isIndented(line);
       } else {
