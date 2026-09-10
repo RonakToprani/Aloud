@@ -40,13 +40,18 @@ const RULES: Record<string, { any: string[]; none?: string[] }> = {
   children: { any: ["children's", "juvenile fiction", "juvenile literature"] },
 };
 
-async function page(n: number, attempt = 1): Promise<GutendexPage> {
+/** A page that will not come after several tries is left out. Thirty-two
+ *  books missing from deep in the list is a shelf; a run that dies is not. */
+async function page(n: number, attempt = 1): Promise<GutendexPage | null> {
   try {
-    const response = await fetch(gutendexUrl({ page: n }), { signal: AbortSignal.timeout(30000) });
+    const response = await fetch(gutendexUrl({ page: n }), { signal: AbortSignal.timeout(60000) });
     if (!response.ok) throw new Error(`${response.status}`);
     return (await response.json()) as GutendexPage;
   } catch (failure) {
-    if (attempt >= 5) throw failure;
+    if (attempt >= 6) {
+      console.log(`\npage ${n} skipped: ${String(failure)}`);
+      return null;
+    }
     await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
     return page(n, attempt + 1);
   }
@@ -58,7 +63,7 @@ async function main() {
     const batch = await Promise.all(
       Array.from({ length: Math.min(4, PAGES - n + 1) }, (_, i) => page(n + i)),
     );
-    for (const result of batch) raw.push(...result.results);
+    for (const result of batch) if (result) raw.push(...result.results);
     process.stdout.write(`\r${raw.length} records`);
   }
   console.log();
