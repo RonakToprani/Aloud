@@ -340,8 +340,12 @@ skip_nonce_check = false
 # callback URL registered, the id here, the secret in the environment, and
 # "facebook" added to NEXT_PUBLIC_AUTH_PROVIDERS. Only providers that cost
 # nothing are offered; Apple and X are not, see SignInView.tsx.
+# Off until Meta verifies a business portfolio for the app. Without that,
+# Advanced Access is refused, the app stays unpublished, and only its admins
+# can sign in. NEXT_PUBLIC_AUTH_PROVIDERS lists "google" alone, so no button
+# ships that cannot work.
 [auth.external.facebook]
-enabled = true
+enabled = false
 client_id = "1299405615490899"
 secret = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_SECRET)"
 
