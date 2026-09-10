@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { AppleIcon, BackIcon, CheckIcon, GoogleIcon } from "@/components/ui/Icons";
+import { AppleIcon, BackIcon, CheckIcon, FacebookIcon, GoogleIcon, XIcon } from "@/components/ui/Icons";
+import type { OAuthProviderId } from "@/components/AuthProvider";
 import { hasHadAccount } from "@/lib/storage/prefs";
 import styles from "./SignIn.module.css";
 
@@ -23,8 +24,22 @@ const PROVIDERS = new Set(
     .map((p) => p.trim().toLowerCase())
     .filter(Boolean),
 );
-const SHOW_APPLE = PROVIDERS.has("apple");
-const SHOW_GOOGLE = PROVIDERS.has("google");
+interface OAuthOption {
+  id: OAuthProviderId;
+  label: string;
+  Icon: typeof GoogleIcon;
+}
+
+/** In the order they are offered. One tap on a provider is the front door;
+ *  email is the side door, for people who would rather not link a social
+ *  account to what they read. */
+const ALL_OAUTH: OAuthOption[] = [
+  { id: "google", label: "Continue with Google", Icon: GoogleIcon },
+  { id: "facebook", label: "Continue with Facebook", Icon: FacebookIcon },
+  { id: "twitter", label: "Continue with X", Icon: XIcon },
+  { id: "apple", label: "Continue with Apple", Icon: AppleIcon },
+];
+const OAUTH = ALL_OAUTH.filter((entry) => PROVIDERS.has(entry.id));
 
 function validEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
@@ -54,6 +69,10 @@ export function SignInView() {
   /** Someone who has signed in on this device before is coming back to
    *  something; everyone else is being offered it for the first time. */
   const [returning, setReturning] = useState(false);
+  /** Email is the side door: shown on request, so three provider buttons
+   *  and a form do not compete on one screen. */
+  const [emailOpen, setEmailOpen] = useState(false);
+  const showEmail = OAUTH.length === 0 || emailOpen;
 
   useEffect(() => {
     setReturning(hasHadAccount());
@@ -96,7 +115,7 @@ export function SignInView() {
   }, [sentTo, code, verifyCode]);
 
   const oauth = useCallback(
-    async (provider: "apple" | "google") => {
+    async (provider: OAuthProviderId) => {
       setError(null);
       const { error: failure } = await signInWith(provider);
       if (failure) setError(failure);
@@ -205,6 +224,31 @@ export function SignInView() {
             </p>
           </div>
 
+          {OAUTH.length > 0 && (
+            <div className={styles.providers}>
+              {OAUTH.map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={styles.outlined}
+                  onClick={() => void oauth(id)}
+                  disabled={busy}
+                >
+                  <Icon size={16} />
+                  {label}
+                </button>
+              ))}
+              <p className={styles.caption}>One tap, no password. Your books stay yours either way.</p>
+            </div>
+          )}
+
+          {OAUTH.length > 0 && !emailOpen && (
+            <button type="button" className={styles.skip} onClick={() => setEmailOpen(true)}>
+              Use email instead
+            </button>
+          )}
+
+          {showEmail && (
           <form
             className={styles.form}
             onSubmit={(event) => {
@@ -232,29 +276,9 @@ export function SignInView() {
                 ? "No password. We send a one-time link that signs you in."
                 : "No password to make up. We send a one-time link, and that is your account."}
             </p>
-            {error && <p className={styles.error} role="alert">{error}</p>}
           </form>
-
-          {(SHOW_APPLE || SHOW_GOOGLE) && (
-            <>
-              <div className={styles.divider}>or</div>
-
-              <div className={styles.providers}>
-                {SHOW_APPLE && (
-                  <button type="button" className={styles.outlined} onClick={() => void oauth("apple")}>
-                    <AppleIcon size={16} />
-                    Continue with Apple
-                  </button>
-                )}
-                {SHOW_GOOGLE && (
-                  <button type="button" className={styles.outlined} onClick={() => void oauth("google")}>
-                    <GoogleIcon size={16} />
-                    Continue with Google
-                  </button>
-                )}
-              </div>
-            </>
           )}
+          {error && <p className={styles.error} role="alert">{error}</p>}
         </div>
       )}
 

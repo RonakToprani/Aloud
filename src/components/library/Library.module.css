@@ -504,6 +504,46 @@
   }
 }
 
+/* ---------- Keep your place ---------- */
+
+.nudge {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+}
+
+.nudgeText {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.nudgeTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  color: var(--ink-strong);
+}
+
+.nudgeBody {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ui-muted);
+  text-wrap: pretty;
+}
+
+.nudgeActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ---------- Add a book ---------- */
 
 .addList {

@@ -42,9 +42,30 @@ const UNDO_MS = 6000;
  *  library paints them before the network answers. */
 const REMOTE_CACHE_KEY = "aloud.remoteBooks.v1";
 /** Shown once, then never again on this device. */
-const DEVICE_ONLY_KEY = "aloud.deviceOnly.v1";
 
 /** What to call the file when asking for it back. */
+/** When the shelf last offered an account, so it asks again after a while
+ *  rather than every visit. A reader who said "not now" meant it for a week. */
+const NUDGE_KEY = "aloud.signupNudge.v1";
+const NUDGE_AGAIN_MS = 7 * 24 * 3600 * 1000;
+
+function nudgeSnoozed(): boolean {
+  try {
+    const at = Number(localStorage.getItem(NUDGE_KEY));
+    return at > 0 && Date.now() - at < NUDGE_AGAIN_MS;
+  } catch {
+    return false;
+  }
+}
+
+function snoozeNudge(): void {
+  try {
+    localStorage.setItem(NUDGE_KEY, String(Date.now()));
+  } catch {
+    /* it simply asks again next visit */
+  }
+}
+
 const SOURCE_NAME: Partial<Record<BookMeta["source"], string>> = { epub: "EPUB", pdf: "PDF" };
 
 const STAGE_LABEL: Record<ImportProgress["stage"], string> = {
@@ -120,11 +141,17 @@ export function LibraryView() {
   const [pasteOpen, setPasteOpen] = useState(false);
   /** The three ways in, offered from one button once the shelf exists. */
   const [addOpen, setAddOpen] = useState(false);
+  /** Whether the shelf may ask for an account this visit. Read after mount:
+   *  the server has no localStorage and must not paint the card. */
+  const [nudge, setNudge] = useState(false);
+
+  useEffect(() => {
+    setNudge(!nudgeSnoozed());
+  }, []);
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteBody, setPasteBody] = useState("");
   const [dragging, setDragging] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const noticeShown = useRef(false);
   /** The account-only book the reader tapped, waiting for its text. */
   const [missingBook, setMissingBook] = useState<BookMeta | null>(null);
 
@@ -170,38 +197,6 @@ export function LibraryView() {
       window.removeEventListener("pageshow", onShow);
     };
   }, [refresh]);
-
-  // Said once, as a passing note rather than a line of the page: a standing
-  // paragraph on a shelf you visit every day stops being read after the
-  // second visit and is furniture by the fifth.
-  useEffect(() => {
-    if (noticeShown.current || authStatus === "unavailable" || authStatus === "signed-in") return;
-    if (!books?.length) return;
-    try {
-      if (localStorage.getItem(DEVICE_ONLY_KEY)) return;
-    } catch {
-      return;
-    }
-    const timer = setTimeout(() => {
-      // Claimed here rather than above: this effect re-runs as the account
-      // and the shelf settle, and claiming it early let a re-run cancel the
-      // timer and then refuse to set another.
-      noticeShown.current = true;
-      try {
-        localStorage.setItem(DEVICE_ONLY_KEY, "seen");
-      } catch {
-        /* it offers again next time */
-      }
-      setToast({
-        id: Date.now(),
-        notice: true,
-        text: "These books live on this device only. Sign up to keep your library and your place in it on every device.",
-        durationMs: 13000,
-        action: { label: "Sign up", onAction: () => router.push("/signin") },
-      });
-    }, 1600);
-    return () => clearTimeout(timer);
-  }, [books, authStatus, router]);
 
   /* ---------------- sync with the account ---------------- */
 
@@ -590,6 +585,33 @@ export function LibraryView() {
       ) : (
         <>
           <StatsStrip />
+
+          {showAccount && !signedIn && nudge && (
+            <section className={styles.nudge} aria-label="Keep your place">
+              <div className={styles.nudgeText}>
+                <p className={styles.nudgeTitle}>Keep your place</p>
+                <p className={styles.nudgeBody}>
+                  Sign in and your books, your place in them and your bookmarks follow you to
+                  every device. One tap, no password.
+                </p>
+              </div>
+              <div className={styles.nudgeActions}>
+                <Link href="/signin" prefetch={false} className={styles.primaryButton}>
+                  Sign in
+                </Link>
+                <button
+                  type="button"
+                  className={styles.ghostButton}
+                  onClick={() => {
+                    snoozeNudge();
+                    setNudge(false);
+                  }}
+                >
+                  Not now
+                </button>
+              </div>
+            </section>
+          )}
 
           {continuing && (
             <section className={styles.continue} aria-labelledby="continue-heading">

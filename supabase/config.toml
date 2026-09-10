@@ -335,6 +335,20 @@ client_id = "320872251079-ehevbl976i608689uqnlqhq63ag62sms.apps.googleuserconten
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 skip_nonce_check = false
 
+# Facebook and X are offered first on the sign-in screen once their apps
+# exist. Each needs a developer app (developers.facebook.com, developer.x.com)
+# with the Supabase callback URL registered, then the id here, the secret
+# in the environment, and the provider name added to NEXT_PUBLIC_AUTH_PROVIDERS.
+[auth.external.facebook]
+enabled = false
+client_id = ""
+secret = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_SECRET)"
+
+[auth.external.twitter]
+enabled = false
+client_id = ""
+secret = "env(SUPABASE_AUTH_EXTERNAL_TWITTER_SECRET)"
+
 [auth.external.apple]
 enabled = false
 client_id = ""
