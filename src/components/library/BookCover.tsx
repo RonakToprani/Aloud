@@ -37,9 +37,11 @@ interface Props {
   /** Larger covers get the fuller drawn treatment. */
   size?: "sm" | "lg";
   className?: string;
+  /** Art that lives elsewhere, for a book not yet on this device. */
+  src?: string;
 }
 
-export function BookCover({ meta, size = "sm", className }: Props) {
+export function BookCover({ meta, size = "sm", className, src }: Props) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -50,16 +52,19 @@ export function BookCover({ meta, size = "sm", className }: Props) {
     return () => URL.revokeObjectURL(objectUrl);
   }, [meta.cover]);
 
+  const shown = url ?? src ?? null;
+
   return (
     <div className={`${styles.cover} ${className ?? ""}`} data-size={size}>
-      {url && !failed ? (
+      {shown && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className={styles.image}
-          src={url}
+          src={shown}
           alt=""
           loading="lazy"
           decoding="async"
+          referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
         />
       ) : (

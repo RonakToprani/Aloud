@@ -11,12 +11,14 @@ This file is the things that are expensive to rediscover and easy to break.
 
 ```bash
 npm run dev          # localhost:3000
-npm test             # 80 tests, ~30s
+npm test             # 121 tests, ~30s
 npm run typecheck
 npm run build
+node scripts/pdfjs-assets.mjs # copy the pdf.js worker and data files into public/
 node scripts/icons.mjs        # regenerate app icons from the logo geometry
 node scripts/screenshots.mjs  # every screen and theme (needs Chrome)
 node scripts/measure-gap.mjs  # how cloud audio is scheduled, through the real player
+npx tsx scripts/gutenberg-shelf.ts  # re-bake the public library catalogue (a few times a year)
 ```
 
 CI runs typecheck, tests and build on every push and PR. `main` is protected:
@@ -29,12 +31,19 @@ contributors need a PR plus a review, though the owner can push directly.
   engine-agnostic.
 - `src/lib/player/player.ts` — playback, one sentence per utterance.
 - `src/lib/speech/synchronizer.ts` — which word is lit, on two clocks.
-- `src/lib/epub/parse.ts`, `src/lib/text/segment.ts` — books in, blocks and
-  sentences out.
+- `src/lib/epub/parse.ts`, `src/lib/pdf/`, `src/lib/text/segment.ts` — books
+  in, blocks and sentences out. `pdf/layout.ts` is the geometry, `pdf/parse.ts`
+  the pdf.js side of it.
 - `src/lib/storage/` — IndexedDB for book text, localStorage for settings and
   places.
 - `src/lib/sync/` — the account layer. Never book text.
-- `src/lib/library/` — import, the sample, progress, the autoplay handoff.
+- `src/lib/library/` — import, the sample, progress, the autoplay handoff,
+  and `gutenberg.ts`, which fetches a public-library book and shelves it
+  through the same import as an uploaded EPUB.
+- `src/lib/gutenberg/` — the public library. `shelf.json` is the catalogue,
+  baked by `scripts/gutenberg-shelf.ts`; `src/app/api/gutenberg/` serves it
+  and proxies the EPUB and cover, which gutenberg.org will not serve
+  cross-origin.
 - `src/components/` — UI by screen. `reader/`, `library/`, `auth/`, `ui/`.
 - `supabase/` — migrations and project config.
 
@@ -70,6 +79,42 @@ before making a sound. Three separate bugs lived here.
 which is why stopping the passage is deferred by a turn. Removing that
 reintroduces a gap at every sentence.
 
+**A PDF's paragraphs are inferred, not read.** A PDF stores glyphs at
+coordinates and nothing about what a paragraph is, so `pdf/layout.ts` works
+it back out: runs sharing a baseline are a line, and a line begins a new
+paragraph on an indent, a blank line's worth of space, or a previous line
+that stopped short of the right margin. Which of those to trust is decided
+per document — a book that indents is never split on a short line, because
+ragged-right text falls short of the margin on every line. Margins are
+per column, so the second column of a paper is a margin and not one long
+indent. Change a threshold here and check it against a real book, not only
+the tests: `tests/pdfLayout.test.ts` states the geometry exactly, which is
+the point, and cannot tell you what actual typesetting does. Measure it by
+counting the pages of a real book that come out with none of their text in
+any block; on a 900-page textbook that number should be the table of
+contents and nothing else.
+
+**Dropping a contents page is the rule most likely to eat a real one.** Half
+a book's pages have numbers on them: axis labels, tables, numbered exercises.
+So a page only goes if it has no prose on it at all *and* its numbers behave
+like page numbers — inside this book's range, mostly distinct, going up as
+the list goes down. Loosening any one of those cost about twenty pages of a
+real textbook, silently. A page between two contents pages goes with them.
+
+**A PDF costs about 350 MB of memory to read.** Measured on a 5.7 MB,
+900-page textbook: peak 350 MB resident, 165 MB heap, about 3 seconds. Most
+of it is pdf.js, not us — `doc.cleanup()` between pages was tried and
+changed nothing. Pages are turned into lines as they are read rather than
+held as text runs, which is the part that is ours to keep small.
+
+**pdf.js ships as files, not as a bundle.** `scripts/pdfjs-assets.mjs` copies
+the worker, the standard fonts and the CMaps into `public/pdfjs/<version>/`,
+and `npm run dev`, `dev:local`, `build` and `start` all run it first. Every
+bundler spells `new URL(..., import.meta.url)` differently and fails quietly:
+the import resolves, the worker 404s, pdf.js silently parses on the main
+thread, and a long book freezes the page. The version is in the path so the
+service worker can cache it forever. `public/pdfjs/` is not committed.
+
 **Design tokens are one ladder.** Every theme in `globals.css` is the same
 lightness and chroma ladder with a different hue; the accent is a hue rotation
 on top. Do not hand-pick per-theme colours, or 4 themes x 3 accents x 2
@@ -77,6 +122,19 @@ highlight styles stops being one product.
 
 **Controls hide when the *reader* is idle,** not when the book advances. The
 sentence index is deliberately absent from that effect's dependencies.
+
+**The public library never goes to Gutendex at request time.** Its
+popularity list answers in a fifth of a second; its topic and search
+queries take half a minute or time out. So the front page, every genre and
+search are answered from `shelf.json`, baked from the popularity list and
+sorted into genres by Gutenberg's own subject headings. Only the EPUB and
+cover are fetched live, from gutenberg.org, through the proxies. A Gutenberg
+book is shelved exactly as an uploaded EPUB is: parsed text in IndexedDB,
+metadata to the account, never the text. The Gutenberg front matter and
+licence are cut off before shelving (`gutenberg/trim.ts`), so the book opens
+on its title page. `gutenbergId` goes up with the metadata (`books.gutenberg_id`)
+so a second device can fetch the book again instead of asking for a file;
+the cover never does, and the sync layer maps columns by name.
 
 **Safari closes IndexedDB behind a backgrounded tab.** `storage/db.ts` retries
 the open and reconnects on a stale handle. Without it, one failure poisons
@@ -91,6 +149,25 @@ applied with `supabase db push`; auth and provider settings live in
 Tables: `profiles` (settings), `books` (metadata only), `reading_positions`,
 `bookmarks`, `reading_sessions`, `reading_stats` (one pre-aggregated row).
 RLS on everything reader-owned; `reading_stats` is readable by anon.
+
+**A migration goes up before the deploy that needs it.** `books.source` is a
+check constraint (`epub`, `pdf`, `txt`, `paste`) and `books.gutenberg_id` is
+a nullable integer; a client that writes a value the live schema does not
+know has its row rejected and that book, its place and its bookmarks stop
+syncing silently. `supabase db push` first, then merge.
+
+**The catalogue is not in the database, and should not be.** The public
+library (`src/lib/gutenberg/shelf.json`) lives in the deployed app, where
+storage and bandwidth cost nothing. The free Supabase tier is 500 MB and
+5 GB egress a month; the full Gutenberg catalogue with search indexes would
+take 60 to 90 MB of it before the first reader, and every search would meter
+egress. Readers, their metadata, positions and bookmarks are all the
+database holds. See "Next" below.
+
+**`books.source` is a check constraint,** so a new kind of book needs a
+migration up before the deploy that can create one. A rejected row fails
+silently on a fire-and-forget push, and that book's position and bookmarks
+stop syncing with it. See `20260909000000_pdf_source.sql`.
 
 **Book ids are global.** `books.id` and `reading_positions.book_id` are
 primary keys across all users, so two users sharing an id means the second is
@@ -194,16 +271,70 @@ Selectors worth knowing:
 - the highlight is drawn as measured rectangles, not styled spans, so there is
   no "current word" element to query
 
+Headless Chrome has no device voices, so anything that has to actually speak
+needs a cloud voice written into `settings.v1` before the page loads, plus
+the book's id in `voiceChosen.v1`, or the first-run voice chooser sits in
+front of the reader.
+
 Adding a book without a file: click `Paste text`, then set the title input
 (`input[placeholder*="article"]`) and the textarea by calling the native value
 setter and dispatching an `input` event, then click `Add to library`.
 
-Reset first-run state by clearing the `aloud.*` keys. Force a cloud voice by
-writing `settings.v1` with `voiceId: "edge:en-US-AriaNeural"` before loading.
+Reset first-run state by clearing the `aloud.*` keys.
 
 To watch audio scheduling, wrap `AudioContext.prototype.createBufferSource` in
 `evaluateOnNewDocument` and log `start(when, offset)`; skip nodes with
 `loop === true`, which are the silent keep-alive feed.
+
+## The public library, as learned
+
+- Gutendex (gutendex.com) is one volunteer's mirror of the catalogue.
+  `sort=popular` pages answer in 0.2 s, any page. `topic=` and `search=`
+  took 15 to 30 s or timed out on every try. The by-number lookup
+  (`/books/{id}`) and `languages=es` on the popular sort are untimed but
+  should be fast; confirm before relying on either.
+- `scripts/gutenberg-shelf.ts` pulls 100 popular pages (3,200 records),
+  drops entries with no EPUB and Gutenberg's own "Index of the works of"
+  lists, dedupes editions on title + subtitle + author keeping the most
+  downloaded, sorts into twelve genres by subject headings (rules in the
+  script), caps each at 96, trims summaries to 600 characters, and writes
+  ~2.3 MB. Gutendex can crawl for ten minutes on a bad hour; a page that
+  fails six tries is skipped rather than failing the run.
+- `pg{id}.epub` (the `.epub.noimages` redirect) is about half a megabyte;
+  the images edition is twenty times that. Covers are hotlinked from
+  `gutenberg.org/cache/epub/{id}/pg{id}.cover.medium.jpg` in `<img>` tags;
+  fetching one as data needs the proxy, since gutenberg.org sends no CORS
+  headers at all.
+- Catalogue names are filed "Austen, Jane", and what follows the comma is
+  sometimes an epithet ("Marcus Aurelius, Emperor of Rome"); some titles
+  carry MARC subfield codes (`$b`). `catalogue.ts` handles both, with tests.
+- Every Gutenberg EPUB opens on a page about Project Gutenberg and closes
+  with the licence, between `*** START OF` and `*** END OF` markers, with
+  notes about the file just inside the first. `gutenberg/trim.ts` takes
+  all of it off. Chapter splitting inside the book is the EPUB's own.
+
+## Next: the whole catalogue, still free
+
+Agreed on 10 Sep 2026, not started. The shelf knows the 2,896 most-read
+English books; a Spanish reader sees nothing, and *Don Quijote* is not
+findable though it would import in a second (the proxies take any number).
+
+- Bake Gutenberg's own `pg_catalog.csv` (every book: number, title,
+  author, language, subjects; ~75,000 rows, no download counts, no
+  summaries) into the function the same way as `shelf.json`: 5 to 6 MB
+  compact, loaded per cold start, linear-scanned in milliseconds. Search
+  then covers everything in every language with no live dependency.
+- Keep the popularity bake for `downloads` and for the summaries of the
+  popular pool. For the long tail, fetch the summary live from Gutendex
+  when the sheet opens, 3 to 4 s timeout, slotted in if it comes; the sheet
+  is complete without it. No write-back anywhere.
+- Store `language` on `BookMeta` (the CSV and the EPUB both carry it). The
+  voice does not need special handling: the cloud voices include good
+  multilingual ones.
+- Per-language front pages from the fast popular endpoint with
+  `languages=`, defaulting from the browser locale.
+- Function memory goes from ~5 MB to ~40 MB with the index loaded. Fine,
+  but the route should not grow much else.
 
 ## Conventions
 

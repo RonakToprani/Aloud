@@ -32,6 +32,7 @@ interface BookRow {
   chapter_titles: string[];
   chapter_sentence_counts: number[];
   chapter_word_counts: number[];
+  gutenberg_id?: number | null;
 }
 
 interface PositionRow {
@@ -79,6 +80,7 @@ function toBookRow(meta: BookMeta, uid: string): BookRow {
     chapter_titles: meta.chapterTitles,
     chapter_sentence_counts: meta.chapterSentenceCounts,
     chapter_word_counts: meta.chapterWordCounts,
+    gutenberg_id: meta.gutenbergId ?? null,
   };
 }
 
@@ -94,6 +96,7 @@ function fromBookRow(row: BookRow): RemoteBook {
     chapterTitles: row.chapter_titles ?? [],
     chapterSentenceCounts: row.chapter_sentence_counts ?? [],
     chapterWordCounts: row.chapter_word_counts ?? [],
+    ...(typeof row.gutenberg_id === "number" ? { gutenbergId: row.gutenberg_id } : {}),
     missing: true,
   };
 }
@@ -102,7 +105,13 @@ export async function pushBooks(metas: BookMeta[]): Promise<void> {
   const supabase = getSupabase();
   const uid = await userId();
   if (!supabase || !uid || !metas.length) return;
-  await supabase.from("books").upsert(metas.map((meta) => toBookRow(meta, uid)), { onConflict: "id" });
+  const rows = metas.map((meta) => toBookRow(meta, uid));
+  const { error } = await supabase.from("books").upsert(rows, { onConflict: "id" });
+  if (!error || rows.length === 1) return;
+  // One bad row aborts the whole statement, and the rest of the library goes
+  // unsynced with it. A book the account cannot accept — a kind of book this
+  // deployment's schema predates, say — must not take the others down.
+  for (const row of rows) await supabase.from("books").upsert(row, { onConflict: "id" });
 }
 
 export async function pullBooks(): Promise<RemoteBook[] | null> {

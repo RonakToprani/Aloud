@@ -203,3 +203,10 @@ export const ArrowDownIcon = ({ size = 16, className }: IconProps) => (
     <path d="m6.6 13.2 5.4 5.4 5.4-5.4" />
   </svg>
 );
+
+export const SearchIcon = ({ size = 16, className }: IconProps) => (
+  <svg {...base(size)} className={className}>
+    <circle cx="11" cy="11" r="6.4" />
+    <path d="m19 19-3.4-3.4" />
+  </svg>
+);

@@ -30,6 +30,7 @@ import {
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { requestAutoplay } from "@/lib/library/autoplay";
 import { bookFraction } from "@/lib/library/progress";
+import { addGutenbergBook } from "@/lib/library/gutenberg";
 import { addSampleBook } from "@/lib/library/sample";
 import { BookCover } from "./BookCover";
 import type { BookBody, BookMeta } from "@/lib/types";
@@ -42,6 +43,9 @@ const UNDO_MS = 6000;
 const REMOTE_CACHE_KEY = "aloud.remoteBooks.v1";
 /** Shown once, then never again on this device. */
 const DEVICE_ONLY_KEY = "aloud.deviceOnly.v1";
+
+/** What to call the file when asking for it back. */
+const SOURCE_NAME: Partial<Record<BookMeta["source"], string>> = { epub: "EPUB", pdf: "PDF" };
 
 const STAGE_LABEL: Record<ImportProgress["stage"], string> = {
   reading: "Reading the file",
@@ -471,6 +475,9 @@ export function LibraryView() {
               >
                 Paste text
               </button>
+              <Link href="/browse" className={styles.ghostButton}>
+                Browse
+              </Link>
               <button
                 type="button"
                 className={styles.primaryButton}
@@ -489,7 +496,7 @@ export function LibraryView() {
       <input
         ref={fileInput}
         type="file"
-        accept=".epub,.txt,.md,application/epub+zip,text/plain"
+        accept=".epub,.pdf,.txt,.md,application/epub+zip,application/pdf,text/plain"
         className="srOnly"
         onChange={(event) => {
           onFiles(event.target.files);
@@ -564,6 +571,16 @@ export function LibraryView() {
             >
               Add a book
             </button>
+            <Link
+              href="/browse"
+              className={styles.landingSecondary}
+              aria-disabled={busy || undefined}
+              onClick={(event) => {
+                if (busy) event.preventDefault();
+              }}
+            >
+              Browse classics
+            </Link>
             <button
               type="button"
               className={styles.landingQuiet}
@@ -725,8 +742,11 @@ export function LibraryView() {
             </div>
             <p className={styles.missingBody}>
               Your place and bookmarks are saved to your account, but the text stays on the device
-              you added it from. Add the same {missingBook.source === "paste" ? "text" : "file"}{" "}
-              here and you&rsquo;ll carry on
+              you added it from.{" "}
+              {missingBook.gutenbergId !== undefined
+                ? "Fetch it from Project Gutenberg again"
+                : `Add the same ${missingBook.source === "paste" ? "text" : "file"} here`}{" "}
+              and you&rsquo;ll carry on
               {readingOf(missingBook).fraction > 0
                 ? missingBook.chapterTitles.length > 1
                   ? ` in ${missingBook.chapterTitles[readingOf(missingBook).chapterIndex] ?? "the same chapter"}`
@@ -734,7 +754,24 @@ export function LibraryView() {
                 : " from the start"}
               .
             </p>
-            {missingBook.source === "paste" ? (
+            {missingBook.gutenbergId !== undefined ? (
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() => {
+                  const ref = {
+                    id: missingBook.gutenbergId as number,
+                    title: missingBook.title,
+                    author: missingBook.author,
+                  };
+                  const options = { id: missingBook.id, addedAt: missingBook.addedAt };
+                  void runImport(() => addGutenbergBook(ref, setProgress, options));
+                }}
+              >
+                <PlusIcon size={17} />
+                Fetch it again
+              </button>
+            ) : missingBook.source === "paste" ? (
               <button
                 type="button"
                 className={styles.primaryButton}
@@ -754,7 +791,7 @@ export function LibraryView() {
                 onClick={() => pickFile({ id: missingBook.id, addedAt: missingBook.addedAt })}
               >
                 <PlusIcon size={17} />
-                Choose the {missingBook.source === "epub" ? "EPUB" : "file"}
+                Choose the {SOURCE_NAME[missingBook.source] ?? "file"}
               </button>
             )}
             <button

@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { bareHeading, CHAPTER_WORD, clean, isAllCaps, isChapterHeading, ROMAN } from "@/lib/text/headings";
 import type { Block, BlockKind, Chapter } from "@/lib/types";
 
 export class DrmProtectedError extends Error {
@@ -37,19 +38,12 @@ const SKIP_TAGS = new Set([
 const FLOW_TAGS = new Set(["TABLE", "THEAD", "TBODY", "TFOOT", "TR", "TD", "TH", "HR", "CAPTION"]);
 const BLOCK_SELECTOR = "p,h1,h2,h3,h4,h5,h6,blockquote,li,dd,dt,figcaption,pre";
 
-/** Invisible characters that would otherwise land inside words. */
-const INVISIBLE = /[\u00AD\u200B\u200C\u200D\uFEFF]/g;
-
 function safeDecode(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
     return value;
   }
-}
-
-function clean(text: string): string {
-  return text.replace(INVISIBLE, "").replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /** Text of an element with a space at every block or line boundary, so
@@ -96,30 +90,24 @@ function kindOf(tag: string): BlockKind {
   }
 }
 
-/** Walk the document in order, flushing loose inline text into paragraphs so
- *  nothing readable is dropped and nothing is emitted twice. */
+const HEADING_CLASS = /chap|title|head|ttl|heading/i;
+
 /**
  * Chapter openings in converted books are rarely real headings: a bold or
  * centred paragraph reading "CHAPTER SEVEN", a lone roman numeral, a line in
  * capitals. A short paragraph that looks like one is treated as one, which
  * is what lets a single-file book be split into chapters at all.
  */
-const CHAPTER_WORD =
-  /^(chapter|part|book|prologue|epilogue|interlude|intermission|act|scene|canto|letter|section)\b/i;
-const ROMAN = /^[IVXLCDM]{1,8}$/;
-const HEADING_CLASS = /chap|title|head|ttl|heading/i;
-
 function looksLikeHeading(text: string, element: Element): boolean {
   if (text.length > 60) return false;
   const words = text.split(/\s+/).filter(Boolean);
   if (!words.length || words.length > 8) return false;
-  const bare = text.replace(/[.:\-–—]+$/, "").trim();
+  const bare = bareHeading(text);
   if (CHAPTER_WORD.test(bare)) return true;
   if (ROMAN.test(bare) || /^\d{1,3}$/.test(bare)) return true;
   // Anything below needs a line that does not read as a sentence.
   if (/[.!?,;]$/.test(text)) return false;
-  const letters = bare.replace(/[^\p{L}]/gu, "");
-  if (letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()) return true;
+  if (isAllCaps(bare)) return true;
   const className = element.getAttribute("class") ?? "";
   if (HEADING_CLASS.test(className)) return true;
   const style = element.getAttribute("style") ?? "";
@@ -136,6 +124,8 @@ interface Extracted {
   anchors: Map<string, number>;
 }
 
+/** Walk the document in order, flushing loose inline text into paragraphs so
+ *  nothing readable is dropped and nothing is emitted twice. */
 function extractBlocks(root: Element): Extracted {
   const out: Block[] = [];
   const anchors = new Map<string, number>();
@@ -331,12 +321,6 @@ function buildTocEntries(doc: Document, basePath: string): TocEntry[] {
 
 /** A page that is itself a table of contents has nothing to read. */
 const CONTENTS_TITLE = /^(table of )?contents$/i;
-
-/** Titles a chapter should be split at even without a table of contents. */
-function isChapterHeading(text: string): boolean {
-  const bare = text.replace(/[.:\-–—]+$/, "").trim();
-  return CHAPTER_WORD.test(bare) || ROMAN.test(bare) || /^\d{1,3}$/.test(bare);
-}
 
 /** Files shorter than this without a title of their own are the tail of the
  *  previous chapter, split across pages by a converter. */

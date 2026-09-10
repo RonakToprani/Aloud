@@ -1,9 +1,10 @@
 import { DrmProtectedError, EpubParseError, parseEpub, parsePlainText, type ParsedBook } from "@/lib/epub/parse";
+import { parsePdf, PdfParseError } from "@/lib/pdf/parse";
 import { putBook, storageHeadroom, StorageFullError } from "@/lib/storage/db";
 import { segmentChapter } from "@/lib/text/segment";
 import type { BookMeta } from "@/lib/types";
 
-export { DrmProtectedError, EpubParseError, StorageFullError };
+export { DrmProtectedError, EpubParseError, PdfParseError, StorageFullError };
 
 export class FileTooLargeError extends Error {
   constructor(message: string) {
@@ -57,9 +58,16 @@ export interface ImportOptions {
   addedAt?: number;
   /** Overrides the author, for text that carries no metadata of its own. */
   author?: string;
+  /** Overrides the title, where the catalogue's is cleaner than the file's. */
+  title?: string;
+  /** A cover from elsewhere, for a file that ships without one. */
+  cover?: Blob;
+  gutenbergId?: number;
 }
 
-async function persist(
+/** Shelves an already-parsed book. The file importers below all end here,
+ *  and so does anything that has to look at the text before it is kept. */
+export async function importParsedBook(
   book: ParsedBook,
   source: BookMeta["source"],
   onProgress?: (progress: ImportProgress) => void,
@@ -72,14 +80,15 @@ async function persist(
 
   const meta: BookMeta = {
     id: options?.id ?? makeId(),
-    title: book.title,
+    title: options?.title ?? book.title,
     author: options?.author ?? book.author,
     source,
     addedAt: options?.addedAt ?? Date.now(),
     chapterTitles: book.chapters.map((chapter) => chapter.title),
     ...counts,
-    cover: book.cover,
+    cover: options?.cover ?? book.cover,
   };
+  if (options?.gutenbergId !== undefined) meta.gutenbergId = options.gutenbergId;
 
   onProgress?.({ stage: "saving", fraction: 0 });
   await putBook(meta, { id: meta.id, chapters: book.chapters });
@@ -88,11 +97,14 @@ async function persist(
 }
 
 /** EPUBs decompress to several times their file size, and the parsed text plus
- *  the index has to fit alongside. Refuse early rather than half-import. */
-async function assertRoom(bytes: number): Promise<void> {
+ *  the index has to fit alongside. Refuse early rather than half-import.
+ *
+ *  A PDF is mostly fonts and images, none of which is kept: what lands in
+ *  storage is the text, which is a fraction of the file. */
+export async function assertRoom(bytes: number, expansion: number): Promise<void> {
   const headroom = await storageHeadroom();
   if (headroom === null) return;
-  const needed = bytes * 4;
+  const needed = Math.max(bytes * expansion, 1);
   if (headroom > needed) return;
   const mb = (value: number) => `${Math.max(1, Math.round(value / 1024 / 1024))} MB`;
   throw new FileTooLargeError(
@@ -105,18 +117,26 @@ export async function importFile(
   onProgress?: (progress: ImportProgress) => void,
   options?: ImportOptions,
 ): Promise<BookMeta> {
-  await assertRoom(file.size);
-  onProgress?.({ stage: "reading", fraction: 0 });
-
   const name = file.name.replace(/\.[^.]+$/, "") || "Untitled";
   const isEpub = /\.epub$/i.test(file.name) || file.type === "application/epub+zip";
+  const isPdfFile = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+  await assertRoom(file.size, isPdfFile ? 0.5 : 4);
+  onProgress?.({ stage: "reading", fraction: 0 });
 
   if (isEpub) {
     onProgress?.({ stage: "parsing", fraction: 0 });
     const parsed = await parseEpub(file, (fraction) =>
       onProgress?.({ stage: "parsing", fraction }),
     );
-    return persist(parsed, "epub", onProgress, options);
+    return importParsedBook(parsed, "epub", onProgress, options);
+  }
+
+  if (isPdfFile) {
+    onProgress?.({ stage: "parsing", fraction: 0 });
+    const parsed = await parsePdf(await file.arrayBuffer(), name, (fraction) =>
+      onProgress?.({ stage: "parsing", fraction }),
+    );
+    return importParsedBook(parsed, "pdf", onProgress, options);
   }
 
   // A saved web page is a book too; it just needs its markup taken off.
@@ -126,20 +146,20 @@ export async function importFile(
     const doc = new DOMParser().parseFromString(await decodeText(file), "text/html");
     const title = doc.title.trim() || name;
     const text = extractText(doc.body);
-    return persist(parsePlainText(text, title), "txt", onProgress, options);
+    return importParsedBook(parsePlainText(text, title), "txt", onProgress, options);
   }
 
   const isText = /\.(txt|md|markdown)$/i.test(file.name) || file.type.startsWith("text/");
   if (!isText) {
     throw new EpubParseError(
-      "Aloud reads EPUB and plain text files. This one is neither. If it's a PDF, it will need converting to EPUB first.",
+      "Aloud reads EPUB, PDF and plain text files. This one is none of those.",
     );
   }
 
   onProgress?.({ stage: "parsing", fraction: 0 });
   let text = await decodeText(file);
   if (/\.(md|markdown)$/i.test(file.name)) text = stripMarkdown(text);
-  return persist(parsePlainText(text, name), "txt", onProgress, options);
+  return importParsedBook(parsePlainText(text, name), "txt", onProgress, options);
 }
 
 /** UTF-8 first; a file that isn't valid UTF-8 is almost always Windows-1252,
@@ -181,7 +201,7 @@ export async function importPastedText(
   onProgress?: (progress: ImportProgress) => void,
   options?: ImportOptions,
 ): Promise<BookMeta> {
-  return persist(parsePlainText(text, title.trim() || "Pasted text"), "paste", onProgress, options);
+  return importParsedBook(parsePlainText(text, title.trim() || "Pasted text"), "paste", onProgress, options);
 }
 
 /** Turns any import failure into something a person can act on. */
@@ -196,11 +216,14 @@ export function describeImportError(error: unknown): { title: string; detail: st
   if (error instanceof FileTooLargeError || error instanceof StorageFullError) {
     return { title: "Not enough space on this device", detail: error.message };
   }
-  if (error instanceof EpubParseError) {
+  if (error instanceof EpubParseError || error instanceof PdfParseError) {
     return { title: "That file couldn't be opened", detail: error.message };
   }
   if (error instanceof Error && error.name === "StorageUnavailableError") {
     return { title: "Storage isn't available", detail: error.message };
+  }
+  if (error instanceof Error && error.name === "DownloadError") {
+    return { title: "That book couldn't be fetched", detail: error.message };
   }
   return {
     title: "That file couldn't be opened",

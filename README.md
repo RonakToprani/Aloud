@@ -16,7 +16,7 @@
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-8b8f99?style=flat-square" /></a>
 </p>
 
-Aloud is a read-along reader for the web. Add an EPUB, a text file, or paste
+Aloud is a read-along reader for the web. Add an EPUB, a PDF, a text file, or paste
 anything, and it reads to you with a real voice while the sentence and the
 word being spoken light up on the page. It's a personal library: the books
 you bring, nothing else. No store, no feed, no social layer.
@@ -32,8 +32,11 @@ on every device.
 
 ## What it does
 
-- **Reads any book you own.** EPUB and plain text. Books stay on your device;
+- **Reads any book you own.** EPUB, PDF and plain text. Books stay on your device;
   the text is never uploaded anywhere.
+- **Comes with a library.** Browse the most-read books on Project Gutenberg
+  by genre or by name, with their covers, and add one in a tap. It arrives
+  as an ordinary EPUB, parsed and kept on the device like a book of your own.
 - **Lights every word.** A single pill glides from word to word as it's
   spoken, with the current sentence washed behind it. Tap any word to start
   reading from there. Hold a sentence to bookmark it. Read ahead and the
