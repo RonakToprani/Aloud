@@ -341,8 +341,8 @@ skip_nonce_check = false
 # "facebook" added to NEXT_PUBLIC_AUTH_PROVIDERS. Only providers that cost
 # nothing are offered; Apple and X are not, see SignInView.tsx.
 [auth.external.facebook]
-enabled = false
-client_id = ""
+enabled = true
+client_id = "1299405615490899"
 secret = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_SECRET)"
 
 [auth.external.apple]
