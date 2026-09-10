@@ -38,7 +38,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || url.pathname === "/manifest.webmanifest") {
+  // /pdfjs/ carries its version in the path, so a cached copy can never be
+  // the wrong one, the same as a built asset.
+  if (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/icons/") ||
+    url.pathname.startsWith("/pdfjs/") ||
+    url.pathname === "/manifest.webmanifest"
+  ) {
     event.respondWith(
       caches.match(request).then(
         (hit) =>

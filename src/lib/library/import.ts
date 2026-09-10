@@ -1,9 +1,10 @@
 import { DrmProtectedError, EpubParseError, parseEpub, parsePlainText, type ParsedBook } from "@/lib/epub/parse";
+import { parsePdf, PdfParseError } from "@/lib/pdf/parse";
 import { putBook, storageHeadroom, StorageFullError } from "@/lib/storage/db";
 import { segmentChapter } from "@/lib/text/segment";
 import type { BookMeta } from "@/lib/types";
 
-export { DrmProtectedError, EpubParseError, StorageFullError };
+export { DrmProtectedError, EpubParseError, PdfParseError, StorageFullError };
 
 export class FileTooLargeError extends Error {
   constructor(message: string) {
@@ -88,11 +89,14 @@ async function persist(
 }
 
 /** EPUBs decompress to several times their file size, and the parsed text plus
- *  the index has to fit alongside. Refuse early rather than half-import. */
-async function assertRoom(bytes: number): Promise<void> {
+ *  the index has to fit alongside. Refuse early rather than half-import.
+ *
+ *  A PDF is mostly fonts and images, none of which is kept: what lands in
+ *  storage is the text, which is a fraction of the file. */
+async function assertRoom(bytes: number, expansion: number): Promise<void> {
   const headroom = await storageHeadroom();
   if (headroom === null) return;
-  const needed = bytes * 4;
+  const needed = Math.max(bytes * expansion, 1);
   if (headroom > needed) return;
   const mb = (value: number) => `${Math.max(1, Math.round(value / 1024 / 1024))} MB`;
   throw new FileTooLargeError(
@@ -105,11 +109,11 @@ export async function importFile(
   onProgress?: (progress: ImportProgress) => void,
   options?: ImportOptions,
 ): Promise<BookMeta> {
-  await assertRoom(file.size);
-  onProgress?.({ stage: "reading", fraction: 0 });
-
   const name = file.name.replace(/\.[^.]+$/, "") || "Untitled";
   const isEpub = /\.epub$/i.test(file.name) || file.type === "application/epub+zip";
+  const isPdfFile = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+  await assertRoom(file.size, isPdfFile ? 0.5 : 4);
+  onProgress?.({ stage: "reading", fraction: 0 });
 
   if (isEpub) {
     onProgress?.({ stage: "parsing", fraction: 0 });
@@ -117,6 +121,14 @@ export async function importFile(
       onProgress?.({ stage: "parsing", fraction }),
     );
     return persist(parsed, "epub", onProgress, options);
+  }
+
+  if (isPdfFile) {
+    onProgress?.({ stage: "parsing", fraction: 0 });
+    const parsed = await parsePdf(await file.arrayBuffer(), name, (fraction) =>
+      onProgress?.({ stage: "parsing", fraction }),
+    );
+    return persist(parsed, "pdf", onProgress, options);
   }
 
   // A saved web page is a book too; it just needs its markup taken off.
@@ -132,7 +144,7 @@ export async function importFile(
   const isText = /\.(txt|md|markdown)$/i.test(file.name) || file.type.startsWith("text/");
   if (!isText) {
     throw new EpubParseError(
-      "Aloud reads EPUB and plain text files. This one is neither. If it's a PDF, it will need converting to EPUB first.",
+      "Aloud reads EPUB, PDF and plain text files. This one is none of those.",
     );
   }
 
@@ -196,7 +208,7 @@ export function describeImportError(error: unknown): { title: string; detail: st
   if (error instanceof FileTooLargeError || error instanceof StorageFullError) {
     return { title: "Not enough space on this device", detail: error.message };
   }
-  if (error instanceof EpubParseError) {
+  if (error instanceof EpubParseError || error instanceof PdfParseError) {
     return { title: "That file couldn't be opened", detail: error.message };
   }
   if (error instanceof Error && error.name === "StorageUnavailableError") {
