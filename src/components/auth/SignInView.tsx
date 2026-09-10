@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { AppleIcon, BackIcon, CheckIcon, FacebookIcon, GoogleIcon, XIcon } from "@/components/ui/Icons";
+import { BackIcon, CheckIcon, FacebookIcon, GoogleIcon } from "@/components/ui/Icons";
 import type { OAuthProviderId } from "@/components/AuthProvider";
 import { hasHadAccount } from "@/lib/storage/prefs";
 import styles from "./SignIn.module.css";
@@ -32,12 +32,15 @@ interface OAuthOption {
 
 /** In the order they are offered. One tap on a provider is the front door;
  *  email is the side door, for people who would rather not link a social
- *  account to what they read. */
+ *  account to what they read.
+ *
+ *  Only providers that cost nothing to run belong here, because the site is
+ *  free and stays that way. Apple wants $99 a year for the entitlement, and
+ *  X bills the profile lookup Supabase makes after every sign-in against a
+ *  prepaid balance. Google and Facebook charge nothing for plain sign-in. */
 const ALL_OAUTH: OAuthOption[] = [
   { id: "google", label: "Continue with Google", Icon: GoogleIcon },
   { id: "facebook", label: "Continue with Facebook", Icon: FacebookIcon },
-  { id: "twitter", label: "Continue with X", Icon: XIcon },
-  { id: "apple", label: "Continue with Apple", Icon: AppleIcon },
 ];
 const OAUTH = ALL_OAUTH.filter((entry) => PROVIDERS.has(entry.id));
 

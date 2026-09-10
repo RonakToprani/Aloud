@@ -35,8 +35,8 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
 }
 
-/** Supabase's names for them; X is still "twitter" there. */
-export type OAuthProviderId = "apple" | "google" | "facebook" | "twitter";
+/** The providers the sign-in screen may offer, by Supabase's names. */
+export type OAuthProviderId = "google" | "facebook";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
