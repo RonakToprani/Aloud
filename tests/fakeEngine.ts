@@ -1,5 +1,6 @@
 import type {
   EngineVoice,
+  PreparedSentence,
   SpeakCallbacks,
   SpeakOptions,
   SpeechEngine,
@@ -39,6 +40,11 @@ export class FakeEngine implements SpeechEngine {
   ignorePause = false;
 
   readonly spoken: SpokenRequest[] = [];
+  /** Passage plans the player offered, in the order they were offered. An
+   *  engine that reads in passages is the only reason `prepare` exists, and
+   *  its contract — the first entry is the text speak() will be given next —
+   *  can only be checked against what was actually spoken. */
+  readonly prepared: PreparedSentence[][] = [];
   private speaking = false;
   private paused = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
@@ -53,6 +59,9 @@ export class FakeEngine implements SpeechEngine {
     return () => {};
   }
   unlock() {}
+  prepare(sentences: PreparedSentence[]) {
+    this.prepared.push(sentences.map((sentence) => ({ ...sentence })));
+  }
 
   private later(fn: () => void, ms: number) {
     const timer = setTimeout(() => {

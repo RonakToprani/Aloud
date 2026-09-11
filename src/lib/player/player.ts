@@ -1,6 +1,6 @@
 import type { SpeechEngine, SpeechError, UtteranceHandle } from "@/lib/speech/engine";
 import { SentenceSynchronizer, type SyncMode } from "@/lib/speech/synchronizer";
-import type { SegmentedChapter } from "@/lib/text/segment";
+import type { SegmentedChapter, Sentence } from "@/lib/text/segment";
 
 export type PlayerStatus = "idle" | "playing" | "paused" | "ended";
 
@@ -128,11 +128,15 @@ export class Player {
 
   play(): void {
     if (this.state.status === "playing") return;
+    // A press of play is a fresh attempt. Without this, a voice that had
+    // already spent its recovery budget stayed spent: the error it left
+    // stood for the life of the page and playing again gave up at the first
+    // hiccup instead of trying.
+    this.recoveries = 0;
     if (this.state.status === "paused") {
       this.resume();
       return;
     }
-    this.recoveries = 0;
     this.speakCurrent();
   }
 
@@ -169,6 +173,16 @@ export class Player {
 
     if (this.pausedByCancel) {
       this.pausedByCancel = false;
+      this.speakCurrent();
+      return;
+    }
+
+    // Nothing is loaded to resume: the last attempt was stopped or gave up.
+    // Speak the sentence again rather than resuming an utterance that is not
+    // there — armStartTimer has no sentence to watch in that state, so the
+    // only net left was the resume check below, and this way the reader gets
+    // sound now instead of half a second from now.
+    if (!this.sync) {
       this.speakCurrent();
       return;
     }
@@ -467,7 +481,7 @@ export class Player {
         ? this.chapter(continues.chapterIndex)?.sentences[continues.sentenceIndex]
         : undefined;
       texts.push({
-        text: sentence.speakable,
+        text: this.spokenText(sentence, cursor.chapterIndex, cursor.sentenceIndex),
         // The block a sentence belongs to is its paragraph; a change of block,
         // or running out of chapter, ends one.
         endsParagraph: !nextSentence || nextSentence.blockIndex !== sentence.blockIndex,
@@ -480,17 +494,31 @@ export class Player {
   }
 
   /** Ask the engine to have this exact sentence ready to play. */
+  /**
+   * What speak() will actually be given for a sentence: all of it, or the
+   * rest of it when the reader is partway through one. Anything offered to
+   * the engine ahead of time has to be this exact string. A passage plan
+   * matches by equality, so a plan holding a whole sentence while the player
+   * asks for the tail of it matches nothing: the sentence is then fetched a
+   * second time on its own, competing with the passage it is already inside
+   * for the one connection. Reopening a book at a saved place is exactly
+   * that case, which is why it showed up as the first press of play going
+   * quiet.
+   */
+  private spokenText(sentence: Sentence, chapterIndex: number, sentenceIndex: number): string {
+    const isCurrent =
+      chapterIndex === this.state.chapterIndex && sentenceIndex === this.state.sentenceIndex;
+    if (!isCurrent) return sentence.speakable;
+    const startWord = Math.min(this.state.wordIndex, Math.max(0, sentence.words.length - 1));
+    return sentence.speakable.slice(sentence.words[startWord]?.start ?? 0);
+  }
+
   private prefetchAt(chapterIndex: number, sentenceIndex: number): void {
     const target = this.resolveSentence(chapterIndex, sentenceIndex, 1);
     if (!target) return;
     const sentence = this.chapter(target.chapterIndex)?.sentences[target.sentenceIndex];
     if (!sentence?.speakable.trim()) return;
-    const startWord = Math.min(this.state.wordIndex, Math.max(0, sentence.words.length - 1));
-    const offset =
-      target.sentenceIndex === this.state.sentenceIndex && target.chapterIndex === this.state.chapterIndex
-        ? (sentence.words[startWord]?.start ?? 0)
-        : 0;
-    const text = sentence.speakable.slice(offset);
+    const text = this.spokenText(sentence, target.chapterIndex, target.sentenceIndex);
     if (!text.trim()) return;
     this.options.engine.prefetch?.({ text, voiceId: this.voiceId, rate: this.rate });
   }

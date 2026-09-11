@@ -221,7 +221,7 @@ class CloudAudioOutput {
   /** Keeps the stream fed between sentences — see startSilentFeed. */
   private silentFeed: AudioBufferSourceNode | null = null;
   private readonly onVisible = () => {
-    if (document.visibilityState === "visible") void this.resumeContext();
+    if (document.visibilityState === "visible") this.ensureAudible();
   };
 
   constructor() {
@@ -342,6 +342,25 @@ class CloudAudioOutput {
   async resumeContext(): Promise<void> {
     const ctx = this.ensureContext();
     if (ctx && ctx.state !== "running") await ctx.resume().catch(() => {});
+  }
+
+  /**
+   * Put the output back where it can be heard. Two separate things stop on
+   * their own and neither restarts: iOS suspends the context whenever the
+   * page loses focus, and it pauses the session holder whenever another app
+   * takes the audio session. A paused holder is the worse of the two, because
+   * the context keeps running and so does its clock: the highlight walks the
+   * sentence and the book advances in silence.
+   *
+   * Deliberately not awaited. A suspended context's clock is frozen, so a
+   * time computed now is still the right time when it comes back, and
+   * nothing needs re-scheduling — which is what lets this sit in front of
+   * audio that is about to be scheduled on that clock.
+   */
+  ensureAudible(): void {
+    const ctx = this.ensureContext();
+    if (ctx && ctx.state !== "running") void ctx.resume().catch(() => {});
+    if (this.sessionHolder?.paused) void this.sessionHolder.play().catch(() => {});
   }
 
   async decode(bytes: ArrayBuffer): Promise<AudioBuffer> {
@@ -607,21 +626,32 @@ interface DecodedPassage {
 }
 
 /** Locate each sentence in the tightened audio using the word timings, whose
- *  char indices address the passage as a whole. */
-function locateSentences(
+ *  char indices address the passage as a whole. Exported for the tests: what
+ *  it does to a passage the voice timed badly decides whether the reader
+ *  hears the paragraph or hears it start over. */
+export function locateSentences(
   plan: PassagePlan,
   words: RawTimedWord[],
   durationMs: number,
   pauseAfterMs: number,
 ): { startMs: number[]; endMs: number[] } {
-  const startMs = plan.sentences.map((sentence) => {
+  const startMs: number[] = [];
+  for (const sentence of plan.sentences) {
     const first = words.find((word) => word.charIndex >= sentence.start);
-    return first ? first.offsetMs : 0;
-  });
+    // A sentence the voice returned no word for starts where the one before
+    // it did, never at zero. Zero would put a sentence's span before the
+    // span of the sentence ahead of it, and the player reads a span that has
+    // already elapsed as the sentence ending instantly — then rewinds the
+    // passage to the top and hears the paragraph start over.
+    const previous = startMs.length ? startMs[startMs.length - 1] : 0;
+    startMs.push(first ? Math.max(first.offsetMs, previous) : previous);
+  }
   // A sentence runs until the next one opens, so no audio is ever skipped —
-  // trailing pauses belong to the sentence that caused them.
-  const endMs = startMs.map((_, i) =>
-    i + 1 < startMs.length ? startMs[i + 1] : durationMs + pauseAfterMs,
+  // trailing pauses belong to the sentence that caused them. A span is never
+  // allowed to be empty: an untimed sentence is passed through quickly, which
+  // is survivable, where a negative span is not.
+  const endMs = startMs.map((start, i) =>
+    Math.max(i + 1 < startMs.length ? startMs[i + 1] : durationMs + pauseAfterMs, start + 1),
   );
   return { startMs, endMs };
 }
@@ -664,6 +694,22 @@ class PassagePlayback {
     return !!this.source && this.pausedAtMs === null;
   }
 
+  /**
+   * Whether a sound is actually coming out, as opposed to whether we think we
+   * started one. A source attached to a suspended context is not playing,
+   * however much it looks like it is, and reporting otherwise hides the
+   * failure from the player's recovery — which is how a restart after the
+   * phone was locked used to leave a reader watching the words move in
+   * silence with no way out but a pause and a press of play.
+   *
+   * Kept apart from `running`, which the passage queue is built on: gating
+   * that on the context state would void a queued passage and put the gap
+   * back into every seam.
+   */
+  get audible(): boolean {
+    return this.running && this.output.context?.state === "running";
+  }
+
   get paused(): boolean {
     return this.pausedAtMs !== null;
   }
@@ -702,6 +748,11 @@ class PassagePlayback {
   startAt(offsetMs: number, at?: number): void {
     const ctx = this.output.context;
     if (!ctx) return;
+    // Every start, not only the first: the single-sentence path has always
+    // done this, and the passage path — the one cloud voices actually use —
+    // did not, so a passage scheduled after a lock or an interruption was
+    // scheduled onto something that could not sound.
+    this.output.ensureAudible();
     this.stop();
     const source = ctx.createBufferSource();
     source.buffer = this.passage.buffer;
@@ -802,7 +853,7 @@ class PassageUtterance implements UtteranceHandle {
   }
 
   get playing(): boolean {
-    return !this.done && this.playback.running;
+    return !this.done && this.playback.audible;
   }
 
   get paused(): boolean {
@@ -1105,6 +1156,13 @@ export class EdgeSpeechEngine implements SpeechEngine {
         const raw = await this.output.decode(result.bytes);
         const ctx = this.output.context;
         const tightened = ctx ? tightenBuffer(ctx, raw, result.words, plan.sentences) : { buffer: raw, words: result.words };
+        // Without word timings a passage cannot be divided into sentences:
+        // every span would land on the same instant and the paragraph would
+        // flash past in silence. Refuse it and let the lone-sentence path,
+        // which can fall back to an estimated pace, read it instead.
+        if (!tightened.words.length) {
+          throw new EdgeApiError("The passage came back with no word timings.");
+        }
         const pause = pauseAfter(plan);
         const { startMs, endMs } = locateSentences(plan, tightened.words, tightened.buffer.duration * 1000, pause);
         return { key, plan, buffer: tightened.buffer, words: tightened.words, startMs, endMs, pauseAfterMs: pause };
@@ -1318,6 +1376,17 @@ export class EdgeSpeechEngine implements SpeechEngine {
       this.playback?.stop();
       this.playback = null;
       this.dropQueued();
+      // A genuine stop abandons the place being left, and with it the passage
+      // that was planned to follow it. Left behind, that passage matches no
+      // sentence ever again, and the one-passage-ahead guards in prepare()
+      // and prefetch() then refuse every future one — so from here on every
+      // sentence boundary would pay a full round trip to Microsoft as
+      // silence, and a slow one trips the start-timeout watchdog into
+      // "this voice produced no sound". The budget goes back to the start
+      // too: the next press of play deserves the small first passage.
+      this.nextPassage = null;
+      this.inFlight = null;
+      this.passagesPlanned = 0;
     }, 0);
   }
 

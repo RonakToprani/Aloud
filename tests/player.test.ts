@@ -163,3 +163,73 @@ test("a mute voice is retried before giving up", async () => {
   player.destroy();
   assert.ok(engine.spoken.length > 1, `should retry before reporting, saw ${engine.spoken.length}`);
 });
+
+test("the passage offered for a sentence starts where the reader does", async () => {
+  const { engine, player } = build();
+  // Partway through the first sentence, as reopening a book at a saved place
+  // leaves it.
+  player.seek(0, 0, 2);
+  player.play();
+  await settle(200);
+  player.destroy();
+
+  const first = engine.prepared[0]?.[0];
+  assert.ok(first, "a passage was offered");
+  // The contract of prepare(): the first entry is the text speak() gets next.
+  // Offering the whole sentence instead has the engine synthesise the
+  // sentence twice, the second time competing with the passage it is in.
+  assert.equal(first.text, engine.spoken[0].text);
+  assert.equal(first.text, "two.");
+});
+
+test("a passage offered for a sentence the reader has not reached is the whole of it", async () => {
+  const { engine, player } = build();
+  player.seek(0, 1, 0);
+  player.play();
+  await settle(200);
+  player.destroy();
+
+  assert.equal(engine.prepared[0]?.[0]?.text, "Bravo three four.");
+});
+
+test("a press of play after the voice gave up is a fresh attempt", async () => {
+  const { engine, player, states } = build();
+  // Safari's instant silent end: the utterance never really spoke.
+  engine.behaviour = "phantom";
+  player.play();
+  await settle(1400);
+
+  assert.equal(lastState(states).status, "paused");
+  assert.ok(lastState(states).error, "it gave up with something to say");
+
+  const gaveUpAfter = engine.spoken.length;
+  player.play();
+  await settle(1400);
+  player.destroy();
+
+  // A spent recovery budget used to stay spent: playing again tried once and
+  // gave up at the first hiccup, for the life of the page.
+  assert.ok(
+    engine.spoken.length - gaveUpAfter > 1,
+    `only ${engine.spoken.length - gaveUpAfter} attempt(s) after pressing play again`,
+  );
+});
+
+test("play speaks at once when there is no utterance left to resume", async () => {
+  const { engine, player, states } = build();
+  engine.behaviour = "phantom";
+  player.play();
+  await settle(1400);
+  assert.equal(lastState(states).status, "paused");
+
+  const gaveUpAfter = engine.spoken.length;
+  engine.behaviour = "events";
+  player.play();
+  // Well inside the 450ms resume check, which was the only thing that used
+  // to notice there was nothing to resume.
+  await settle(80);
+  player.destroy();
+
+  assert.ok(engine.spoken.length > gaveUpAfter, "it spoke without waiting to be checked on");
+  assert.equal(lastState(states).status, "playing");
+});

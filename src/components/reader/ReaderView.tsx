@@ -612,15 +612,22 @@ export function ReaderView({ bookId }: { bookId: string }) {
     playerRef.current?.toggle();
   }, [engine, wakeChrome]);
 
+  // Unlocked here too, not only in onToggle: these are also the lock screen's
+  // and the notification's buttons, and a media-session action is a user
+  // gesture. Without it, the one thing that re-acquires the audio session
+  // after the phone was locked or a call came in never runs on the route a
+  // reader actually uses to start again, and playback comes back silent.
   const onPrevious = useCallback(() => {
+    engine.unlock();
     wakeChrome();
     playerRef.current?.previousSentence();
-  }, [wakeChrome]);
+  }, [engine, wakeChrome]);
 
   const onNext = useCallback(() => {
+    engine.unlock();
     wakeChrome();
     playerRef.current?.nextSentence();
-  }, [wakeChrome]);
+  }, [engine, wakeChrome]);
 
   const onWordTap = useCallback(
     (sentenceIndex: number, wordIndex: number) => {
@@ -811,7 +818,13 @@ export function ReaderView({ bookId }: { bookId: string }) {
           durationSeconds: bookDurationSeconds,
           positionSeconds: bookPositionSeconds,
           playbackRate: settings.rate,
-          onPlay: () => playerRef.current?.play(),
+          onPlay: () => {
+            engine.unlock();
+            playerRef.current?.play();
+          },
+          // No unlock on the way out: re-playing the silent session holder
+          // here would be sound where the reader asked for none, and a pause
+          // must stay paused.
           onPause: () => playerRef.current?.pause(),
           onNext,
           onPrevious,
