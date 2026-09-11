@@ -1,3 +1,8 @@
+/* No backdrop-filter here, deliberately. A blur on a full-screen element that
+   is also fading in makes the compositor re-blur the whole page on every frame
+   of the entrance, which is the one thing on a phone that turns opening a
+   sheet into a stutter. Under a scrim this opaque the blur was invisible
+   anyway. */
 .scrim {
   position: fixed;
   inset: 0;
@@ -6,9 +11,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  animation: scrimIn var(--dur-ui) var(--ease-soft) both;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  animation: scrimIn var(--dur-scrim) var(--ease-soft) both;
 }
 
 .panel {
@@ -155,10 +158,16 @@
   }
 }
 
+/* Opacity is done a third of the way in, the travel carries on to the end. The
+   sheet is therefore readable about 80ms after the tap while still arriving
+   rather than snapping; fading the whole way is what made it feel late. */
 @keyframes sheetIn {
   from {
     transform: translateY(14px);
     opacity: 0;
+  }
+  34% {
+    opacity: 1;
   }
   to {
     transform: translateY(0);
@@ -170,6 +179,9 @@
   from {
     transform: translateY(8px) scale(0.99);
     opacity: 0;
+  }
+  34% {
+    opacity: 1;
   }
   to {
     transform: translateY(0) scale(1);

@@ -73,11 +73,15 @@
   border-radius: 50%;
   background: var(--sentence);
   color: var(--accent-strong);
-  transition: background-color var(--dur-ui) var(--ease-soft);
+  transition: background-color var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
 }
 
 .accountChip:hover {
   background: var(--segment);
+}
+
+.accountChip:active {
+  transform: scale(0.94);
 }
 
 .accountInitial {
@@ -149,7 +153,13 @@
   font-weight: 600;
   /* A link dressed as a button is still a button to look at. */
   text-decoration: none;
-  transition: background-color var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft);
+  transition: background-color var(--dur-ui) var(--ease-soft), opacity var(--dur-ui) var(--ease-soft),
+    transform var(--dur-tap) var(--ease-soft);
+}
+
+.landingPrimary:active:not(:disabled),
+.landingSecondary:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .landingPrimary {
@@ -185,11 +195,16 @@
   padding: 0 12px;
   font-size: 13px;
   color: var(--ui-muted);
-  transition: color var(--dur-ui) var(--ease-soft);
+  transition: color var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
 }
 
 .landingQuiet:hover:not(:disabled) {
   color: var(--ui);
+}
+
+.landingQuiet:active:not(:disabled) {
+  color: var(--ui);
+  transform: scale(0.97);
 }
 
 .landingQuiet:disabled {
@@ -218,7 +233,15 @@
   font-size: 13.5px;
   font-weight: 500;
   transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft),
-    opacity var(--dur-ui) var(--ease-soft);
+    opacity var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
+}
+
+/* A phone has no hover, and the tap highlight is off everywhere, so without
+   this nothing at all answers the finger until the sheet has finished
+   arriving, and the button reads as slow. */
+.primaryButton:active:not(:disabled),
+.ghostButton:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* The one filled action on the page. --segment sits at the same lightness as
@@ -563,11 +586,16 @@
   text-align: left;
   text-decoration: none;
   color: inherit;
-  transition: background-color var(--dur-ui) var(--ease-soft);
+  transition: background-color var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
 }
 
 .addOption:hover {
   background: var(--segment);
+}
+
+.addOption:active {
+  background: var(--segment);
+  transform: scale(0.985);
 }
 
 .addIcon {
@@ -748,6 +776,7 @@
   font-family: var(--font-serif);
   min-height: 150px;
 }
+
 
 .pasteInput:focus-visible,
 .pasteArea:focus-visible {

@@ -21,10 +21,15 @@
   --radius-sheet: 28px;
 
   --ease-soft: cubic-bezier(0.32, 0.72, 0.29, 1);
+  /* A press answers the finger before anything else in the interface moves.
+     Anything above about 120ms stops reading as the tap itself and starts
+     reading as a delay. */
+  --dur-tap: 90ms;
+  --dur-scrim: 150ms;
   --dur-pill: 220ms;
   --dur-wash: 260ms;
   --dur-ui: 260ms;
-  --dur-sheet: 300ms;
+  --dur-sheet: 240ms;
 
   --font-ui: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-serif: var(--font-newsreader), Iowan Old Style, Georgia, serif;
