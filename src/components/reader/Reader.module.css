@@ -214,8 +214,9 @@
   border-radius: 20px;
   background: var(--chrome);
   border: 1px solid var(--hairline-soft);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* No blur here either, and for the same reason as the collapsed capsule it
+     borrows from: a blur inside a fixed element is what lifts the reader's
+     chrome off the bottom of the screen on iOS. */
   color: var(--ui-muted);
   font-family: var(--font-ui);
   font-size: 11.5px;

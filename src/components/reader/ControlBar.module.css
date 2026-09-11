@@ -21,6 +21,13 @@
 
 /* ---------- Collapsed capsule ---------- */
 
+/* No backdrop-filter, though it would be the obvious thing on a floating
+   capsule. iOS gives a blur inside a fixed element its own composited layer
+   and then paints it at the scroll offset it was last rasterised at, so the
+   whole dock lifts off the bottom of the screen mid-chapter and stays there
+   until something forces a repaint. Nothing is lost: the capsule sits on the
+   opaque part of the fade below it, so there was never anything behind it to
+   blur. */
 .capsule {
   position: absolute;
   bottom: calc(26px + env(safe-area-inset-bottom));
@@ -32,8 +39,6 @@
   border-radius: 22px;
   background: var(--chrome);
   border: 1px solid var(--hairline-soft);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   font-size: 11.5px;
   color: var(--ui-muted);
   pointer-events: auto;
