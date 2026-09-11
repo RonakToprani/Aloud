@@ -112,6 +112,15 @@
   transition: border-color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
 }
 
+/* iOS Safari zooms the whole page in when a field it is focusing has text
+   under 16px, and it does not zoom back out afterwards, so searching for a
+   book left the reader stranded at 1.2x. 16px on touch only; a desktop
+   pointer never triggers it and keeps the designed size. */
+@media (pointer: coarse) {
+  .searchInput {
+    font-size: 16px;
+  }
+}
 
 .searchInput::placeholder {
   color: var(--ui-faint);

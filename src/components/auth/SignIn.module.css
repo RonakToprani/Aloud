@@ -88,6 +88,14 @@
   border-color: var(--accent-strong);
 }
 
+/* Under 16px, iOS Safari zooms the page in to focus a field and never zooms
+   back out. The code field is already 18px and needs no help. */
+@media (pointer: coarse) {
+  .input {
+    font-size: 16px;
+  }
+}
+
 .codeInput {
   composes: input;
   font-family: var(--font-mono);

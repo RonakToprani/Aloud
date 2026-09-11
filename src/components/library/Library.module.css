@@ -784,6 +784,15 @@
   outline-offset: 1px;
 }
 
+/* Under 16px, iOS Safari zooms the page in to focus a field and never zooms
+   back out, which on a sheet leaves the buttons off-screen. */
+@media (pointer: coarse) {
+  .pasteInput,
+  .pasteArea {
+    font-size: 16px;
+  }
+}
+
 /* ---------- Drag & drop ---------- */
 
 .dropVeil {
