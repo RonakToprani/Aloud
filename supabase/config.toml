@@ -233,12 +233,27 @@ otp_length = 6
 otp_expiry = 3600
 
 # Use a production-ready SMTP server
-# Supabase's built-in mailer is in use. To move to a provider (needed for
-# the code template below and for real volume), set enabled = true and fill
-# in host, port, user, pass = "env(...)", admin_email and sender_name, then
-# set NEXT_PUBLIC_SUPABASE_EMAIL_CODE=true in the app.
+# Resend, sending from the verified subdomain send.aloudreader.org. The bare
+# domain is deliberately not the sender: a deliverability problem on the
+# mailer then never touches the domain the site itself serves from.
+#
+# The live project is configured through the dashboard, not from here.
+# `supabase config push` sends the whole [auth] block, and the Google client
+# secret above resolves from an environment variable that is not normally
+# set — pushing without it exported would blank the secret and take the only
+# working sign-in down with it. Export both secrets or use the dashboard.
+#
+# The six-digit code in SignInView only appears once the magic link template
+# carries {{ .Token }} and NEXT_PUBLIC_SUPABASE_EMAIL_CODE=true. Turning SMTP
+# on alone does not put a code in the email.
 [auth.email.smtp]
-enabled = false
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_SMTP_PASSWORD)"
+admin_email = "noreply@send.aloudreader.org"
+sender_name = "Aloud"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
