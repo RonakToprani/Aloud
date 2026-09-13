@@ -66,15 +66,29 @@ function normalise(value: string | null | undefined): string {
 }
 
 /** Catalogues file authors as "Austen, Jane" and files carry "Jane Austen".
- *  Compare the words, not their order. */
+ *  Compare the words, not their order. Two silences agree; one silence against
+ *  a name does not, because "Notes" by nobody and "Notes" by someone are not
+ *  evidence of the same book. */
 function sameAuthor(left: string | null | undefined, right: string | null | undefined): boolean {
   const a = normalise(left);
   const b = normalise(right);
-  // One side saying nothing is not a mismatch: plain text and many EPUBs
-  // carry no author at all, and the title has already had to agree.
-  if (!a || !b) return true;
+  if (!a || !b) return !a && !b;
   const words = (value: string) => [...new Set(value.split(" "))].sort().join(" ");
   return words(a) === words(b);
+}
+
+/** How far two word counts may sit apart and still be the same book. The
+ *  ordinary case is the very same file being added again, where they agree
+ *  exactly; the slack is for another edition of it, whose front matter and
+ *  notes differ. Two different books that share a title and an author have to
+ *  also be within this of each other before they can be confused. */
+const LENGTH_TOLERANCE = 0.2;
+
+function sameLength(left: number | undefined, right: number | undefined): boolean {
+  // No length on either side is no evidence, and this match is only worth
+  // making on evidence.
+  if (!left || !right) return false;
+  return Math.abs(left - right) <= Math.max(left, right) * LENGTH_TOLERANCE;
 }
 
 /**
@@ -92,15 +106,23 @@ function sameAuthor(left: string | null | undefined, right: string | null | unde
  * through, and a different edition would leave the saved place pointing at the
  * wrong sentence.
  */
-export function reclaimableMatch<T extends { id: string; title: string; author?: string | null; addedAt: number }>(
-  book: { title: string; author?: string | null },
+export function reclaimableMatch<
+  T extends { id: string; title: string; author?: string | null; addedAt: number; wordCount?: number },
+>(
+  book: { title: string; author?: string | null; wordCount?: number },
   candidates: readonly T[] | undefined,
 ): T | undefined {
   const title = normalise(book.title);
   if (!title) return undefined;
-  return candidates?.find(
-    (candidate) => normalise(candidate.title) === title && sameAuthor(candidate.author, book.author),
+  const hits = (candidates ?? []).filter(
+    (candidate) =>
+      normalise(candidate.title) === title &&
+      sameAuthor(candidate.author, book.author) &&
+      sameLength(candidate.wordCount, book.wordCount),
   );
+  // Two candidates this file could equally be is not a match, it is a
+  // coin toss, and the reader can point at the one they meant.
+  return hits.length === 1 ? hits[0] : undefined;
 }
 
 /** Re-adding a book the account already knows about keeps its id, so the
@@ -110,7 +132,13 @@ export interface ImportOptions {
   addedAt?: number;
   /** Books the account remembers but this device has no text for. A file that
    *  matches one of them is that book coming home, not a new one. */
-  reclaimable?: readonly { id: string; title: string; author?: string | null; addedAt: number }[];
+  reclaimable?: readonly {
+    id: string;
+    title: string;
+    author?: string | null;
+    addedAt: number;
+    wordCount?: number;
+  }[];
   /** Overrides the author, for text that carries no metadata of its own. */
   author?: string;
   /** Overrides the title, where the catalogue's is cleaner than the file's. */
@@ -136,7 +164,14 @@ export async function importParsedBook(
   // An explicit id wins: that came from the reader pointing at one book.
   const reclaimed = options?.id
     ? undefined
-    : reclaimableMatch({ title: options?.title ?? book.title, author: options?.author ?? book.author }, options?.reclaimable);
+    : reclaimableMatch(
+        {
+          title: options?.title ?? book.title,
+          author: options?.author ?? book.author,
+          wordCount: counts.wordCount,
+        },
+        options?.reclaimable,
+      );
 
   const meta: BookMeta = {
     id: options?.id ?? reclaimed?.id ?? makeId(),
