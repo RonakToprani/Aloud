@@ -56,8 +56,11 @@ function formatCountdown(seconds: number): string {
 
 /**
  * Sign in is the only thing an account is for — reading works without one —
- * so this screen sells nothing and asks for one thing. Magic link first:
- * one-handed on a phone at night, a password is the worst part of any flow.
+ * so this screen sells nothing and asks for one thing. Neither way in is the
+ * main one: Google and a code by email sit at the same weight, because the
+ * reader who will not link a social account to what they read is not taking
+ * the side door. No password in either case; on a phone at night that is the
+ * worst part of any flow.
  */
 export function SignInView() {
   const router = useRouter();
@@ -74,8 +77,6 @@ export function SignInView() {
   const [returning, setReturning] = useState(false);
   /** Email is the side door: shown on request, so three provider buttons
    *  and a form do not compete on one screen. */
-  const [emailOpen, setEmailOpen] = useState(false);
-  const showEmail = OAUTH.length === 0 || emailOpen;
 
   useEffect(() => {
     setReturning(hasHadAccount());
@@ -228,30 +229,25 @@ export function SignInView() {
           </div>
 
           {OAUTH.length > 0 && (
-            <div className={styles.providers}>
-              {OAUTH.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={styles.outlined}
-                  onClick={() => void oauth(id)}
-                  disabled={busy}
-                >
-                  <Icon size={16} />
-                  {label}
-                </button>
-              ))}
-              <p className={styles.caption}>One tap, no password. Your books stay yours either way.</p>
-            </div>
+            <>
+              <div className={styles.providers}>
+                {OAUTH.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={styles.outlined}
+                    onClick={() => void oauth(id)}
+                    disabled={busy}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className={styles.divider}>or</div>
+            </>
           )}
 
-          {OAUTH.length > 0 && !emailOpen && (
-            <button type="button" className={styles.skip} onClick={() => setEmailOpen(true)}>
-              Use email instead
-            </button>
-          )}
-
-          {showEmail && (
           <form
             className={styles.form}
             onSubmit={(event) => {
@@ -271,16 +267,16 @@ export function SignInView() {
               onChange={(event) => setEmail(event.target.value)}
               aria-label="Email address"
             />
-            <button type="submit" className={styles.primary} disabled={busy || !validEmail(email)}>
-              {busy ? "Sending…" : "Email me a link"}
+            <button type="submit" className={styles.outlined} disabled={busy || !validEmail(email)}>
+              {busy ? "Sending…" : EMAIL_HAS_CODE ? "Email me a code" : "Email me a link"}
             </button>
-            <p className={styles.caption}>
-              {returning
-                ? "No password. We send a one-time link that signs you in."
-                : "No password to make up. We send a one-time link, and that is your account."}
-            </p>
           </form>
-          )}
+
+          <p className={styles.caption}>
+            {returning
+              ? "No password either way. We only check that it is you."
+              : "No password to make up. Whichever you choose becomes your account."}
+          </p>
           {error && <p className={styles.error} role="alert">{error}</p>}
         </div>
       )}
