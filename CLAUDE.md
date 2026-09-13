@@ -19,6 +19,7 @@ node scripts/icons.mjs        # regenerate app icons from the logo geometry
 node scripts/screenshots.mjs  # every screen and theme (needs Chrome)
 node scripts/measure-gap.mjs  # how cloud audio is scheduled, through the real player
 npx tsx scripts/gutenberg-shelf.ts  # re-bake the public library catalogue (a few times a year)
+python3 scripts/send-email.py --help  # write to the readers; dry run unless --send
 ```
 
 CI runs typecheck, tests and build on every push and PR. `main` is protected:
@@ -285,6 +286,51 @@ Reset first-run state by clearing the `aloud.*` keys.
 To watch audio scheduling, wrap `AudioContext.prototype.createBufferSource` in
 `evaluateOnNewDocument` and log `start(when, offset)`; skip nodes with
 `loop === true`, which are the silent keep-alive feed.
+
+## Writing to readers
+
+Sign-in codes and announcements both go through one Resend account over SMTP
+(`smtp.resend.com`, user `resend`, the key in `.env.local` as
+`RESEND_SMTP_PASSWORD`), sending as `send.aloudreader.org`. `ANNOUNCE_REPLY_TO`
+is there too, since this repo is public and it is a personal inbox. That subdomain is
+the sender rather than the bare domain, so a deliverability problem never
+touches the domain the site serves from. Only DKIM is published, which is all
+Resend needs; there is no DMARC record yet.
+
+An announcement is a pair of files in `emails/`, HTML and plain text, and one
+command:
+
+```bash
+python3 scripts/send-email.py --subject "..." \
+  --html emails/x.html --text emails/x.txt --all          # dry run, counts only
+python3 scripts/send-email.py ... --to you@example.com --send   # one to yourself first
+python3 scripts/send-email.py ... --all --send                  # everyone
+```
+
+**Both parts, always.** A bulk HTML mail with no plain text alternative is a
+spam signal, and some readers see the text one.
+
+**Never send from a noreply address.** The mail asks people to reply with
+ideas, and to reply with "stop" to unsubscribe; both are a lie from an address
+that discards mail. It sends as a person, with `Reply-To` pointing at a real
+inbox. Note the From address itself has no inbound MX, so a reply typed by
+hand rather than through the reply button will bounce.
+
+**The script checks every recipient's domain before sending.** A reader who
+typed `gmail.con` at sign-up is one hard bounce, and hard bounces are what a
+young sending domain is judged on.
+
+**Addresses are masked in the output and the ledger is gitignored.** Everyone
+already reached is recorded in `emails/<name>.sent.txt` and skipped on a
+re-run, so a failure part way through is safe to retry. That file holds real
+readers' addresses and this repo is public.
+
+**Most accounts cannot be written to at all.** Anonymous sign-ins have no
+address: at the last count 103 accounts, 86 of them anonymous, 17 reachable.
+
+**Aloud is not affiliated with Project Gutenberg.** Credit them as the source
+of the books and nothing more. Their licence carries trademark terms, and
+Aloud strips their header and licence from every book before shelving it.
 
 ## The public library, as learned
 

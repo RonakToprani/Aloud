@@ -9,3 +9,7 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 screenshots
 public/pdfjs/
+
+# Who an announcement has already reached. Readers' addresses, and this
+# repo is public.
+emails/*.sent.txt
