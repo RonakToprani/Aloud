@@ -27,7 +27,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     upstream = await fetch(`https://www.gutenberg.org/ebooks/${id}.epub.noimages`, {
       redirect: "follow",
-      headers: { "user-agent": "Aloud (read-along reader; https://aloudreader.vercel.app)" },
+      headers: { "user-agent": "Aloud (read-along reader; https://www.aloudreader.org)" },
       signal: control.signal,
     });
   } catch {

@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://aloudreader.vercel.app"><img alt="Open Aloud" src="https://img.shields.io/badge/open-aloudreader.vercel.app-5b7fa6?style=flat-square" /></a>
-  <img alt="Hours listened" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=hours%20listened&query=%24.hours_listened_label&url=https%3A%2F%2Faloudreader.vercel.app%2Fapi%2Fstats&cacheSeconds=300" />
-  <img alt="Readers" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=readers&query=%24.readers&url=https%3A%2F%2Faloudreader.vercel.app%2Fapi%2Fstats&cacheSeconds=300" />
-  <img alt="Active this week" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=active%20this%20week&query=%24.active_readers_7d&url=https%3A%2F%2Faloudreader.vercel.app%2Fapi%2Fstats&cacheSeconds=300" />
+  <a href="https://www.aloudreader.org"><img alt="Open Aloud" src="https://img.shields.io/badge/open-aloudreader.org-5b7fa6?style=flat-square" /></a>
+  <img alt="Hours listened" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=hours%20listened&query=%24.hours_listened_label&url=https%3A%2F%2Fwww.aloudreader.org%2Fapi%2Fstats&cacheSeconds=300" />
+  <img alt="Readers" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=readers&query=%24.readers&url=https%3A%2F%2Fwww.aloudreader.org%2Fapi%2Fstats&cacheSeconds=300" />
+  <img alt="Active this week" src="https://img.shields.io/badge/dynamic/json?style=flat-square&color=6a8fb5&label=active%20this%20week&query=%24.active_readers_7d&url=https%3A%2F%2Fwww.aloudreader.org%2Fapi%2Fstats&cacheSeconds=300" />
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-8b8f99?style=flat-square" /></a>
 </p>
 
@@ -26,7 +26,7 @@ screen and it opens full-screen, keeps reading with the screen locked, and
 puts play and pause on the lock screen. Finish a book on a phone and it
 offers to show you how.
 
-**Try it:** [aloudreader.vercel.app](https://aloudreader.vercel.app). Reading
+**Try it:** [aloudreader.org](https://www.aloudreader.org). Reading
 works without an account; sign in to keep your library and your place in it
 on every device.
 

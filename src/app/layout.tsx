@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
   },
   formatDetection: { telephone: false },
-  metadataBase: new URL("https://aloudreader.vercel.app"),
+  metadataBase: new URL("https://www.aloudreader.org"),
   openGraph: {
     title: "Aloud",
     description: "Bring your own books. Press play, and every word lights up as it's spoken.",
