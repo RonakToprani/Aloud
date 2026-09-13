@@ -170,6 +170,17 @@ migration up before the deploy that can create one. A rejected row fails
 silently on a fire-and-forget push, and that book's position and bookmarks
 stop syncing with it. See `20260909000000_pdf_source.sql`.
 
+**Re-adding a book the account remembers reuses its id.** A device that has
+lost a book shows it greyed out, and the reader's instinct is Add a book
+rather than tapping the ghost. Both paths now land on the same entry:
+`reclaimableMatch` in `library/import.ts` matches the parsed title and author
+against the books the account knows about and this device has no text for, and
+the import adopts that id and its addedAt. Only those books are candidates.
+Adopting the id of a book already on the device would replace text the reader
+is part way through, and a different edition would leave the saved place
+pointing at the wrong sentence. An explicit id, from the book's own sheet,
+always wins over a match.
+
 **Book ids are global.** `books.id` and `reading_positions.book_id` are
 primary keys across all users, so two users sharing an id means the second is
 denied by RLS. This is why the sample mints a per-device id rather than using

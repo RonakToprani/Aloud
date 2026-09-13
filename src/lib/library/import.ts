@@ -51,11 +51,66 @@ async function measure(book: ParsedBook, onProgress?: (fraction: number) => void
   };
 }
 
+/** Loose enough that the same book from two sources still matches, strict
+ *  enough that two books do not: case, accents, punctuation and a leading
+ *  article all go, since "The Odyssey" and "Odyssey" are one book. */
+function normalise(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/^(the|a|an)\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Catalogues file authors as "Austen, Jane" and files carry "Jane Austen".
+ *  Compare the words, not their order. */
+function sameAuthor(left: string | null | undefined, right: string | null | undefined): boolean {
+  const a = normalise(left);
+  const b = normalise(right);
+  // One side saying nothing is not a mismatch: plain text and many EPUBs
+  // carry no author at all, and the title has already had to agree.
+  if (!a || !b) return true;
+  const words = (value: string) => [...new Set(value.split(" "))].sort().join(" ");
+  return words(a) === words(b);
+}
+
+/**
+ * The account-only book this file is a copy of, if it is a copy of one.
+ *
+ * A reader whose device has lost a book sees it greyed out on the shelf, and
+ * the obvious thing to do is add the file again. Doing that through Add a book
+ * rather than through the book itself used to mint a new id, which left the
+ * ghost sitting there and the new copy open at page one with the saved place
+ * still attached to the old id. Matching by title and author puts the reader
+ * back where they were whichever way in they took.
+ *
+ * Only books whose text this device does not have are candidates. Adopting the
+ * id of a book that is already here would replace text the reader is part way
+ * through, and a different edition would leave the saved place pointing at the
+ * wrong sentence.
+ */
+export function reclaimableMatch<T extends { id: string; title: string; author?: string | null; addedAt: number }>(
+  book: { title: string; author?: string | null },
+  candidates: readonly T[] | undefined,
+): T | undefined {
+  const title = normalise(book.title);
+  if (!title) return undefined;
+  return candidates?.find(
+    (candidate) => normalise(candidate.title) === title && sameAuthor(candidate.author, book.author),
+  );
+}
+
 /** Re-adding a book the account already knows about keeps its id, so the
  *  saved place and bookmarks line up with the text again. */
 export interface ImportOptions {
   id?: string;
   addedAt?: number;
+  /** Books the account remembers but this device has no text for. A file that
+   *  matches one of them is that book coming home, not a new one. */
+  reclaimable?: readonly { id: string; title: string; author?: string | null; addedAt: number }[];
   /** Overrides the author, for text that carries no metadata of its own. */
   author?: string;
   /** Overrides the title, where the catalogue's is cleaner than the file's. */
@@ -78,12 +133,17 @@ export async function importParsedBook(
     onProgress?.({ stage: "indexing", fraction }),
   );
 
+  // An explicit id wins: that came from the reader pointing at one book.
+  const reclaimed = options?.id
+    ? undefined
+    : reclaimableMatch({ title: options?.title ?? book.title, author: options?.author ?? book.author }, options?.reclaimable);
+
   const meta: BookMeta = {
-    id: options?.id ?? makeId(),
+    id: options?.id ?? reclaimed?.id ?? makeId(),
     title: options?.title ?? book.title,
     author: options?.author ?? book.author,
     source,
-    addedAt: options?.addedAt ?? Date.now(),
+    addedAt: options?.addedAt ?? reclaimed?.addedAt ?? Date.now(),
     chapterTitles: book.chapters.map((chapter) => chapter.title),
     ...counts,
     cover: options?.cover ?? book.cover,

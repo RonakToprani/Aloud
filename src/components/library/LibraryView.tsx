@@ -269,6 +269,15 @@ export function LibraryView() {
 
   /* ---------------- importing ---------------- */
 
+  /** Books the account remembers and this device has no text for. Handing
+   *  these to the importer is what lets a file the reader adds through Add a
+   *  book, or drops on the page, land on the entry that is already there
+   *  rather than beside it. */
+  const withReclaimable = useCallback(
+    (options?: ImportOptions): ImportOptions => ({ ...options, reclaimable: remoteBooks }),
+    [remoteBooks],
+  );
+
   const runImport = useCallback(
     async (task: () => Promise<BookMeta>) => {
       setError(null);
@@ -276,7 +285,13 @@ export function LibraryView() {
       setProgress({ stage: "reading", fraction: 0 });
       try {
         const meta = await task();
+        // Adopting an id is invisible otherwise, and the reader is owed an
+        // explanation for why the book opened where they left it.
+        const cameBack = remoteBooks.some((book) => book.id === meta.id);
         await refresh();
+        if (cameBack) {
+          setToast({ id: Date.now(), text: `${meta.title} is back, at the page you left it` });
+        }
         // The first book is the moment an account starts earning its keep.
         await ensureAccount();
         void pushBooks([meta]).catch(() => {});
@@ -286,7 +301,7 @@ export function LibraryView() {
         setProgress(null);
       }
     },
-    [refresh, ensureAccount],
+    [refresh, ensureAccount, remoteBooks],
   );
 
   const onFiles = useCallback(
@@ -295,9 +310,9 @@ export function LibraryView() {
       const options = importTarget.current ?? undefined;
       importTarget.current = null;
       if (!file) return;
-      void runImport(() => importFile(file, setProgress, options));
+      void runImport(() => importFile(file, setProgress, withReclaimable(options)));
     },
-    [runImport],
+    [runImport, withReclaimable],
   );
 
   /**
@@ -779,7 +794,7 @@ export function LibraryView() {
             setPasteOpen(false);
             setPasteTitle("");
             setPasteBody("");
-            void runImport(() => importPastedText(body, title, setProgress, options));
+            void runImport(() => importPastedText(body, title, setProgress, withReclaimable(options)));
           }}
         >
           Add to library
