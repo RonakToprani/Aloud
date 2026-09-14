@@ -327,6 +327,13 @@ python3 scripts/send-email.py ... --to you@example.com --send   # one to yoursel
 python3 scripts/send-email.py ... --all --send                  # everyone
 ```
 
+Cold outreach to organisations is `scripts/send-outreach.py`: one personalised
+email per entry in a JSON batch, scheduled through Resend's API so it lands at
+a civilised hour, staggered a few minutes apart, with a ledger of Resend ids so
+a scheduled batch can be cancelled before it fires. Resend sits behind
+Cloudflare, which answers Python's default user agent with a bare
+`error code: 1010`; that is not a key problem, set a user agent.
+
 **Both parts, always.** A bulk HTML mail with no plain text alternative is a
 spam signal, and some readers see the text one.
 

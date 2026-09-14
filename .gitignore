@@ -13,3 +13,6 @@ public/pdfjs/
 # Who an announcement has already reached. Readers' addresses, and this
 # repo is public.
 emails/*.sent.txt
+# Who we have written to. Published organisational addresses, but a target list
+# has no business in a public repo.
+emails/outreach*.json
