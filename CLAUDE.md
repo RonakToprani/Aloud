@@ -312,7 +312,7 @@ To watch audio scheduling, wrap `AudioContext.prototype.createBufferSource` in
 Sign-in codes and announcements both go through one Resend account over SMTP
 (`smtp.resend.com`, user `resend`, the key in `.env.local` as
 `RESEND_SMTP_PASSWORD`), sending as `send.aloudreader.org`. `ANNOUNCE_REPLY_TO`
-is there too, since this repo is public and it is a personal inbox. That subdomain is
+and `LINKEDIN_URL` are there too, since this repo is public and both are personal. That subdomain is
 the sender rather than the bare domain, so a deliverability problem never
 touches the domain the site serves from. Only DKIM is published, which is all
 Resend needs; there is no DMARC record yet.
