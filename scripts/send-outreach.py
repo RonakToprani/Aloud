@@ -26,28 +26,34 @@ def from_env(name: str) -> str:
     return m.group(1).strip()
 
 
-# Early access, not a free tool. "Free while I build it" is true, and it tells
-# them without saying so that it will not always be. The ask is a conversation
-# with a few learners, never "pass it on": a forward makes it a free resource
-# on someone's list, a reply makes them a design partner.
-DEFAULT_ASK = "Would you try it with two or three of your learners and tell me what's missing?"
+# Plain text only, on purpose. A card, a logo and coloured links are what a
+# marketing email has and a personal one does not; every real email anyone
+# receives from a person was typed into a mail client. And it leads with what
+# is in it for them: a founding-partner offer that costs nothing today and can
+# be kept, rather than a favour asked of a stranger.
+DEFAULT_OFFER = (
+    "So here's an offer. If a couple of your tutors will try it with their learners and tell me "
+    "what's missing, your programs have it free for good, whatever it costs later, and I'll build "
+    "what your learners need first. I'm also happy to come in and set it up with your team."
+)
 
 
 def text_of(e: dict) -> str:
-    ask = e.get("ask", DEFAULT_ASK)
     return f"""{e['greeting']}
 
-I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights up each word as it's spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It's free while I build it.
+I'm Ronak, in London, Ontario. I've spent the last few months building Aloud, a reader that reads a book aloud and lights up each word as it's spoken, for people who read better when they can hear and see the words together. It works in the browser with any EPUB or PDF, plus a few thousand classics.
 
 {e['why']}
 
-{ask} It's at {SITE}, with nothing to install and no sign-up needed. One honest sentence in reply would help me more than anything.
+{e.get('offer', DEFAULT_OFFER)}
 
-Thank you,
+It's at aloudreader.org, nothing to install. If it's not for you, a one-line reply saying so helps too.
+
+Thanks,
+Ronak
 
 {signature_text()}
-
-If you'd rather not hear from me again, reply with the word stop.
+If you'd rather I didn't write again, just say so.
 """
 
 
@@ -57,10 +63,10 @@ def linkedin() -> str | None:
 
 
 def signature_text() -> str:
-    lines = ["Ronak Toprani", "Building Aloud in Toronto", SITE]
+    line = "aloudreader.org"
     if linkedin():
-        lines.append(linkedin())
-    return "\n".join(lines)
+        line += "  |  " + linkedin().replace("https://www.", "")
+    return "Ronak Toprani\n" + line
 
 
 def signature_html() -> str:
@@ -151,7 +157,7 @@ def main() -> None:
     for i, e in enumerate(pending):
         body = {
             "from": FROM, "to": [e["to"]], "reply_to": reply_to,
-            "subject": e["subject"], "text": text_of(e), "html": html_of(e),
+            "subject": e["subject"], "text": text_of(e),
             "headers": {"List-Unsubscribe": f"<mailto:{unsubscribe}?subject=unsubscribe>"},
         }
         if start:
