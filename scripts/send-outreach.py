@@ -3,99 +3,81 @@
 Resend so it goes out at a civilised hour without a machine staying awake.
 
     python3 scripts/send-outreach.py emails/outreach.json                 # dry run
-    python3 scripts/send-outreach.py emails/outreach.json --at 2026-09-14T13:00:00Z
+    python3 scripts/send-outreach.py emails/outreach.json --at 2026-09-14T13:00:00Z --stagger-minutes 5
     python3 scripts/send-outreach.py emails/outreach.json --cancel       # before it fires
 
-Each entry: {"to", "greeting", "subject", "why"} where `why` is the one
-sentence that says why this organisation in particular. Everything else is
-shared. Resend ids are written to a ledger beside the batch so a scheduled
-send can be cancelled, and so a re-run never queues anyone twice.
+Each entry: {"to", "greeting", "subject", "why"} and optionally "ask", where
+`why` is the one sentence that says why this organisation in particular.
+Everything else is shared. Resend ids go to a ledger beside the batch so a
+scheduled send can be cancelled, and so a re-run never queues anyone twice.
+
+What keeps this in Gmail's Primary tab rather than Promotions, learned the
+hard way: one text colour throughout, no table layout, no List-Unsubscribe
+header (a bulk-mail signal; the "reply with stop" line satisfies the law on
+its own), and as few links as possible. The small logo in the signature is
+the one remaining risk, kept because it reads as a person with a company.
 """
 import argparse, json, pathlib, re, sys, time, urllib.request
+from datetime import datetime, timedelta
 
 FROM = "Ronak at Aloud <hello@send.aloudreader.org>"
 SITE = "https://www.aloudreader.org"
 LOGO = f"{SITE}/email/logo.png"
 SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
+INK = "#1f2933"
+DEFAULT_ASK = "Would you try it with two or three of your learners and tell me what's missing?"
 
 
-def from_env(name: str) -> str:
+def from_env(name: str, required: bool = True) -> str | None:
     m = re.search(rf"^{name}=(.+)$", pathlib.Path(".env.local").read_text(), re.M)
-    if not m:
+    if not m and required:
         sys.exit(f"{name} is not in .env.local")
-    return m.group(1).strip()
-
-
-# Plain text only, on purpose. A card, a logo and coloured links are what a
-# marketing email has and a personal one does not; every real email anyone
-# receives from a person was typed into a mail client. And it leads with what
-# is in it for them: a founding-partner offer that costs nothing today and can
-# be kept, rather than a favour asked of a stranger.
-DEFAULT_OFFER = (
-    "So here's an offer. If a couple of your tutors will try it with their learners and tell me "
-    "what's missing, your programs have it free for good, whatever it costs later, and I'll build "
-    "what your learners need first. I'm also happy to come in and set it up with your team."
-)
-
-
-def text_of(e: dict) -> str:
-    return f"""{e['greeting']}
-
-I'm Ronak, in London, Ontario. I've spent the last few months building Aloud, a reader that reads a book aloud and lights up each word as it's spoken, for people who read better when they can hear and see the words together. It works in the browser with any EPUB or PDF, plus a few thousand classics.
-
-{e['why']}
-
-{e.get('offer', DEFAULT_OFFER)}
-
-It's at aloudreader.org, nothing to install. If it's not for you, a one-line reply saying so helps too.
-
-Thanks,
-Ronak
-
-{signature_text()}
-If you'd rather I didn't write again, just say so.
-"""
-
-
-def linkedin() -> str | None:
-    m = re.search(r"^LINKEDIN_URL=(.+)$", pathlib.Path(".env.local").read_text(), re.M)
     return m.group(1).strip() if m else None
 
 
-def signature_text() -> str:
-    line = "aloudreader.org"
-    if linkedin():
-        line += "  |  " + linkedin().replace("https://www.", "")
-    return "Ronak Toprani\n" + line
+def signature_lines() -> list[str]:
+    lines = ["Ronak Toprani", "Building Aloud in Toronto"]
+    if phone := from_env("PHONE", required=False):
+        lines.append(phone)
+    return lines
 
 
-def signature_html() -> str:
-    # The one place the logo appears. At the top of a cold email a wordmark
-    # reads as marketing; beside a name at the bottom it reads as a person who
-    # has a company.
-    links = f'<a href="{SITE}" style="color:#5b7fa6;text-decoration:none">aloudreader.org</a>'
-    if linkedin():
-        links += f' &nbsp;·&nbsp; <a href="{linkedin()}" style="color:#5b7fa6;text-decoration:none">LinkedIn</a>'
-    return (
-        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 22px"><tr>'
-        f'<td style="padding:0 14px 0 0;vertical-align:middle"><img src="{LOGO}" alt="Aloud" width="80" height="26" style="display:block;border:0;width:80px;height:26px"></td>'
-        f'<td style="vertical-align:middle;font:400 13px/1.5 {SANS};color:#52606d">'
-        f'<span style="font-weight:600;color:#1f2933">Ronak Toprani</span><br>Building Aloud in Toronto<br>{links}'
-        f'</td></tr></table>'
-    )
+def text_of(e: dict) -> str:
+    sig = "\n".join(signature_lines() + [SITE.replace("https://www.", "")])
+    if li := from_env("LINKEDIN_URL", required=False):
+        sig += "\n" + li.replace("https://www.", "")
+    return f"""{e['greeting']}
+
+I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights up each word as it's spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It's free, and it's available right now.
+
+{e['why']}
+
+{e.get('ask', DEFAULT_ASK)} It's at {SITE}, with nothing to install and no sign-up needed. I'd love to hear any feedback, even a short point.
+
+Thank you,
+
+{sig}
+
+If you'd rather not hear from me again, reply with the word stop.
+"""
 
 
 def html_of(e: dict) -> str:
-    p = lambda t, c="#52606d", s=15, b=18: f'<p style="margin:0 0 {b}px;font:400 {s}px/1.6 {SANS};color:{c}">{t}</p>'
+    p = lambda t, b=18, s=15: f'<p style="margin:0 0 {b}px;font:400 {s}px/1.6 {SANS};color:{INK}">{t}</p>'
+    links = f'<a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>'
+    if li := from_env("LINKEDIN_URL", required=False):
+        links += f' &nbsp;·&nbsp; <a href="{li}" style="color:#5b7fa6">LinkedIn</a>'
+    sig = "<br>".join(signature_lines()) + "<br>" + links
     return (
-        f'<div style="max-width:480px;margin:0 auto;padding:22px 20px;background:#fff;font-family:{SANS}">'
-        + p(e["greeting"], "#1f2933")
-        + p("I’m Ronak, and I’m building Aloud: a reader that reads any book aloud and lights up each word as it’s spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It’s free while I build it.")
+        f'<div style="max-width:520px;font-family:{SANS}">'
+        + p(e["greeting"])
+        + p("I’m Ronak, and I’m building Aloud: a reader that reads any book aloud and lights up each word as it’s spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It’s free, and it’s available right now.")
         + p(e["why"])
-        + p(f'{e.get("ask", DEFAULT_ASK)} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. One honest sentence in reply would help me more than anything.')
-        + p("Thank you,", "#1f2933", b=10)
-        + signature_html()
-        + p("If you’d rather not hear from me again, reply with the word stop.", "#7b8794", 12, 0)
+        + p(f'{e.get("ask", DEFAULT_ASK)} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. I’d love to hear any feedback, even a short point.')
+        + p("Thank you,", 14)
+        + f'<img src="{LOGO}" alt="Aloud" width="80" height="26" style="display:block;border:0;width:80px;height:26px;margin:0 0 8px">'
+        + p(sig, 22, 14)
+        + p("If you’d rather not hear from me again, reply with the word stop.", 0, 13)
         + "</div>"
     )
 
@@ -122,7 +104,7 @@ def main() -> None:
     ap.add_argument("batch")
     ap.add_argument("--at", help="ISO 8601 UTC time to send, e.g. 2026-09-14T13:00:00Z")
     ap.add_argument("--stagger-minutes", type=float, default=0,
-                    help="space successive sends out by this many minutes, so a morning's outreach does not land as one burst")
+                    help="space successive sends out, so a morning's outreach does not land as one burst")
     ap.add_argument("--now", action="store_true", help="send immediately")
     ap.add_argument("--cancel", action="store_true", help="cancel everything in the ledger")
     a = ap.parse_args()
@@ -132,7 +114,6 @@ def main() -> None:
     ledger = batch_path.with_suffix(".sent.txt")
     key = from_env("RESEND_SMTP_PASSWORD")
     reply_to = from_env("ANNOUNCE_REPLY_TO")
-    unsubscribe = reply_to.split("<")[-1].rstrip(">")
 
     if a.cancel:
         if not ledger.exists():
@@ -152,17 +133,14 @@ def main() -> None:
         print("\nDRY RUN. Add --at <iso time> to schedule, or --now.")
         return
 
-    from datetime import datetime, timedelta
     start = datetime.strptime(a.at, "%Y-%m-%dT%H:%M:%SZ") if a.at else None
     for i, e in enumerate(pending):
         body = {
             "from": FROM, "to": [e["to"]], "reply_to": reply_to,
-            "subject": e["subject"], "text": text_of(e),
-            "headers": {"List-Unsubscribe": f"<mailto:{unsubscribe}?subject=unsubscribe>"},
+            "subject": e["subject"], "text": text_of(e), "html": html_of(e),
         }
         if start:
-            when = start + timedelta(minutes=a.stagger_minutes * i)
-            body["scheduled_at"] = when.strftime("%Y-%m-%dT%H:%M:%SZ")
+            body["scheduled_at"] = (start + timedelta(minutes=a.stagger_minutes * i)).strftime("%Y-%m-%dT%H:%M:%SZ")
         r = api("/emails", body, key)
         if "id" in r:
             with ledger.open("a") as f:
