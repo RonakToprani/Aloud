@@ -26,16 +26,22 @@ def from_env(name: str) -> str:
     return m.group(1).strip()
 
 
+# Early access, not a free tool. "Free while I build it" is true, and it tells
+# them without saying so that it will not always be. The ask is a conversation
+# with a few learners, never "pass it on": a forward makes it a free resource
+# on someone's list, a reply makes them a design partner.
+DEFAULT_ASK = "Would you try it with two or three of your learners and tell me what's missing?"
+
+
 def text_of(e: dict) -> str:
+    ask = e.get("ask", DEFAULT_ASK)
     return f"""{e['greeting']}
 
-I'm Ronak. I built Aloud, a free reader that reads any book aloud and lights up each word as it's spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 free classics, and the text never leaves their device.
+I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights up each word as it's spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It's free while I build it.
 
 {e['why']}
 
-It's at {SITE}. There's nothing to install and no sign-up needed to try it.
-
-If it's useful to the people you work with, I'd be grateful if you passed it on. And if it isn't, I'd genuinely like to know why. Just reply.
+{ask} It's at {SITE}, with nothing to install and no sign-up needed. One honest sentence in reply would help me more than anything.
 
 Thank you,
 Ronak
@@ -51,10 +57,9 @@ def html_of(e: dict) -> str:
         f'<div style="max-width:480px;margin:0 auto;padding:22px 20px;background:#fff;font-family:{SANS}">'
         f'<img src="{LOGO}" alt="Aloud" width="98" height="32" style="display:block;border:0;width:98px;height:32px;margin:0 0 22px">'
         + p(e["greeting"], "#1f2933")
-        + p("I’m Ronak. I built Aloud, a free reader that reads any book aloud and lights up each word as it’s spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 free classics, and the text never leaves their device.")
+        + p("I’m Ronak, and I’m building Aloud: a reader that reads any book aloud and lights up each word as it’s spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It’s free while I build it.")
         + p(e["why"])
-        + p(f'It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>. There’s nothing to install and no sign-up needed to try it.')
-        + p("If it’s useful to the people you work with, I’d be grateful if you passed it on. And if it isn’t, I’d genuinely like to know why. Just reply.")
+        + p(f'{e.get("ask", DEFAULT_ASK)} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. One honest sentence in reply would help me more than anything.')
         + p("Thank you,<br>Ronak<br>Aloud, Toronto", "#1f2933", b=22)
         + p("If you’d rather not hear from me again, reply with the word stop.", "#7b8794", 12, 0)
         + "</div>"
