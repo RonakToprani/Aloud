@@ -13,9 +13,10 @@ scheduled send can be cancelled, and so a re-run never queues anyone twice.
 
 What keeps this in Gmail's Primary tab rather than Promotions, learned the
 hard way: one text colour throughout, no table layout, no List-Unsubscribe
-header (a bulk-mail signal; the "reply with stop" line satisfies the law on
-its own), and as few links as possible. The small logo in the signature is
-the one remaining risk, kept because it reads as a person with a company.
+header, a bulk-mail signal, and as few links as possible. The signature is
+the one table: the logo beside the name, the way a mail client lays one out.
+There is no unsubscribe line, by the owner's choice; anti-spam law asks for
+one, and the fallback is that every reply reaches a person who will act on it.
 """
 import argparse, json, pathlib, re, sys, time, urllib.request
 from datetime import datetime, timedelta
@@ -57,8 +58,6 @@ I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights
 Thank you,
 
 {sig}
-
-If you'd rather not hear from me again, reply with the word stop.
 """
 
 
@@ -67,17 +66,20 @@ def html_of(e: dict) -> str:
     links = f'<a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>'
     if li := from_env("LINKEDIN_URL", required=False):
         links += f' &nbsp;·&nbsp; <a href="{li}" style="color:#5b7fa6">LinkedIn</a>'
-    sig = "<br>".join(signature_lines()) + "<br>" + links
+    sig = f'<span style="font-weight:600">{signature_lines()[0]}</span><br>' + "<br>".join(signature_lines()[1:]) + "<br>" + links
     return (
         f'<div style="max-width:520px;font-family:{SANS}">'
         + p(e["greeting"])
         + p("I’m Ronak, and I’m building Aloud: a reader that reads any book aloud and lights up each word as it’s spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It’s free, and it’s available right now.")
         + p(e["why"])
         + p(f'{e.get("ask", DEFAULT_ASK)} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. I’d love to hear any feedback, even a short point.')
-        + p("Thank you,", 14)
-        + f'<img src="{LOGO}" alt="Aloud" width="80" height="26" style="display:block;border:0;width:80px;height:26px;margin:0 0 8px">'
-        + p(sig, 22, 14)
-        + p("If you’d rather not hear from me again, reply with the word stop.", 0, 13)
+        + p("Thank you,", 12)
+        # The one table in the email: the logo beside the name, the way a
+        # signature block looks in a mail client. Nothing else is laid out.
+        + f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0"><tr>'
+        f'<td style="padding:0 14px 0 0;vertical-align:middle"><img src="{LOGO}" alt="Aloud" width="80" height="26" style="display:block;border:0;width:80px;height:26px"></td>'
+        f'<td style="vertical-align:middle;font:400 14px/1.5 {SANS};color:{INK}">{sig}</td>'
+        f'</tr></table>'
         + "</div>"
     )
 
