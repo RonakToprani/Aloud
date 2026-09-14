@@ -44,23 +44,51 @@ I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights
 {ask} It's at {SITE}, with nothing to install and no sign-up needed. One honest sentence in reply would help me more than anything.
 
 Thank you,
-Ronak
-Aloud, Toronto
+
+{signature_text()}
 
 If you'd rather not hear from me again, reply with the word stop.
 """
+
+
+def linkedin() -> str | None:
+    m = re.search(r"^LINKEDIN_URL=(.+)$", pathlib.Path(".env.local").read_text(), re.M)
+    return m.group(1).strip() if m else None
+
+
+def signature_text() -> str:
+    lines = ["Ronak Toprani", "Building Aloud in Toronto", SITE]
+    if linkedin():
+        lines.append(linkedin())
+    return "\n".join(lines)
+
+
+def signature_html() -> str:
+    # The one place the logo appears. At the top of a cold email a wordmark
+    # reads as marketing; beside a name at the bottom it reads as a person who
+    # has a company.
+    links = f'<a href="{SITE}" style="color:#5b7fa6;text-decoration:none">aloudreader.org</a>'
+    if linkedin():
+        links += f' &nbsp;·&nbsp; <a href="{linkedin()}" style="color:#5b7fa6;text-decoration:none">LinkedIn</a>'
+    return (
+        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 22px"><tr>'
+        f'<td style="padding:0 14px 0 0;vertical-align:middle"><img src="{LOGO}" alt="Aloud" width="80" height="26" style="display:block;border:0;width:80px;height:26px"></td>'
+        f'<td style="vertical-align:middle;font:400 13px/1.5 {SANS};color:#52606d">'
+        f'<span style="font-weight:600;color:#1f2933">Ronak Toprani</span><br>Building Aloud in Toronto<br>{links}'
+        f'</td></tr></table>'
+    )
 
 
 def html_of(e: dict) -> str:
     p = lambda t, c="#52606d", s=15, b=18: f'<p style="margin:0 0 {b}px;font:400 {s}px/1.6 {SANS};color:{c}">{t}</p>'
     return (
         f'<div style="max-width:480px;margin:0 auto;padding:22px 20px;background:#fff;font-family:{SANS}">'
-        f'<img src="{LOGO}" alt="Aloud" width="98" height="32" style="display:block;border:0;width:98px;height:32px;margin:0 0 22px">'
         + p(e["greeting"], "#1f2933")
         + p("I’m Ronak, and I’m building Aloud: a reader that reads any book aloud and lights up each word as it’s spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It’s free while I build it.")
         + p(e["why"])
         + p(f'{e.get("ask", DEFAULT_ASK)} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. One honest sentence in reply would help me more than anything.')
-        + p("Thank you,<br>Ronak<br>Aloud, Toronto", "#1f2933", b=22)
+        + p("Thank you,", "#1f2933", b=10)
+        + signature_html()
         + p("If you’d rather not hear from me again, reply with the word stop.", "#7b8794", 12, 0)
         + "</div>"
     )
