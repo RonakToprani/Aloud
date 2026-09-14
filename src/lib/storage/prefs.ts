@@ -21,7 +21,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: "dark",
+  theme: "light",
   highlight: "pill",
   face: "serif",
   fontSize: 19,
