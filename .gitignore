@@ -18,3 +18,4 @@ emails/*.sent.txt
 emails/outreach*.json
 emails/repl*.json
 emails/suppressed.txt
+.claude/worktrees/
