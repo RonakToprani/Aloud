@@ -6,7 +6,16 @@ export type SyncMode = "pending" | "events" | "estimated";
 export interface SynchronizerOptions {
   /** Full sentence text; word offsets are relative to it. */
   sentenceText: string;
+  /** Offsets into the *displayed* text; `onWord` reports an index into this
+   *  one, since it's what the reader measures rectangles against. */
   words: WordToken[];
+  /** The same tokenizer applied to `sentenceText` itself, which is what a
+   *  boundary event's charIndex and the duration model are actually
+   *  measured against. Defaults to `words` — correct whenever speech and
+   *  the page are the same string — and is only trusted when it has the
+   *  same length as `words`, since that's what makes word i in one word i
+   *  in the other. */
+  speakableWords?: WordToken[];
   /** Index of the first word actually being spoken. */
   startWordIndex: number;
   rate: number;
@@ -45,6 +54,9 @@ export class SentenceSynchronizer {
   private readonly lastIndex: number;
   private readonly durations: number[];
   private readonly estimatedTotal: number;
+  /** Offsets into `sentenceText`, for boundary lookups and duration
+   *  estimates — see `SynchronizerOptions.speakableWords`. */
+  private readonly spoken: WordToken[];
 
   /** Model start time of each word, plus a final total. */
   private readonly cumulative: number[];
@@ -65,9 +77,10 @@ export class SentenceSynchronizer {
   private pausedOffset = 0;
 
   constructor(private options: SynchronizerOptions) {
-    const { sentenceText, words, rate, voiceId, startWordIndex } = options;
+    const { sentenceText, words, rate, voiceId, startWordIndex, speakableWords } = options;
+    this.spoken = speakableWords && speakableWords.length === words.length ? speakableWords : words;
     const calibration = getCalibration(voiceId);
-    this.durations = estimateWordDurations(sentenceText, words, rate, calibration);
+    this.durations = estimateWordDurations(sentenceText, this.spoken, rate, calibration);
     this.lastIndex = Math.max(0, words.length - 1);
     this.current = Math.min(Math.max(0, startWordIndex), this.lastIndex);
     this.estimatedTotal = this.durations.slice(this.current).reduce((sum, ms) => sum + ms, 0);
@@ -94,7 +107,7 @@ export class SentenceSynchronizer {
     if (this.stopped) return;
     this.startedAt = performance.now();
     this.options.onWord(this.current);
-    if (!this.options.words.length) return;
+    if (!this.spoken.length) return;
 
     this.graceTimer = setTimeout(() => {
       if (this.stopped || this.mode !== "pending") return;
@@ -106,7 +119,7 @@ export class SentenceSynchronizer {
 
   /** Call from the utterance's onboundary. */
   boundary(charIndex: number): void {
-    if (this.stopped || !this.options.words.length) return;
+    if (this.stopped || !this.spoken.length) return;
 
     if (this.mode !== "events") {
       this.setMode("events");
@@ -114,8 +127,12 @@ export class SentenceSynchronizer {
     }
     this.clearGrace();
 
-    const base = this.options.words[this.options.startWordIndex]?.start ?? 0;
-    const index = wordAtCharIndex(this.options.words, base + charIndex);
+    // charIndex comes from the engine, measured against what it was actually
+    // asked to say, so the lookup has to walk the same words rather than the
+    // displayed ones — see `speakableWords`. The index it lands on is still
+    // valid into `words`, because the two are the same length.
+    const base = this.spoken[this.options.startWordIndex]?.start ?? 0;
+    const index = wordAtCharIndex(this.spoken, base + charIndex);
 
     // Engines occasionally re-announce or briefly regress; within a sentence
     // the highlight only ever moves forward.
