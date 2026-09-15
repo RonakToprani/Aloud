@@ -72,3 +72,31 @@ test("a block with no letters produces no speakable words", () => {
   const segmented = segmentChapter(chapterOf("* * *"));
   assert.equal(segmented.sentences.every((s) => s.words.length === 0), true);
 });
+
+test("a block's speakable override replaces a single-sentence block's spoken text", () => {
+  const chapter: Chapter = {
+    id: "c",
+    title: "Test",
+    blocks: [{ kind: "h1", text: "IV", speakable: "four" }],
+  };
+  const segmented = segmentChapter(chapter);
+  assert.equal(segmented.sentences.length, 1);
+  assert.equal(segmented.sentences[0].text, "IV");
+  assert.equal(segmented.sentences[0].speakable, "four");
+  // The shown text and the spoken text no longer match character for
+  // character, so per-word offsets - reused against both strings elsewhere -
+  // are dropped rather than risk misaligning the highlight.
+  assert.equal(segmented.sentences[0].words.length, 0);
+});
+
+test("a speakable override is ignored on a block that splits into more than one sentence", () => {
+  const chapter: Chapter = {
+    id: "c",
+    title: "Test",
+    blocks: [{ kind: "p", text: "First. Second.", speakable: "override" }],
+  };
+  const segmented = segmentChapter(chapter);
+  assert.equal(segmented.sentences.length, 2);
+  assert.equal(segmented.sentences[0].speakable, "First.");
+  assert.equal(segmented.sentences[1].speakable, "Second.");
+});

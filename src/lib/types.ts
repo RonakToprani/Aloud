@@ -5,6 +5,10 @@ export type BlockKind = "h1" | "h2" | "h3" | "p" | "quote";
 export interface Block {
   kind: BlockKind;
   text: string;
+  /** What should be spoken, when it must differ from what's shown (a roman
+   *  numeral marked up as one, read as a word rather than spelled out).
+   *  Absent when speech should just use `text`. */
+  speakable?: string;
 }
 
 export interface Chapter {

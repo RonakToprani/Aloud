@@ -7,7 +7,7 @@ import { DrmProtectedError, EpubParseError, parseEpub, parsePlainText } from "@/
 interface EpubParts {
   encryption?: string;
   rights?: boolean;
-  chapters?: { href: string; body: string; id: string }[];
+  chapters?: { href: string; body: string; id: string; title?: string }[];
   extraManifest?: string;
   extraSpine?: string;
   /** Extra files under OEBPS/, e.g. a nav document. */
@@ -51,7 +51,7 @@ async function makeEpub(parts: EpubParts = {}): Promise<Uint8Array> {
   for (const c of chapters) {
     zip.file(
       `OEBPS/${c.href}`,
-      `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>x</title></head><body>${c.body}</body></html>`,
+      `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>${c.title ?? "x"}</title></head><body>${c.body}</body></html>`,
     );
   }
   return zip.generateAsync({ type: "uint8array" });
@@ -176,4 +176,60 @@ test("a contents page is not a chapter", async () => {
     }),
   );
   assert.deepEqual(book.chapters.map((c) => c.title), ["One"]);
+});
+
+// Standard Ebooks writes a chapter opening as <hgroup><h2 epub:type="z3998:
+// ordinal z3998:roman">I</h2><p epub:type="title">A Fellow Traveller</p>
+// </hgroup>, with the <head><title> spelling the same thing out as "I: A
+// Fellow Traveller". <hgroup> isn't a block or container tag the parser
+// already knows, so its two lines used to glue into an ordinary paragraph
+// that never matched the synthesised chapter title and got read right after
+// it.
+test("a Standard Ebooks hgroup heading is read once, its numeral spoken as a word", async () => {
+  const nav = `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="ch1.xhtml">I: A Fellow Traveller</a></li></ol></nav></body></html>`;
+  const body =
+    `<section epub:type="chapter"><hgroup class="has-h2"><h2 epub:type="z3998:ordinal z3998:roman">I</h2><p epub:type="title">A Fellow Traveller</p></hgroup>${filler(4)}</section>`;
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [{ id: "c1", href: "ch1.xhtml", title: "I: A Fellow Traveller", body }],
+      extraFiles: { "nav.xhtml": nav },
+      extraManifest: `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    }),
+  );
+  assert.equal(book.chapters.length, 1);
+  assert.equal(book.chapters[0].title, "I: A Fellow Traveller");
+  const withTitle = book.chapters[0].blocks.filter((b) => b.text === "I: A Fellow Traveller");
+  assert.equal(withTitle.length, 1);
+  assert.equal(book.chapters[0].blocks[0].speakable, "one: A Fellow Traveller");
+});
+
+test("a bare roman numeral heading is spoken as a word, not spelled out", async () => {
+  const body = `<h2 epub:type="z3998:roman">IV</h2>${filler(4)}`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  assert.equal(book.chapters[0].title, "IV");
+  assert.equal(book.chapters[0].blocks[0].text, "IV");
+  assert.equal(book.chapters[0].blocks[0].speakable, "four");
+});
+
+test("a longer roman numeral heading is spoken as a number", async () => {
+  const body = `<h2 epub:type="z3998:roman">XXIII</h2>${filler(4)}`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  assert.equal(book.chapters[0].blocks[0].text, "XXIII");
+  assert.equal(book.chapters[0].blocks[0].speakable, "twenty-three");
+});
+
+test("a lowercase roman numeral inside a sentence is still spoken as a word", async () => {
+  const body = `<p>See note <span epub:type="z3998:roman">iv</span> for details.</p>`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  const block = book.chapters[0].blocks.find((b) => /See note/.test(b.text));
+  assert.equal(block?.text, "See note iv for details.");
+  assert.equal(block?.speakable, "See note four for details.");
+});
+
+test("an unmarked capital I in prose stays the pronoun, not a numeral", async () => {
+  const body = `<p>I stopped there and looked around before I went on.</p>`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  const block = book.chapters[0].blocks.find((b) => /stopped there/.test(b.text));
+  assert.equal(block?.text, "I stopped there and looked around before I went on.");
+  assert.equal(block?.speakable, undefined);
 });

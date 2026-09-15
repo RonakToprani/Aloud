@@ -176,10 +176,17 @@ export function segmentChapter(chapter: Chapter): SegmentedChapter {
   chapter.blocks.forEach((block, blockIndex) => {
     const indices: number[] = [];
     const parts = block.text.length ? splitSentences(block.text) : [];
+    // A block-level override (currently just a roman numeral read as a word)
+    // replaces the sentence text wholesale, so it only applies when the
+    // whole block is one sentence: splitting it further would leave no
+    // single part to attach it to.
+    const override = block.speakable && parts.length === 1 ? block.speakable.trim() : null;
     for (const part of parts) {
       if (!part.length) continue;
-      const speakable = part.trim();
-      const lead = part.indexOf(speakable);
+      const trimmed = part.trim();
+      const speakable = override ?? trimmed;
+      const lead = part.indexOf(trimmed);
+      const diverges = speakable !== trimmed;
       const index = sentences.length;
       sentences.push({
         index,
@@ -187,7 +194,11 @@ export function segmentChapter(chapter: Chapter): SegmentedChapter {
         text: part,
         speakable,
         lead: lead < 0 ? 0 : lead,
-        words: isSpeakable(speakable) ? tokenizeWords(speakable) : [],
+        // A rewritten sentence has no character-for-character match to the
+        // displayed text, so per-word offsets - reused against both strings
+        // elsewhere - would misalign the highlight. It still plays correctly;
+        // it just shows as one un-highlighted run while it does.
+        words: !diverges && isSpeakable(speakable) ? tokenizeWords(speakable) : [],
       });
       indices.push(index);
     }
