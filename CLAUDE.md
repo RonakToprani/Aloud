@@ -360,6 +360,37 @@ a scheduled batch can be cancelled before it fires. Resend sits behind
 Cloudflare, which answers Python's default user agent with a bare
 `error code: 1010`; that is not a key problem, set a user agent.
 
+**What a day of real replies taught, 14 Sep 2026.** Read these before writing
+to anyone.
+
+- *Primary, not Promotions.* One text colour throughout, no layout table
+  except the signature, no `List-Unsubscribe` header, two links at most, a
+  human From name. The grey-on-black contrast and an image-in-a-table
+  signature were what tipped Gmail. Even so, ten identical copies to one
+  inbox split between tabs: the decision is per message and partly noise, so
+  test with one copy, not ten.
+- *Tone.* Short. Say the one thing, then stop. No "no pressure at all", no
+  "one honest sentence would help me more than anything", nothing that reads
+  as written to be liked. A reply is two or three lines and the sign-off.
+- *Every email looks the same.* Same paragraph style, same signature table
+  with the logo, whether cold or reply. `send-reply.py` imports its markup
+  from `send-outreach.py` so the two cannot drift.
+- *Replies are real replies.* From the Aloud mailbox, inside their thread,
+  with `In-Reply-To` and `References` from the mail being answered and their
+  message quoted under an "On ... wrote:" line. Gmail's "Show original" gives
+  the ids; a thread page's `data-legacy-message-id` (hex) is the
+  `permmsgid=msg-f:` (decimal) of the original-message URL, which is faster
+  than clicking through menus.
+- *Copies first.* Every draft goes to the owner's inbox before it goes to
+  anyone, subject prefixed with who it is for. Anything to someone who
+  matters (a Standard Ebooks editor, say) is held for an explicit go.
+- *A removal request gets no reply,* only a line in `emails/suppressed.txt`,
+  which every future wave must honour.
+- *Send at nine, Toronto time, a few minutes apart.* Delivery status per
+  message is a GET on Resend's `/emails/{id}`.
+- *Know who you are writing to.* Standard Ebooks is backed by ElevenLabs;
+  the first email did not know that and the reply had to own it.
+
 **Both parts, always.** A bulk HTML mail with no plain text alternative is a
 spam signal, and some readers see the text one.
 
