@@ -16,3 +16,5 @@ emails/*.sent.txt
 # Who we have written to. Published organisational addresses, but a target list
 # has no business in a public repo.
 emails/outreach*.json
+emails/repl*.json
+emails/suppressed.txt
