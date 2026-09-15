@@ -33,3 +33,64 @@ export function isAllCaps(text: string): boolean {
   if (letters.length < 3) return false;
   return letters === letters.toUpperCase() && letters !== letters.toLowerCase();
 }
+
+/** Standard subtractive-notation symbols, longest value first so a greedy
+ *  read never has to backtrack. */
+const ROMAN_NUMERALS: [string, number][] = [
+  ["M", 1000], ["CM", 900], ["D", 500], ["CD", 400],
+  ["C", 100], ["XC", 90], ["L", 50], ["XL", 40],
+  ["X", 10], ["IX", 9], ["V", 5], ["IV", 4], ["I", 1],
+];
+
+/**
+ * A roman numeral, case-insensitively, or null for anything the greedy read
+ * doesn't consume completely (a stray initial, "IC", four figures and up).
+ * Markup can mislabel a numeral; this is what keeps that honest rather than
+ * reading nonsense as a number.
+ */
+export function romanToInt(raw: string): number | null {
+  const text = raw.trim().toUpperCase();
+  if (!text) return null;
+  let value = 0;
+  let i = 0;
+  for (const [symbol, amount] of ROMAN_NUMERALS) {
+    while (text.startsWith(symbol, i)) {
+      value += amount;
+      i += symbol.length;
+    }
+  }
+  if (i !== text.length || value < 1 || value > 3999) return null;
+  return value;
+}
+
+const ONES = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+];
+const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+
+function threeDigitsToWords(n: number): string {
+  const words: string[] = [];
+  if (n >= 100) {
+    words.push(ONES[Math.floor(n / 100)], "hundred");
+    n %= 100;
+  }
+  if (n >= 20) {
+    const tens = TENS[Math.floor(n / 10)];
+    const ones = n % 10;
+    words.push(ones ? `${tens}-${ONES[ones]}` : tens);
+  } else if (n > 0) {
+    words.push(ONES[n]);
+  }
+  return words.join(" ");
+}
+
+/** Spells a number out for speech, 0 to 3999; the page keeps its digits. */
+export function numberToWords(n: number): string {
+  if (n === 0) return "zero";
+  const thousands = Math.floor(n / 1000);
+  const rest = n % 1000;
+  return [thousands ? `${threeDigitsToWords(thousands)} thousand` : "", threeDigitsToWords(rest)]
+    .filter(Boolean)
+    .join(" ");
+}

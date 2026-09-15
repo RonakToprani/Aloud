@@ -1,5 +1,14 @@
 import JSZip from "jszip";
-import { bareHeading, CHAPTER_WORD, clean, isAllCaps, isChapterHeading, ROMAN } from "@/lib/text/headings";
+import {
+  bareHeading,
+  CHAPTER_WORD,
+  clean,
+  isAllCaps,
+  isChapterHeading,
+  numberToWords,
+  romanToInt,
+  ROMAN,
+} from "@/lib/text/headings";
 import type { Block, BlockKind, Chapter } from "@/lib/types";
 
 export class DrmProtectedError extends Error {
@@ -30,6 +39,12 @@ const BLOCK_TAGS = new Set([
 ]);
 const CONTAINER_TAGS = new Set([
   "DIV", "SECTION", "ARTICLE", "MAIN", "UL", "OL", "DL", "BLOCKQUOTE", "ASIDE", "FIGURE", "BODY",
+  // A `<header>` wrapping a heading (Standard Ebooks puts one, plus a logo,
+  // in front of every front- and back-matter page) has to recurse the same
+  // way, or the heading inside it never gets typed as one and survives the
+  // "already named" dedup below to be read again right after the synthesised
+  // title.
+  "HEADER",
 ]);
 const SKIP_TAGS = new Set([
   "SCRIPT", "STYLE", "NAV", "SVG", "IMG", "IMAGE", "AUDIO", "VIDEO", "HEAD", "LINK", "META", "RT", "RP",
@@ -70,6 +85,80 @@ function flatText(element: Element): string {
   };
   visit(element);
   return out;
+}
+
+/** epub:type is a space-separated list of semantic tokens, usually prefixed
+ *  ("z3998:roman"); the prefix carries no meaning we act on. */
+function epubTypeTokens(el: Element): string[] {
+  const raw =
+    el.getAttribute("epub:type") ?? el.getAttributeNS("http://www.idpf.org/2007/ops", "type") ?? "";
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => token.split(":").pop() ?? token);
+}
+
+function hasEpubType(el: Element, token: string): boolean {
+  return epubTypeTokens(el).includes(token);
+}
+
+function romanWord(raw: string): string | null {
+  const value = romanToInt(raw);
+  return value === null ? null : numberToWords(value);
+}
+
+/** Like `flatText`, but also builds what should be spoken: identical except
+ *  inside an element marked epub:type="z3998:roman", where a numeral kept as
+ *  letters on the page ("I", "XIV") must be read as a word ("one",
+ *  "fourteen") rather than spelled out or misread as the pronoun. */
+function flatTextBoth(element: Element): { text: string; speakable: string } {
+  let text = "";
+  let speakable = "";
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const value = node.textContent ?? "";
+      text += value;
+      speakable += value;
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    const tag = el.tagName.toUpperCase();
+    if (SKIP_TAGS.has(tag)) return;
+    if (tag === "BR") {
+      text += " ";
+      speakable += " ";
+      return;
+    }
+    const breaks = BLOCK_TAGS.has(tag) || CONTAINER_TAGS.has(tag) || FLOW_TAGS.has(tag);
+    if (hasEpubType(el, "roman")) {
+      const display = flatText(el);
+      const word = romanWord(clean(display));
+      if (breaks) {
+        text += " ";
+        speakable += " ";
+      }
+      text += display;
+      speakable += word ?? display;
+      if (breaks) {
+        text += " ";
+        speakable += " ";
+      }
+      return;
+    }
+    if (breaks) {
+      text += " ";
+      speakable += " ";
+    }
+    for (const child of Array.from(node.childNodes)) visit(child);
+    if (breaks) {
+      text += " ";
+      speakable += " ";
+    }
+  };
+  visit(element);
+  return { text, speakable };
 }
 
 function kindOf(tag: string): BlockKind {
@@ -118,6 +207,39 @@ function looksLikeHeading(text: string, element: Element): boolean {
   return false;
 }
 
+/**
+ * `<hgroup>` bundles a heading with one or more `<p>` lines simulating a
+ * smaller one (Standard Ebooks writes a chapter opening as an ordinal `<h2>`
+ * plus a title `<p>`, kept as two elements so each can carry its own size).
+ * Read as one block, or the ordinal becomes a paragraph of its own and is
+ * read again right after the chapter title synthesised from the ToC, which
+ * names the whole thing already.
+ */
+function combineHgroup(hgroup: Element): Block | null {
+  const parts = Array.from(hgroup.children).filter((c) => BLOCK_TAGS.has(c.tagName.toUpperCase()));
+  if (!parts.length) return null;
+
+  const pieces = parts.map((el) => {
+    const both = flatTextBoth(el);
+    return { text: clean(both.text), speakable: clean(both.speakable) };
+  });
+  const texts = pieces.map((p) => p.text).filter(Boolean);
+  if (!texts.length) return null;
+
+  // Standard Ebooks' own <head><title> joins an ordinal and the chapter name
+  // with ": ", which is what lets this match the table of contents entry
+  // and get deduplicated against the synthesised chapter title.
+  const ordinal = hasEpubType(parts[0], "ordinal");
+  const joiner = ordinal && texts.length > 1 ? ": " : " ";
+  const text = texts.join(joiner);
+  const speakables = pieces.map((p) => p.speakable).filter(Boolean);
+  const speakable = speakables.length === texts.length ? speakables.join(joiner) : text;
+
+  const outerKind = kindOf(parts[0].tagName.toUpperCase());
+  const kind: BlockKind = outerKind === "p" ? "h2" : outerKind;
+  return { kind, text, ...(speakable !== text ? { speakable } : {}) };
+}
+
 interface Extracted {
   blocks: Block[];
   /** Element id → index of the block it begins, for anchors in a TOC. */
@@ -137,15 +259,20 @@ function extractBlocks(root: Element): Extracted {
 
   const walk = (node: Element): void => {
     let pending = "";
+    let pendingSpeakable = "";
     const flush = () => {
       const text = clean(pending);
+      const speakable = clean(pendingSpeakable);
       pending = "";
-      if (text) out.push({ kind: "p", text });
+      pendingSpeakable = "";
+      if (text) out.push({ kind: "p", text, ...(speakable !== text ? { speakable } : {}) });
     };
 
     for (const child of Array.from(node.childNodes)) {
       if (child.nodeType === Node.TEXT_NODE) {
-        pending += child.nodeValue ?? "";
+        const value = child.nodeValue ?? "";
+        pending += value;
+        pendingSpeakable += value;
         continue;
       }
       if (child.nodeType !== Node.ELEMENT_NODE) continue;
@@ -155,6 +282,20 @@ function extractBlocks(root: Element): Extracted {
       if (SKIP_TAGS.has(tag)) continue;
       if (tag === "BR") {
         pending += " ";
+        pendingSpeakable += " ";
+        continue;
+      }
+
+      if (tag === "HGROUP") {
+        // Not a BLOCK_TAG or CONTAINER_TAG, so it would otherwise fall
+        // through to the generic inline case below and its ordinal and
+        // title lines would glue into an ordinary paragraph, never
+        // recognised as the heading it is (see combineHgroup).
+        flush();
+        note(element);
+        for (const inner of Array.from(element.querySelectorAll("[id],[name]"))) note(inner);
+        const heading = combineHgroup(element);
+        if (heading) out.push(heading);
         continue;
       }
 
@@ -171,10 +312,16 @@ function extractBlocks(root: Element): Extracted {
           // becomes its own block rather than one run of glued text.
           walk(element);
         } else {
-          const text = clean(flatText(element));
+          const both = flatTextBoth(element);
+          const text = clean(both.text);
           if (text) {
             const kind = kindOf(tag);
-            out.push({ kind: kind === "p" && looksLikeHeading(text, element) ? "h2" : kind, text });
+            const speakable = clean(both.speakable);
+            out.push({
+              kind: kind === "p" && looksLikeHeading(text, element) ? "h2" : kind,
+              text,
+              ...(speakable !== text ? { speakable } : {}),
+            });
           }
         }
         continue;
@@ -184,13 +331,19 @@ function extractBlocks(root: Element): Extracted {
       for (const inner of Array.from(element.querySelectorAll("[id],[name]"))) note(inner);
       if (FLOW_TAGS.has(tag)) {
         flush();
-        const text = clean(flatText(element));
-        if (text) out.push({ kind: "p", text });
+        const both = flatTextBoth(element);
+        const text = clean(both.text);
+        if (text) {
+          const speakable = clean(both.speakable);
+          out.push({ kind: "p", text, ...(speakable !== text ? { speakable } : {}) });
+        }
         continue;
       }
 
       // Anything else is inline as far as reading is concerned.
-      pending += flatText(element);
+      const inline = flatTextBoth(element);
+      pending += inline.text;
+      pendingSpeakable += inline.speakable;
     }
     flush();
   };
@@ -526,12 +679,21 @@ export async function parseEpub(
       const heading = /^h[1-3]$/.test(part[0].kind) ? part[0].text : null;
       const named = seg === 0 ? (tocTitle ?? null) : points[seg - 1].title;
       const chapterTitle = named ?? heading ?? (seg === 0 ? fallbackTitle : null) ?? `Chapter ${chapters.length + 1}`;
-      // Not read twice when the title already names it.
-      if (heading && (!named || same(heading, named))) part = part.slice(1);
+      // Not read twice when the title already names it. Its speakable form
+      // (a roman numeral read as a word) moves with it to the synthesised
+      // title, or the fix would vanish along with the duplicate.
+      let titleSpeakable: string | undefined;
+      if (heading && (!named || same(heading, named))) {
+        titleSpeakable = part[0].speakable;
+        part = part.slice(1);
+      }
       chapters.push({
         id: seg === 0 ? entry.path : `${entry.path}#${bounds[seg]}`,
         title: chapterTitle,
-        blocks: [{ kind: "h1", text: chapterTitle }, ...part],
+        blocks: [
+          { kind: "h1", text: chapterTitle, ...(titleSpeakable ? { speakable: titleSpeakable } : {}) },
+          ...part,
+        ],
       });
     }
 
