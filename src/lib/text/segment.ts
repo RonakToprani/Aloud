@@ -175,7 +175,10 @@ export function segmentChapter(chapter: Chapter): SegmentedChapter {
 
   chapter.blocks.forEach((block, blockIndex) => {
     const indices: number[] = [];
-    const parts = block.text.length ? splitSentences(block.text) : [];
+    // An image is never spoken, however long its alt text; only a caption,
+    // when there is one, reads like an ordinary paragraph.
+    const spokenText = block.kind === "image" ? (block.caption ?? "") : block.text;
+    const parts = spokenText.length ? splitSentences(spokenText) : [];
     // A block-level override (currently just a roman numeral read as a word)
     // replaces the sentence text wholesale, so it only applies when the
     // whole block is one sentence: splitting it further would leave no

@@ -97,6 +97,28 @@
   font-style: italic;
 }
 
+/* An illustration never runs past the measure the text sets, whatever its
+   own pixel size is, so it never becomes the widest thing on the page. */
+.figure {
+  margin: 0 0 1.4em;
+  text-align: center;
+}
+
+.figureImage {
+  max-width: 100%;
+  height: auto;
+}
+
+.figureCaption {
+  margin-top: 0.5em;
+  font-size: 0.86em;
+  line-height: 1.5;
+  /* Always muted, not just when read-ahead dims it: a caption reads quieter
+     than the prose whether or not the voice has reached it yet. */
+  color: var(--ink-dim);
+  text-align: left;
+}
+
 .sentence {
   cursor: pointer;
 }

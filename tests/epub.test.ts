@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import JSZip from "jszip";
 import { DrmProtectedError, EpubParseError, parseEpub, parsePlainText } from "@/lib/epub/parse";
+import { segmentChapter } from "@/lib/text/segment";
 
 interface EpubParts {
   encryption?: string;
@@ -232,4 +233,67 @@ test("an unmarked capital I in prose stays the pronoun, not a numeral", async ()
   const block = book.chapters[0].blocks.find((b) => /stopped there/.test(b.text));
   assert.equal(block?.text, "I stopped there and looked around before I went on.");
   assert.equal(block?.speakable, undefined);
+});
+
+test("an <img>, a captioned <figure> and an inline SVG <image> all become image blocks", async () => {
+  const body = `
+    <p>Real prose opens the chapter and runs on for a while so the page reads as more than a stub.</p>
+    <img alt="A drawing of a cat." src="images/cat.png"/>
+    <p>More prose follows the bare image.</p>
+    <figure>
+      <img alt="A drawing of a dog." src="images/dog.png"/>
+      <figcaption>The dog waits by the door.</figcaption>
+    </figure>
+    <p>And still more prose after the captioned figure.</p>
+    <svg xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="A publisher's mark.">
+      <image xlink:href="images/mark.svg"/>
+    </svg>
+    <p>The chapter ends with a final paragraph.</p>
+  `;
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [{ id: "c1", href: "text/ch1.xhtml", body }],
+      extraFiles: {
+        "text/images/cat.png": "cat-bytes",
+        "text/images/dog.png": "dog-bytes",
+        "text/images/mark.svg": "<svg>mark-bytes</svg>",
+      },
+    }),
+  );
+
+  const images = book.chapters[0].blocks.filter((b) => b.kind === "image");
+  assert.equal(images.length, 3);
+
+  const [cat, dog, mark] = images;
+  assert.equal(cat.src, "OEBPS/text/images/cat.png");
+  assert.equal(cat.alt, "A drawing of a cat.");
+  assert.equal(cat.caption, undefined);
+
+  assert.equal(dog.src, "OEBPS/text/images/dog.png");
+  assert.equal(dog.alt, "A drawing of a dog.");
+  assert.equal(dog.caption, "The dog waits by the door.");
+
+  assert.equal(mark.src, "OEBPS/text/images/mark.svg");
+  assert.equal(mark.alt, "A publisher's mark.");
+  assert.equal(mark.caption, undefined);
+
+  // The bytes behind every image block were captured, keyed by that same src.
+  assert.ok(book.images);
+  assert.equal(await book.images!["OEBPS/text/images/cat.png"].text(), "cat-bytes");
+  assert.equal(await book.images!["OEBPS/text/images/dog.png"].text(), "dog-bytes");
+  assert.match(await book.images!["OEBPS/text/images/mark.svg"].text(), /mark-bytes/);
+
+  // A bare image and an SVG image yield no sentences at all: the player has
+  // nothing to skip past because there is nothing to speak in the first
+  // place. A figure's caption, though, reads like any other paragraph.
+  const segmented = segmentChapter(book.chapters[0]);
+  const catIndex = book.chapters[0].blocks.indexOf(cat);
+  const dogIndex = book.chapters[0].blocks.indexOf(dog);
+  const markIndex = book.chapters[0].blocks.indexOf(mark);
+  assert.deepEqual(segmented.blockSentences[catIndex], []);
+  assert.deepEqual(segmented.blockSentences[markIndex], []);
+  assert.equal(segmented.blockSentences[dogIndex].length, 1);
+  const captionSentence = segmented.sentences[segmented.blockSentences[dogIndex][0]];
+  assert.equal(captionSentence.speakable, "The dog waits by the door.");
+  assert.ok(captionSentence.words.length > 0);
 });

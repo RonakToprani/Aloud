@@ -104,6 +104,8 @@ type Sheet = "appearance" | "playback" | "contents" | null;
 interface LoadedBook {
   meta: BookMeta;
   chapters: Chapter[];
+  /** Illustration bytes an image block's `src` looks itself up in. */
+  images: Record<string, Blob>;
 }
 
 /**
@@ -211,7 +213,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
         setAutoplay(wantsAutoplay);
         setNeedsVoice(!wantsAutoplay && !underway && !hasChosenVoice(bookId));
         loaded.current = true;
-        setBook({ meta, chapters: body.chapters });
+        setBook({ meta, chapters: body.chapters, images: body.images ?? {} });
         setBookmarks(await listBookmarks(bookId).catch(() => []));
       } catch (error) {
         if (!alive) return;
@@ -915,6 +917,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
 
         <ReaderSurface
           chapter={chapter}
+          images={book.images}
           currentSentence={playerState.sentenceIndex}
           currentWord={playerState.wordIndex}
           highlight={settings.highlight}

@@ -138,6 +138,41 @@ test("skipping forward steps over blocks with nothing to say", async () => {
   assert.equal(lastState(states).sentenceIndex, 3);
 });
 
+test("an image block between two paragraphs is skipped, not spoken", async () => {
+  // An illustration is never given to the speech engine: it has no sentences
+  // at all, the same as the "* * *" block above, so resolveSentence steps
+  // straight over it.
+  const engine = new FakeEngine();
+  engine.msPerWord = 100; // matches build()'s default: fast enough to run quickly, slow enough that a short sentence isn't mistaken for a phantom end
+  const chapter: SegmentedChapter = segmentChapter({
+    id: "c0",
+    title: "Chapter 1",
+    blocks: [
+      { kind: "p", text: "Alpha one two." },
+      { kind: "image", text: "", src: "images/plate.png", alt: "A plate." },
+      { kind: "p", text: "Bravo three four." },
+    ],
+  });
+  const states: PlayerState[] = [];
+  const player = new Player({
+    engine,
+    getChapter: (i) => (i === 0 ? chapter : undefined),
+    chapterCount: 1,
+    rate: 1,
+    voiceId: null,
+    onState: (state) => states.push({ ...state }),
+  });
+  player.play();
+  await settle(1200);
+  player.destroy();
+
+  assert.equal(lastState(states).status, "ended");
+  assert.deepEqual(
+    engine.spoken.map((request) => request.text),
+    ["Alpha one two.", "Bravo three four."],
+  );
+});
+
 test("a voice that is listed but never speaks is reported, not left silent", async () => {
   // Exactly what a Siri voice does on iOS: the utterance is accepted and then
   // nothing happens — no start, no end, no error — so the highlight would sit
