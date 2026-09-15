@@ -1,5 +1,14 @@
 import JSZip from "jszip";
-import { bareHeading, CHAPTER_WORD, clean, isAllCaps, isChapterHeading, ROMAN } from "@/lib/text/headings";
+import {
+  bareHeading,
+  CHAPTER_WORD,
+  clean,
+  isAllCaps,
+  isChapterHeading,
+  numberToWords,
+  romanToInt,
+  ROMAN,
+} from "@/lib/text/headings";
 import type { Block, BlockKind, Chapter } from "@/lib/types";
 
 export class DrmProtectedError extends Error {
@@ -23,6 +32,10 @@ export interface ParsedBook {
   author: string | null;
   chapters: Chapter[];
   cover?: Blob;
+  /** Illustrations referenced by image blocks, keyed by the same zip path a
+   *  block's `src` carries. Only images actually used in the text are read
+   *  from the zip, and only up to IMAGE_BUDGET_BYTES. */
+  images?: Record<string, Blob>;
 }
 
 const BLOCK_TAGS = new Set([
@@ -30,6 +43,13 @@ const BLOCK_TAGS = new Set([
 ]);
 const CONTAINER_TAGS = new Set([
   "DIV", "SECTION", "ARTICLE", "MAIN", "UL", "OL", "DL", "BLOCKQUOTE", "ASIDE", "FIGURE", "BODY",
+  // Standard Ebooks puts a <header> in front of every front- and back-matter
+  // page, holding a heading and, on the imprint, the logo. It has to recurse
+  // like any container: otherwise the heading is never typed as one and
+  // survives the "already named" dedup below to be read again after the
+  // synthesised title, and the image flattens into inline text and the logo
+  // is lost with no trace of having been there.
+  "HEADER",
 ]);
 const SKIP_TAGS = new Set([
   "SCRIPT", "STYLE", "NAV", "SVG", "IMG", "IMAGE", "AUDIO", "VIDEO", "HEAD", "LINK", "META", "RT", "RP",
@@ -70,6 +90,80 @@ function flatText(element: Element): string {
   };
   visit(element);
   return out;
+}
+
+/** epub:type is a space-separated list of semantic tokens, usually prefixed
+ *  ("z3998:roman"); the prefix carries no meaning we act on. */
+function epubTypeTokens(el: Element): string[] {
+  const raw =
+    el.getAttribute("epub:type") ?? el.getAttributeNS("http://www.idpf.org/2007/ops", "type") ?? "";
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => token.split(":").pop() ?? token);
+}
+
+function hasEpubType(el: Element, token: string): boolean {
+  return epubTypeTokens(el).includes(token);
+}
+
+function romanWord(raw: string): string | null {
+  const value = romanToInt(raw);
+  return value === null ? null : numberToWords(value);
+}
+
+/** Like `flatText`, but also builds what should be spoken: identical except
+ *  inside an element marked epub:type="z3998:roman", where a numeral kept as
+ *  letters on the page ("I", "XIV") must be read as a word ("one",
+ *  "fourteen") rather than spelled out or misread as the pronoun. */
+function flatTextBoth(element: Element): { text: string; speakable: string } {
+  let text = "";
+  let speakable = "";
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const value = node.textContent ?? "";
+      text += value;
+      speakable += value;
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    const tag = el.tagName.toUpperCase();
+    if (SKIP_TAGS.has(tag)) return;
+    if (tag === "BR") {
+      text += " ";
+      speakable += " ";
+      return;
+    }
+    const breaks = BLOCK_TAGS.has(tag) || CONTAINER_TAGS.has(tag) || FLOW_TAGS.has(tag);
+    if (hasEpubType(el, "roman")) {
+      const display = flatText(el);
+      const word = romanWord(clean(display));
+      if (breaks) {
+        text += " ";
+        speakable += " ";
+      }
+      text += display;
+      speakable += word ?? display;
+      if (breaks) {
+        text += " ";
+        speakable += " ";
+      }
+      return;
+    }
+    if (breaks) {
+      text += " ";
+      speakable += " ";
+    }
+    for (const child of Array.from(node.childNodes)) visit(child);
+    if (breaks) {
+      text += " ";
+      speakable += " ";
+    }
+  };
+  visit(element);
+  return { text, speakable };
 }
 
 function kindOf(tag: string): BlockKind {
@@ -118,15 +212,68 @@ function looksLikeHeading(text: string, element: Element): boolean {
   return false;
 }
 
+/**
+ * `<hgroup>` bundles a heading with one or more `<p>` lines simulating a
+ * smaller one (Standard Ebooks writes a chapter opening as an ordinal `<h2>`
+ * plus a title `<p>`, kept as two elements so each can carry its own size).
+ * Read as one block, or the ordinal becomes a paragraph of its own and is
+ * read again right after the chapter title synthesised from the ToC, which
+ * names the whole thing already.
+ */
+function combineHgroup(hgroup: Element): Block | null {
+  const parts = Array.from(hgroup.children).filter((c) => BLOCK_TAGS.has(c.tagName.toUpperCase()));
+  if (!parts.length) return null;
+
+  const pieces = parts.map((el) => {
+    const both = flatTextBoth(el);
+    return { text: clean(both.text), speakable: clean(both.speakable) };
+  });
+  const texts = pieces.map((p) => p.text).filter(Boolean);
+  if (!texts.length) return null;
+
+  // Standard Ebooks' own <head><title> joins an ordinal and the chapter name
+  // with ": ", which is what lets this match the table of contents entry
+  // and get deduplicated against the synthesised chapter title.
+  const ordinal = hasEpubType(parts[0], "ordinal");
+  const joiner = ordinal && texts.length > 1 ? ": " : " ";
+  const text = texts.join(joiner);
+  const speakables = pieces.map((p) => p.speakable).filter(Boolean);
+  const speakable = speakables.length === texts.length ? speakables.join(joiner) : text;
+
+  const outerKind = kindOf(parts[0].tagName.toUpperCase());
+  const kind: BlockKind = outerKind === "p" ? "h2" : outerKind;
+  return { kind, text, ...(speakable !== text ? { speakable } : {}) };
+}
+
 interface Extracted {
   blocks: Block[];
   /** Element id → index of the block it begins, for anchors in a TOC. */
   anchors: Map<string, number>;
 }
 
+/** Where an <img>, or an SVG <image>, points, before it is resolved against
+ *  the chapter file's own path. SVG spells this three different ways
+ *  depending on the producer and how strictly the file parsed. */
+function imageHref(el: Element): string | null {
+  return (
+    el.getAttribute("src") ??
+    el.getAttributeNS("http://www.w3.org/1999/xlink", "href") ??
+    el.getAttribute("xlink:href") ??
+    el.getAttribute("href")
+  );
+}
+
+/** The first <img> or SVG <image> inside an element, whichever markup was used. */
+function findImage(scope: Element): Element | null {
+  return scope.querySelector("img, image");
+}
+
 /** Walk the document in order, flushing loose inline text into paragraphs so
- *  nothing readable is dropped and nothing is emitted twice. */
-function extractBlocks(root: Element): Extracted {
+ *  nothing readable is dropped and nothing is emitted twice.
+ *
+ *  `basePath` is the chapter file's own zip path, which is what an image's
+ *  relative href is resolved against. */
+function extractBlocks(root: Element, basePath: string): Extracted {
   const out: Block[] = [];
   const anchors = new Map<string, number>();
 
@@ -135,26 +282,90 @@ function extractBlocks(root: Element): Extracted {
     if (id && !anchors.has(id)) anchors.set(id, out.length);
   };
 
+  /** `container` is the <img>, <figure> or <svg>; `imgEl` is the element that
+   *  actually carries the href, which for a figure or an inline SVG is a
+   *  descendant of it. */
+  const pushImage = (container: Element, imgEl: Element) => {
+    const href = imageHref(imgEl);
+    if (!href) return;
+    const src = resolvePath(basePath, href);
+    if (!src) return;
+    const alt = clean(imgEl.getAttribute("alt") ?? container.getAttribute("aria-label") ?? "");
+    const figcaption = container.querySelector("figcaption");
+    const caption = figcaption ? clean(flatText(figcaption)) : undefined;
+    out.push({ kind: "image", text: "", src, alt, ...(caption ? { caption } : {}) });
+  };
+
   const walk = (node: Element): void => {
     let pending = "";
+    let pendingSpeakable = "";
     const flush = () => {
       const text = clean(pending);
+      const speakable = clean(pendingSpeakable);
       pending = "";
-      if (text) out.push({ kind: "p", text });
+      pendingSpeakable = "";
+      if (text) out.push({ kind: "p", text, ...(speakable !== text ? { speakable } : {}) });
     };
 
     for (const child of Array.from(node.childNodes)) {
       if (child.nodeType === Node.TEXT_NODE) {
-        pending += child.nodeValue ?? "";
+        const value = child.nodeValue ?? "";
+        pending += value;
+        pendingSpeakable += value;
         continue;
       }
       if (child.nodeType !== Node.ELEMENT_NODE) continue;
 
       const element = child as Element;
       const tag = element.tagName.toUpperCase();
+
+      // An illustration is a block of its own kind, never inline text.
+      // <figure> is checked before the generic container handling below so a
+      // figure that wraps an image keeps its caption attached to it, rather
+      // than the caption becoming a stray paragraph next to a dropped image.
+      if (tag === "FIGURE") {
+        const img = findImage(element);
+        if (img) {
+          flush();
+          note(element);
+          pushImage(element, img);
+          continue;
+        }
+        // A figure without an image (a table, say) is an ordinary container.
+      } else if (tag === "IMG") {
+        flush();
+        note(element);
+        pushImage(element, element);
+        continue;
+      } else if (tag === "SVG") {
+        // Standard Ebooks draws its own logo as an SVG wrapping an <image>;
+        // <svg> is otherwise decorative and its contents are never walked.
+        const img = findImage(element);
+        if (img) {
+          flush();
+          note(element);
+          pushImage(element, img);
+        }
+        continue;
+      }
+
       if (SKIP_TAGS.has(tag)) continue;
       if (tag === "BR") {
         pending += " ";
+        pendingSpeakable += " ";
+        continue;
+      }
+
+      if (tag === "HGROUP") {
+        // Not a BLOCK_TAG or CONTAINER_TAG, so it would otherwise fall
+        // through to the generic inline case below and its ordinal and
+        // title lines would glue into an ordinary paragraph, never
+        // recognised as the heading it is (see combineHgroup).
+        flush();
+        note(element);
+        for (const inner of Array.from(element.querySelectorAll("[id],[name]"))) note(inner);
+        const heading = combineHgroup(element);
+        if (heading) out.push(heading);
         continue;
       }
 
@@ -171,10 +382,16 @@ function extractBlocks(root: Element): Extracted {
           // becomes its own block rather than one run of glued text.
           walk(element);
         } else {
-          const text = clean(flatText(element));
+          const both = flatTextBoth(element);
+          const text = clean(both.text);
           if (text) {
             const kind = kindOf(tag);
-            out.push({ kind: kind === "p" && looksLikeHeading(text, element) ? "h2" : kind, text });
+            const speakable = clean(both.speakable);
+            out.push({
+              kind: kind === "p" && looksLikeHeading(text, element) ? "h2" : kind,
+              text,
+              ...(speakable !== text ? { speakable } : {}),
+            });
           }
         }
         continue;
@@ -184,13 +401,19 @@ function extractBlocks(root: Element): Extracted {
       for (const inner of Array.from(element.querySelectorAll("[id],[name]"))) note(inner);
       if (FLOW_TAGS.has(tag)) {
         flush();
-        const text = clean(flatText(element));
-        if (text) out.push({ kind: "p", text });
+        const both = flatTextBoth(element);
+        const text = clean(both.text);
+        if (text) {
+          const speakable = clean(both.speakable);
+          out.push({ kind: "p", text, ...(speakable !== text ? { speakable } : {}) });
+        }
         continue;
       }
 
       // Anything else is inline as far as reading is concerned.
-      pending += flatText(element);
+      const inline = flatTextBoth(element);
+      pending += inline.text;
+      pendingSpeakable += inline.speakable;
     }
     flush();
   };
@@ -330,7 +553,11 @@ const SPLIT_WORDS = 4000;
 
 function wordCount(blocks: Block[]): number {
   let count = 0;
-  for (const block of blocks) count += block.text.split(/\s+/).length;
+  for (const block of blocks) {
+    // An image has nothing to count; a caption counts like any paragraph.
+    const text = block.kind === "image" ? (block.caption ?? "") : block.text;
+    if (text) count += text.split(/\s+/).length;
+  }
   return count;
 }
 
@@ -466,7 +693,7 @@ export async function parseEpub(
       const doc = parseXml(await file.async("text"), "application/xhtml+xml");
       const body = doc.body ?? doc.documentElement;
       if (!body) continue;
-      extracted = extractBlocks(body);
+      extracted = extractBlocks(body, entry.path);
       pageTitle = clean(doc.querySelector("title")?.textContent ?? "");
     } catch {
       continue;
@@ -477,7 +704,11 @@ export async function parseEpub(
     const words = wordCount(blocks);
     const looksLikeCover =
       /cover|title-?page|halftitle/i.test(entry.path) && words < 25;
-    if (looksLikeCover || words < 3) continue;
+    // A near-wordless page is ordinarily a stub a converter left behind, but
+    // a page that is nothing but a full-page illustration — a frontispiece,
+    // say — is exactly the kind of page this exists to show, not drop.
+    const hasImage = blocks.some((block) => block.kind === "image");
+    if (looksLikeCover || (words < 3 && !hasImage)) continue;
 
     const tocTitle = titles.get(entry.path);
     const leadHeading = /^h[1-3]$/.test(blocks[0].kind) ? blocks[0].text : null;
@@ -526,12 +757,21 @@ export async function parseEpub(
       const heading = /^h[1-3]$/.test(part[0].kind) ? part[0].text : null;
       const named = seg === 0 ? (tocTitle ?? null) : points[seg - 1].title;
       const chapterTitle = named ?? heading ?? (seg === 0 ? fallbackTitle : null) ?? `Chapter ${chapters.length + 1}`;
-      // Not read twice when the title already names it.
-      if (heading && (!named || same(heading, named))) part = part.slice(1);
+      // Not read twice when the title already names it. Its speakable form
+      // (a roman numeral read as a word) moves with it to the synthesised
+      // title, or the fix would vanish along with the duplicate.
+      let titleSpeakable: string | undefined;
+      if (heading && (!named || same(heading, named))) {
+        titleSpeakable = part[0].speakable;
+        part = part.slice(1);
+      }
       chapters.push({
         id: seg === 0 ? entry.path : `${entry.path}#${bounds[seg]}`,
         title: chapterTitle,
-        blocks: [{ kind: "h1", text: chapterTitle }, ...part],
+        blocks: [
+          { kind: "h1", text: chapterTitle, ...(titleSpeakable ? { speakable: titleSpeakable } : {}) },
+          ...part,
+        ],
       });
     }
 
@@ -545,7 +785,50 @@ export async function parseEpub(
     );
   }
 
-  return { title, author, chapters, cover };
+  const images = await readImages(zip, chapters);
+
+  return { title, author, chapters, cover, images };
+}
+
+/** A fully illustrated novel runs to a few dozen plates at a few hundred KB
+ *  each; this is generous room for that without one lavish or malicious EPUB
+ *  filling a reader's device. Past the cap, later images are just left out —
+ *  the book still reads fine, it only loses pictures. */
+const IMAGE_BUDGET_BYTES = 40 * 1024 * 1024;
+
+/** Reads only the images an image block actually points at, in the order
+ *  they appear, stopping once the per-book budget is spent. Nothing here
+ *  holds the whole zip's images in memory: each is decompressed, kept if it
+ *  fits, and otherwise dropped immediately. */
+async function readImages(zip: JSZip, chapters: Chapter[]): Promise<Record<string, Blob> | undefined> {
+  const paths = new Set<string>();
+  for (const chapter of chapters) {
+    for (const block of chapter.blocks) {
+      if (block.kind === "image" && block.src) paths.add(block.src);
+    }
+  }
+  if (!paths.size) return undefined;
+
+  const images: Record<string, Blob> = {};
+  let used = 0;
+  let n = 0;
+  for (const path of paths) {
+    const file = zip.file(path);
+    if (file) {
+      try {
+        const blob = await file.async("blob");
+        if (used + blob.size <= IMAGE_BUDGET_BYTES) {
+          images[path] = blob;
+          used += blob.size;
+        }
+      } catch {
+        /* one unreadable image just means that picture is missing */
+      }
+    }
+    n += 1;
+    if (n % 8 === 0) await yieldToUi();
+  }
+  return Object.keys(images).length ? images : undefined;
 }
 
 /** Plain text and pasted text: blank lines separate paragraphs. */

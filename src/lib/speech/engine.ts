@@ -26,6 +26,9 @@ export interface PreparedSentence {
   text: string;
   /** True when the next sentence starts a new paragraph. */
   endsParagraph: boolean;
+  /** A chapter heading (h1/h2/h3), read alone with a longer pause after it
+   *  rather than run into the prose that follows. */
+  isHeading?: boolean;
 }
 
 export interface EngineVoice {

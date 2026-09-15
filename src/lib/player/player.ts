@@ -373,6 +373,7 @@ export class Player {
     const sync = new SentenceSynchronizer({
       sentenceText: sentence.speakable,
       words: sentence.words,
+      speakableWords: sentence.speakableWords,
       startWordIndex: startWord,
       rate: this.rate,
       voiceId: this.voiceId,
@@ -444,6 +445,18 @@ export class Player {
       },
     );
 
+    // Offering again now, rather than only on the next sentence's turn,
+    // matters when this sentence's own offer (above, before speak()) was
+    // itself just consumed by speak() — normally harmless since a passage
+    // covers many sentences ahead and this is a no-op for an engine that's
+    // still mid-fetch or already holds one, but a heading's passage is
+    // exactly one sentence long, so without this the sentence after it goes
+    // unplanned for a full turn. It has to happen before prefetchNext below:
+    // once this starts the real passage fetch, prefetchNext's own guard
+    // sees it and skips, rather than racing it with a lone-sentence copy of
+    // the same text.
+    this.offerPassage(target.chapterIndex, target.sentenceIndex);
+
     this.prefetchNext(target.chapterIndex, target.sentenceIndex);
   }
 
@@ -465,7 +478,7 @@ export class Player {
    *  in isolation. */
   private offerPassage(chapterIndex: number, sentenceIndex: number): void {
     if (!this.options.engine.prepare) return;
-    const texts: { text: string; endsParagraph: boolean }[] = [];
+    const texts: { text: string; endsParagraph: boolean; isHeading: boolean }[] = [];
     let cursor: { chapterIndex: number; sentenceIndex: number } | null = {
       chapterIndex,
       sentenceIndex,
@@ -480,11 +493,15 @@ export class Player {
       const nextSentence = continues
         ? this.chapter(continues.chapterIndex)?.sentences[continues.sentenceIndex]
         : undefined;
+      const kind = chapter.blocks[sentence.blockIndex]?.kind;
       texts.push({
         text: this.spokenText(sentence, cursor.chapterIndex, cursor.sentenceIndex),
         // The block a sentence belongs to is its paragraph; a change of block,
         // or running out of chapter, ends one.
         endsParagraph: !nextSentence || nextSentence.blockIndex !== sentence.blockIndex,
+        // A heading has no terminal punctuation for the voice to land on, so
+        // it is read alone rather than folded into the paragraph after it.
+        isHeading: kind === "h1" || kind === "h2" || kind === "h3",
       });
       cursor = continues;
     }

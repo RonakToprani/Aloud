@@ -18,7 +18,17 @@ export interface Sentence {
   speakable: string;
   /** Offset of `speakable` within `text`, so word offsets can be rendered. */
   lead: number;
+  /** Offsets into `text` (by way of `lead`), for measuring and for tapping
+   *  a word on the page. */
   words: WordToken[];
+  /** The same tokenizer applied to `speakable` instead, offsets into it. A
+   *  roman numeral read as a word ("I" -> "one") is one token either way,
+   *  so word i here is word i in `words` — that's what lets the
+   *  synchronizer light the displayed word from a boundary reported against
+   *  the spoken one. Equal in length to `words` unless something about the
+   *  override changes the token count, in which case both are emptied
+   *  rather than offer an index that doesn't line up. */
+  speakableWords: WordToken[];
 }
 
 export interface SegmentedChapter {
@@ -175,19 +185,49 @@ export function segmentChapter(chapter: Chapter): SegmentedChapter {
 
   chapter.blocks.forEach((block, blockIndex) => {
     const indices: number[] = [];
-    const parts = block.text.length ? splitSentences(block.text) : [];
+    // An image is never spoken, however long its alt text; only a caption,
+    // when there is one, reads like an ordinary paragraph.
+    const spokenText = block.kind === "image" ? (block.caption ?? "") : block.text;
+    const parts = spokenText.length ? splitSentences(spokenText) : [];
+    // A block-level override (currently just a roman numeral read as a word)
+    // replaces the sentence text wholesale, so it only applies when the
+    // whole block is one sentence: splitting it further would leave no
+    // single part to attach it to.
+    const override = block.speakable && parts.length === 1 ? block.speakable.trim() : null;
     for (const part of parts) {
       if (!part.length) continue;
-      const speakable = part.trim();
-      const lead = part.indexOf(speakable);
+      const trimmed = part.trim();
+      const speakable = override ?? trimmed;
+      const lead = part.indexOf(trimmed);
       const index = sentences.length;
+
+      let words: WordToken[];
+      let speakableWords: WordToken[];
+      if (speakable === trimmed) {
+        words = isSpeakable(trimmed) ? tokenizeWords(trimmed) : [];
+        speakableWords = words;
+      } else {
+        const displayWords = isSpeakable(trimmed) ? tokenizeWords(trimmed) : [];
+        const spokenWords = isSpeakable(speakable) ? tokenizeWords(speakable) : [];
+        // Word i on the page is word i in speech only when the rewrite
+        // didn't change how many tokens there are (true for a roman numeral,
+        // which is always one token whichever way it's written). When it
+        // isn't true there is no honest index to hand the synchronizer, so
+        // the sentence plays without a highlight rather than lighting the
+        // wrong word.
+        const aligned = displayWords.length === spokenWords.length;
+        words = aligned ? displayWords : [];
+        speakableWords = aligned ? spokenWords : [];
+      }
+
       sentences.push({
         index,
         blockIndex,
         text: part,
         speakable,
         lead: lead < 0 ? 0 : lead,
-        words: isSpeakable(speakable) ? tokenizeWords(speakable) : [],
+        words,
+        speakableWords,
       });
       indices.push(index);
     }

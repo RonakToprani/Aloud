@@ -45,6 +45,13 @@ export class FakeEngine implements SpeechEngine {
    *  its contract — the first entry is the text speak() will be given next —
    *  can only be checked against what was actually spoken. */
   readonly prepared: PreparedSentence[][] = [];
+  /** Lone-sentence prefetch requests, in the order they came in — see
+   *  `calls`, which is what actually orders them against `prepare`. */
+  readonly prefetched: SpokenRequest[] = [];
+  /** `prepare` and `prefetch` calls in one timeline, since which came first
+   *  is exactly what the real engine's dedup depends on and `prepared` and
+   *  `prefetched` alone don't preserve their relative order. */
+  readonly calls: { type: "prepare" | "prefetch"; text: string }[] = [];
   private speaking = false;
   private paused = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
@@ -61,6 +68,11 @@ export class FakeEngine implements SpeechEngine {
   unlock() {}
   prepare(sentences: PreparedSentence[]) {
     this.prepared.push(sentences.map((sentence) => ({ ...sentence })));
+    this.calls.push({ type: "prepare", text: sentences[0]?.text ?? "" });
+  }
+  prefetch(options: SpeakOptions) {
+    this.prefetched.push({ text: options.text, rate: options.rate, voiceId: options.voiceId });
+    this.calls.push({ type: "prefetch", text: options.text });
   }
 
   private later(fn: () => void, ms: number) {

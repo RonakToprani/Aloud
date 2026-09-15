@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import JSZip from "jszip";
 import { DrmProtectedError, EpubParseError, parseEpub, parsePlainText } from "@/lib/epub/parse";
+import { segmentChapter } from "@/lib/text/segment";
 
 interface EpubParts {
   encryption?: string;
   rights?: boolean;
-  chapters?: { href: string; body: string; id: string }[];
+  chapters?: { href: string; body: string; id: string; title?: string }[];
   extraManifest?: string;
   extraSpine?: string;
   /** Extra files under OEBPS/, e.g. a nav document. */
@@ -51,7 +52,7 @@ async function makeEpub(parts: EpubParts = {}): Promise<Uint8Array> {
   for (const c of chapters) {
     zip.file(
       `OEBPS/${c.href}`,
-      `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>x</title></head><body>${c.body}</body></html>`,
+      `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>${c.title ?? "x"}</title></head><body>${c.body}</body></html>`,
     );
   }
   return zip.generateAsync({ type: "uint8array" });
@@ -176,4 +177,123 @@ test("a contents page is not a chapter", async () => {
     }),
   );
   assert.deepEqual(book.chapters.map((c) => c.title), ["One"]);
+});
+
+// Standard Ebooks writes a chapter opening as <hgroup><h2 epub:type="z3998:
+// ordinal z3998:roman">I</h2><p epub:type="title">A Fellow Traveller</p>
+// </hgroup>, with the <head><title> spelling the same thing out as "I: A
+// Fellow Traveller". <hgroup> isn't a block or container tag the parser
+// already knows, so its two lines used to glue into an ordinary paragraph
+// that never matched the synthesised chapter title and got read right after
+// it.
+test("a Standard Ebooks hgroup heading is read once, its numeral spoken as a word", async () => {
+  const nav = `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="ch1.xhtml">I: A Fellow Traveller</a></li></ol></nav></body></html>`;
+  const body =
+    `<section epub:type="chapter"><hgroup class="has-h2"><h2 epub:type="z3998:ordinal z3998:roman">I</h2><p epub:type="title">A Fellow Traveller</p></hgroup>${filler(4)}</section>`;
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [{ id: "c1", href: "ch1.xhtml", title: "I: A Fellow Traveller", body }],
+      extraFiles: { "nav.xhtml": nav },
+      extraManifest: `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    }),
+  );
+  assert.equal(book.chapters.length, 1);
+  assert.equal(book.chapters[0].title, "I: A Fellow Traveller");
+  const withTitle = book.chapters[0].blocks.filter((b) => b.text === "I: A Fellow Traveller");
+  assert.equal(withTitle.length, 1);
+  assert.equal(book.chapters[0].blocks[0].speakable, "one: A Fellow Traveller");
+});
+
+test("a bare roman numeral heading is spoken as a word, not spelled out", async () => {
+  const body = `<h2 epub:type="z3998:roman">IV</h2>${filler(4)}`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  assert.equal(book.chapters[0].title, "IV");
+  assert.equal(book.chapters[0].blocks[0].text, "IV");
+  assert.equal(book.chapters[0].blocks[0].speakable, "four");
+});
+
+test("a longer roman numeral heading is spoken as a number", async () => {
+  const body = `<h2 epub:type="z3998:roman">XXIII</h2>${filler(4)}`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  assert.equal(book.chapters[0].blocks[0].text, "XXIII");
+  assert.equal(book.chapters[0].blocks[0].speakable, "twenty-three");
+});
+
+test("a lowercase roman numeral inside a sentence is still spoken as a word", async () => {
+  const body = `<p>See note <span epub:type="z3998:roman">iv</span> for details.</p>`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  const block = book.chapters[0].blocks.find((b) => /See note/.test(b.text));
+  assert.equal(block?.text, "See note iv for details.");
+  assert.equal(block?.speakable, "See note four for details.");
+});
+
+test("an unmarked capital I in prose stays the pronoun, not a numeral", async () => {
+  const body = `<p>I stopped there and looked around before I went on.</p>`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  const block = book.chapters[0].blocks.find((b) => /stopped there/.test(b.text));
+  assert.equal(block?.text, "I stopped there and looked around before I went on.");
+  assert.equal(block?.speakable, undefined);
+});
+
+test("an <img>, a captioned <figure> and an inline SVG <image> all become image blocks", async () => {
+  const body = `
+    <p>Real prose opens the chapter and runs on for a while so the page reads as more than a stub.</p>
+    <img alt="A drawing of a cat." src="images/cat.png"/>
+    <p>More prose follows the bare image.</p>
+    <figure>
+      <img alt="A drawing of a dog." src="images/dog.png"/>
+      <figcaption>The dog waits by the door.</figcaption>
+    </figure>
+    <p>And still more prose after the captioned figure.</p>
+    <svg xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="A publisher's mark.">
+      <image xlink:href="images/mark.svg"/>
+    </svg>
+    <p>The chapter ends with a final paragraph.</p>
+  `;
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [{ id: "c1", href: "text/ch1.xhtml", body }],
+      extraFiles: {
+        "text/images/cat.png": "cat-bytes",
+        "text/images/dog.png": "dog-bytes",
+        "text/images/mark.svg": "<svg>mark-bytes</svg>",
+      },
+    }),
+  );
+
+  const images = book.chapters[0].blocks.filter((b) => b.kind === "image");
+  assert.equal(images.length, 3);
+
+  const [cat, dog, mark] = images;
+  assert.equal(cat.src, "OEBPS/text/images/cat.png");
+  assert.equal(cat.alt, "A drawing of a cat.");
+  assert.equal(cat.caption, undefined);
+
+  assert.equal(dog.src, "OEBPS/text/images/dog.png");
+  assert.equal(dog.alt, "A drawing of a dog.");
+  assert.equal(dog.caption, "The dog waits by the door.");
+
+  assert.equal(mark.src, "OEBPS/text/images/mark.svg");
+  assert.equal(mark.alt, "A publisher's mark.");
+  assert.equal(mark.caption, undefined);
+
+  // The bytes behind every image block were captured, keyed by that same src.
+  assert.ok(book.images);
+  assert.equal(await book.images!["OEBPS/text/images/cat.png"].text(), "cat-bytes");
+  assert.equal(await book.images!["OEBPS/text/images/dog.png"].text(), "dog-bytes");
+  assert.match(await book.images!["OEBPS/text/images/mark.svg"].text(), /mark-bytes/);
+
+  // A bare image and an SVG image yield no sentences at all: the player has
+  // nothing to skip past because there is nothing to speak in the first
+  // place. A figure's caption, though, reads like any other paragraph.
+  const segmented = segmentChapter(book.chapters[0]);
+  const catIndex = book.chapters[0].blocks.indexOf(cat);
+  const dogIndex = book.chapters[0].blocks.indexOf(dog);
+  const markIndex = book.chapters[0].blocks.indexOf(mark);
+  assert.deepEqual(segmented.blockSentences[catIndex], []);
+  assert.deepEqual(segmented.blockSentences[markIndex], []);
+  assert.equal(segmented.blockSentences[dogIndex].length, 1);
+  const captionSentence = segmented.sentences[segmented.blockSentences[dogIndex][0]];
+  assert.equal(captionSentence.speakable, "The dog waits by the door.");
+  assert.ok(captionSentence.words.length > 0);
 });

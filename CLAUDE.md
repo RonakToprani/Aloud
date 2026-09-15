@@ -11,7 +11,7 @@ This file is the things that are expensive to rediscover and easy to break.
 
 ```bash
 npm run dev          # localhost:3000
-npm test             # 121 tests, ~30s
+npm test             # ~160 tests, ~35s
 npm run typecheck
 npm run build
 node scripts/pdfjs-assets.mjs # copy the pdf.js worker and data files into public/
@@ -94,6 +94,32 @@ the point, and cannot tell you what actual typesetting does. Measure it by
 counting the pages of a real book that come out with none of their text in
 any block; on a 900-page textbook that number should be the table of
 contents and nothing else.
+
+**What is shown and what is spoken can differ, on purpose.** A Standard Ebooks
+chapter opens `<hgroup><h2 epub:type="z3998:roman">I</h2><p epub:type="title">A
+Fellow Traveller</p></hgroup>`, and the numeral must be read "one" while the
+page still shows "I". So a `Block` may carry `speakable`, a `Sentence` carries
+`speakableWords` beside `words`, and the synchronizer looks a boundary up in
+the spoken string and lights the displayed word of the same index. That only
+works when the two tokenise to the same count, which a roman numeral does
+("XXIII" is one token, "twenty-three" is one token); when they differ both
+arrays are emptied rather than misaligned. `<hgroup>` and `<header>` are
+containers the parser must walk: left as text they became a paragraph that
+never matched the synthesised chapter title and was read again after it,
+which is the "title read twice" Alex Cabal of Standard Ebooks reported.
+
+**Illustrations are blocks that say nothing.** An `<img>`, a `<figure>` or an
+inline SVG `<image>` becomes `{kind: "image"}`; it yields no sentences, so the
+player steps over it the way it steps over "* * *", and only a caption is read.
+Image bytes live in the book body in IndexedDB under a 40 MB per-book budget
+and are never synced. The Standard Ebooks logo sits in a `<header>` on the
+imprint, which is why that tag matters twice.
+
+**A chapter heading ends its passage.** Edge paces only off terminal
+punctuation, which a heading lacks, so the gap after a title was shorter than
+the gap between two sentences and `tighten.ts` can only shorten silence, never
+lengthen it. The pause after a heading therefore comes from the scheduled seam
+between passages (`headingPauseMs`), not from a trim.
 
 **Dropping a contents page is the rule most likely to eat a real one.** Half
 a book's pages have numbers on them: axis labels, tables, numbered exercises.
@@ -333,6 +359,37 @@ a civilised hour, staggered a few minutes apart, with a ledger of Resend ids so
 a scheduled batch can be cancelled before it fires. Resend sits behind
 Cloudflare, which answers Python's default user agent with a bare
 `error code: 1010`; that is not a key problem, set a user agent.
+
+**What a day of real replies taught, 14 Sep 2026.** Read these before writing
+to anyone.
+
+- *Primary, not Promotions.* One text colour throughout, no layout table
+  except the signature, no `List-Unsubscribe` header, two links at most, a
+  human From name. The grey-on-black contrast and an image-in-a-table
+  signature were what tipped Gmail. Even so, ten identical copies to one
+  inbox split between tabs: the decision is per message and partly noise, so
+  test with one copy, not ten.
+- *Tone.* Short. Say the one thing, then stop. No "no pressure at all", no
+  "one honest sentence would help me more than anything", nothing that reads
+  as written to be liked. A reply is two or three lines and the sign-off.
+- *Every email looks the same.* Same paragraph style, same signature table
+  with the logo, whether cold or reply. `send-reply.py` imports its markup
+  from `send-outreach.py` so the two cannot drift.
+- *Replies are real replies.* From the Aloud mailbox, inside their thread,
+  with `In-Reply-To` and `References` from the mail being answered and their
+  message quoted under an "On ... wrote:" line. Gmail's "Show original" gives
+  the ids; a thread page's `data-legacy-message-id` (hex) is the
+  `permmsgid=msg-f:` (decimal) of the original-message URL, which is faster
+  than clicking through menus.
+- *Copies first.* Every draft goes to the owner's inbox before it goes to
+  anyone, subject prefixed with who it is for. Anything to someone who
+  matters (a Standard Ebooks editor, say) is held for an explicit go.
+- *A removal request gets no reply,* only a line in `emails/suppressed.txt`,
+  which every future wave must honour.
+- *Send at nine, Toronto time, a few minutes apart.* Delivery status per
+  message is a GET on Resend's `/emails/{id}`.
+- *Know who you are writing to.* Standard Ebooks is backed by ElevenLabs;
+  the first email did not know that and the reply had to own it.
 
 **Both parts, always.** A bulk HTML mail with no plain text alternative is a
 spam signal, and some readers see the text one.

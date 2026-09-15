@@ -2,8 +2,11 @@ import "./setup";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { planPassage, type PassageInput } from "@/lib/speech/edge/passage";
+import { pauseAfter } from "@/lib/speech/edge/engine";
+import { DEFAULT_TIGHTEN } from "@/lib/speech/edge/tighten";
 
 const s = (text: string, endsParagraph = false): PassageInput => ({ text, endsParagraph });
+const heading = (text: string): PassageInput => ({ text, endsParagraph: true, isHeading: true });
 
 test("groups sentences into one passage", () => {
   const plan = planPassage([s("One two."), s("Three four."), s("Five six.", true)], 200);
@@ -58,4 +61,28 @@ test("falls back to a sentence boundary when no paragraph ends in range", () => 
 test("empty input yields no passage", () => {
   assert.equal(planPassage([], 200), null);
   assert.equal(planPassage([s("   ")], 200), null);
+});
+
+test("a heading ends its passage even with room to spare", () => {
+  // Measured against the live endpoint: the gap Edge leaves after a heading
+  // (no terminal punctuation) is shorter than the gap between two ordinary
+  // sentences, so tighten.ts's trim-only cuts can never lengthen it back up.
+  // Ending the passage here instead gives the heading a scheduled gap before
+  // the next passage — genuine dead air rather than a trimmed one.
+  const inputs = [heading("I: A Fellow Traveller"), s("The story begins here."), s("And continues.", true)];
+  const plan = planPassage(inputs, 1500)!;
+  assert.equal(plan.sentences.length, 1);
+  assert.equal(plan.sentences[0].text, "I: A Fellow Traveller");
+  assert.equal(plan.sentences[0].isHeading, true);
+  assert.ok(!plan.text.includes("story"), "the paragraph waits for the next passage");
+});
+
+test("a heading gets the dedicated pause rather than the ordinary paragraph one", () => {
+  const withHeading = planPassage([heading("Chapter One")], 1500)!;
+  const withParagraph = planPassage([s("End of paragraph.", true)], 1500)!;
+  const withSentence = planPassage([s("Mid-paragraph.", false)], 1500)!;
+  assert.equal(pauseAfter(withHeading), DEFAULT_TIGHTEN.headingPauseMs);
+  assert.equal(pauseAfter(withParagraph), DEFAULT_TIGHTEN.paragraphPauseMs);
+  assert.equal(pauseAfter(withSentence), DEFAULT_TIGHTEN.sentencePauseMs);
+  assert.ok(DEFAULT_TIGHTEN.headingPauseMs > DEFAULT_TIGHTEN.paragraphPauseMs);
 });

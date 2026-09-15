@@ -186,7 +186,7 @@ export async function importParsedBook(
   if (options?.gutenbergId !== undefined) meta.gutenbergId = options.gutenbergId;
 
   onProgress?.({ stage: "saving", fraction: 0 });
-  await putBook(meta, { id: meta.id, chapters: book.chapters });
+  await putBook(meta, { id: meta.id, chapters: book.chapters, images: book.images });
   onProgress?.({ stage: "saving", fraction: 1 });
   return meta;
 }

@@ -36,6 +36,7 @@ function runSentence(
     const sync = new SentenceSynchronizer({
       sentenceText: sentence.speakable,
       words: sentence.words,
+      speakableWords: sentence.speakableWords,
       startWordIndex: 0,
       rate: options.rate ?? 1,
       voiceId: `voice-${behaviour}`,
@@ -158,4 +159,36 @@ test("estimated timing calibrates itself towards the real duration", async () =>
   const after = getCalibration(voice);
   assert.ok(after > before, `calibration should rise: ${before} -> ${after}`);
   assert.ok(after > 1.2 && after < 1.6, `and converge near the real ratio, got ${after}`);
+});
+
+test("a boundary landing inside the spoken numeral lights the displayed roman one", () => {
+  // Mirrors a real chapter heading: "XXIII" on the page, "twenty-three"
+  // spoken. A boundary event's charIndex is measured against what was
+  // actually said, so naively reusing it against the displayed word offsets
+  // would land past "XXIII" (5 characters) and onto "Difficulties" instead.
+  const chapter = segmentChapter({
+    id: "c",
+    title: "t",
+    blocks: [{ kind: "h1", text: "XXIII: Difficulties Ahead", speakable: "twenty-three: Difficulties Ahead" }],
+  });
+  const sentence = chapter.sentences[0];
+  assert.equal(sentence.words.length, sentence.speakableWords.length);
+
+  const visited: number[] = [];
+  const sync = new SentenceSynchronizer({
+    sentenceText: sentence.speakable,
+    words: sentence.words,
+    speakableWords: sentence.speakableWords,
+    startWordIndex: 0,
+    rate: 1,
+    voiceId: "voice-roman-boundary",
+    onWord: (index) => visited.push(index),
+  });
+  sync.start();
+  const charIndex = sentence.speakable.indexOf("twenty-three") + 9; // inside "-three"
+  sync.boundary(charIndex);
+  sync.stop();
+
+  assert.equal(visited[visited.length - 1], 0);
+  assert.equal(sentence.text.slice(sentence.words[0].start, sentence.words[0].end), "XXIII");
 });

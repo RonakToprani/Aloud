@@ -138,6 +138,41 @@ test("skipping forward steps over blocks with nothing to say", async () => {
   assert.equal(lastState(states).sentenceIndex, 3);
 });
 
+test("an image block between two paragraphs is skipped, not spoken", async () => {
+  // An illustration is never given to the speech engine: it has no sentences
+  // at all, the same as the "* * *" block above, so resolveSentence steps
+  // straight over it.
+  const engine = new FakeEngine();
+  engine.msPerWord = 100; // matches build()'s default: fast enough to run quickly, slow enough that a short sentence isn't mistaken for a phantom end
+  const chapter: SegmentedChapter = segmentChapter({
+    id: "c0",
+    title: "Chapter 1",
+    blocks: [
+      { kind: "p", text: "Alpha one two." },
+      { kind: "image", text: "", src: "images/plate.png", alt: "A plate." },
+      { kind: "p", text: "Bravo three four." },
+    ],
+  });
+  const states: PlayerState[] = [];
+  const player = new Player({
+    engine,
+    getChapter: (i) => (i === 0 ? chapter : undefined),
+    chapterCount: 1,
+    rate: 1,
+    voiceId: null,
+    onState: (state) => states.push({ ...state }),
+  });
+  player.play();
+  await settle(1200);
+  player.destroy();
+
+  assert.equal(lastState(states).status, "ended");
+  assert.deepEqual(
+    engine.spoken.map((request) => request.text),
+    ["Alpha one two.", "Bravo three four."],
+  );
+});
+
 test("a voice that is listed but never speaks is reported, not left silent", async () => {
   // Exactly what a Siri voice does on iOS: the utterance is accepted and then
   // nothing happens — no start, no end, no error — so the highlight would sit
@@ -180,6 +215,50 @@ test("the passage offered for a sentence starts where the reader does", async ()
   // sentence twice, the second time competing with the passage it is in.
   assert.equal(first.text, engine.spoken[0].text);
   assert.equal(first.text, "two.");
+});
+
+test("a heading is offered again for planning as soon as it starts, not a turn later", async () => {
+  // A heading ends its own passage (edge/engine.ts), so the passage offered
+  // for it covers nothing past it. If the player waited for the next
+  // sentence's own turn to plan ahead, the engine would have nothing ready
+  // to answer that sentence with and would fetch it alone first, then again
+  // moments later as part of the real passage — two requests for the same
+  // text. Re-offering right after speak() starts, before the lone-sentence
+  // lookahead runs, is what a passage-based engine's own dedup depends on.
+  const engine = new FakeEngine();
+  const chapter: SegmentedChapter = segmentChapter({
+    id: "c0",
+    title: "Chapter One",
+    blocks: [
+      { kind: "h1", text: "Chapter One." },
+      { kind: "p", text: "Prose begins here." },
+    ],
+  });
+  const player = new Player({
+    engine,
+    getChapter: (i) => (i === 0 ? chapter : undefined),
+    chapterCount: 1,
+    rate: 1,
+    voiceId: null,
+    onState: () => {},
+  });
+
+  player.play();
+
+  // Both offers for the heading's turn — the one before speak() and the one
+  // that plans past it — must land before the lone-sentence lookahead does.
+  const kinds = engine.calls.map((call) => call.type);
+  const prepareIndices = kinds.reduce<number[]>((acc, kind, i) => (kind === "prepare" ? [...acc, i] : acc), []);
+  const prefetchIndex = kinds.indexOf("prefetch");
+  assert.ok(prepareIndices.length >= 2, `expected at least 2 prepare calls, saw ${prepareIndices.length}`);
+  if (prefetchIndex !== -1) {
+    assert.ok(
+      prepareIndices[1] < prefetchIndex,
+      "the second prepare call must land before the lone-sentence prefetch, or the two race for the same text",
+    );
+  }
+
+  player.destroy();
 });
 
 test("a passage offered for a sentence the reader has not reached is the whole of it", async () => {
