@@ -465,7 +465,7 @@ export class Player {
    *  in isolation. */
   private offerPassage(chapterIndex: number, sentenceIndex: number): void {
     if (!this.options.engine.prepare) return;
-    const texts: { text: string; endsParagraph: boolean }[] = [];
+    const texts: { text: string; endsParagraph: boolean; isHeading: boolean }[] = [];
     let cursor: { chapterIndex: number; sentenceIndex: number } | null = {
       chapterIndex,
       sentenceIndex,
@@ -480,11 +480,15 @@ export class Player {
       const nextSentence = continues
         ? this.chapter(continues.chapterIndex)?.sentences[continues.sentenceIndex]
         : undefined;
+      const kind = chapter.blocks[sentence.blockIndex]?.kind;
       texts.push({
         text: this.spokenText(sentence, cursor.chapterIndex, cursor.sentenceIndex),
         // The block a sentence belongs to is its paragraph; a change of block,
         // or running out of chapter, ends one.
         endsParagraph: !nextSentence || nextSentence.blockIndex !== sentence.blockIndex,
+        // A heading has no terminal punctuation for the voice to land on, so
+        // it is read alone rather than folded into the paragraph after it.
+        isHeading: kind === "h1" || kind === "h2" || kind === "h3",
       });
       cursor = continues;
     }

@@ -62,9 +62,22 @@ function isNarrationVoice(traits: string[]): boolean {
   return traits.some((trait) => NARRATION_TRAITS.has(trait.toLowerCase()));
 }
 
+/** "AvaMultilingualNeural", "AndrewMultilingualNeural" and so on: Microsoft's
+ *  newest voice generation, retrained for more natural prosody across
+ *  languages. Microsoft still tags them by conversational use ("Conversation",
+ *  "Copilot") rather than "Novel" or "Narration", so a rule that only looked
+ *  at ContentCategories would rank an older, flatter-sounding "Novel" voice
+ *  above them — which is exactly backwards for how they actually sound read
+ *  aloud over a chapter. Rank the generation first, the provider's own
+ *  narration tag second. */
+function isMultilingualVoice(shortName: string): boolean {
+  return /multilingual/i.test(shortName);
+}
+
 function toEngineVoice(voice: EdgeVoice): EngineVoice {
   const name = displayName(voice);
   const traits = voice.VoiceTag?.ContentCategories ?? [];
+  const quality = isMultilingualVoice(voice.ShortName) ? 0.97 : isNarrationVoice(traits) ? 0.92 : 0.85;
   return {
     traits,
     id: `edge:${voice.ShortName}`,
@@ -73,7 +86,7 @@ function toEngineVoice(voice: EdgeVoice): EngineVoice {
     local: false,
     isDefault: false,
     tier: "enhanced",
-    quality: isNarrationVoice(traits) ? 0.95 : 0.85,
+    quality,
   };
 }
 
@@ -656,8 +669,10 @@ export function locateSentences(
   return { startMs, endMs };
 }
 
-function pauseAfter(plan: PassagePlan): number {
+/** Exported for the tests: which pause a passage owes whatever follows it. */
+export function pauseAfter(plan: PassagePlan): number {
   const last = plan.sentences[plan.sentences.length - 1];
+  if (last?.isHeading) return DEFAULT_TIGHTEN.headingPauseMs;
   return last?.endsParagraph ? DEFAULT_TIGHTEN.paragraphPauseMs : DEFAULT_TIGHTEN.sentencePauseMs;
 }
 

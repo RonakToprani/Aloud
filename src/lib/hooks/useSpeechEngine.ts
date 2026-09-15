@@ -106,48 +106,28 @@ export function useSpeechEngine(): SpeechEngineState {
   return { engine, voices, groups, ready, supported: engine.supported, preferredLang };
 }
 
-/** Traits a provider uses for voices built to narrate long-form prose. */
-const NARRATION_TRAITS = new Set(["novel", "audiobook", "narration"]);
-
-/**
- * The voice the sample opens in, when the device can reach it. Chosen by ear
- * rather than by the provider's tags: several voices are tagged for narration
- * and this is the one that sounds like someone reading you a book.
- */
-const SHOWCASE_FIRST = "edge:en-US-ChristopherNeural";
-
 /**
  * The voice a first-time listener should hear.
  *
- * Some voices are tagged by their provider as built for narrating books,
- * and those are the ones worth leading with. They hold up over a chapter
- * rather than a sentence, and they are the same on every device, so what a
- * new reader hears is what the app is supposed to sound like rather than
- * whatever their operating system happens to ship. One of them is named
- * outright; where neither it nor any narration voice is offered, this is
- * just the ordinary default.
+ * `quality` (see `edge/engine.ts`) already ranks Microsoft's newest,
+ * most natural voice generation above its older narration-tagged voices,
+ * which are themselves above everything else — so leading with the
+ * highest-quality voice in the reader's own locale is what puts a
+ * genuinely good voice in front of a new reader, on any device, without
+ * naming one outright and freezing the choice as better voices ship.
  */
 export function pickShowcaseVoice(voices: EngineVoice[], preferredLang: string): EngineVoice | null {
   const lang = preferredLang.toLowerCase();
   const base = lang.split("-")[0];
-  // American only: a British or Australian reader is better served by the
-  // narration voice in their own locale, which the sort below finds.
-  if (lang === "en" || lang.startsWith("en-us")) {
-    const first = voices.find((voice) => voice.id === SHOWCASE_FIRST);
-    if (first) return first;
-  }
-  const narration = voices.filter(
-    (voice) =>
-      voice.lang.toLowerCase().startsWith(base) &&
-      (voice.traits ?? []).some((trait) => NARRATION_TRAITS.has(trait.toLowerCase())),
-  );
-  if (!narration.length) return pickDefaultVoice(voices, preferredLang);
-  return [...narration].sort(
+  const inLocale = voices.filter((voice) => voice.lang.toLowerCase().startsWith(base));
+  const pool = inLocale.length ? inLocale : voices;
+  const best = [...pool].sort(
     (a, b) =>
       Number(b.lang.toLowerCase() === lang) - Number(a.lang.toLowerCase() === lang) ||
       b.quality - a.quality ||
       a.name.localeCompare(b.name),
   )[0];
+  return best ?? pickDefaultVoice(voices, preferredLang);
 }
 
 /** The voice we pick when the reader hasn't chosen one. */
