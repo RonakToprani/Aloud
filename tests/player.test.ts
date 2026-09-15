@@ -217,6 +217,50 @@ test("the passage offered for a sentence starts where the reader does", async ()
   assert.equal(first.text, "two.");
 });
 
+test("a heading is offered again for planning as soon as it starts, not a turn later", async () => {
+  // A heading ends its own passage (edge/engine.ts), so the passage offered
+  // for it covers nothing past it. If the player waited for the next
+  // sentence's own turn to plan ahead, the engine would have nothing ready
+  // to answer that sentence with and would fetch it alone first, then again
+  // moments later as part of the real passage — two requests for the same
+  // text. Re-offering right after speak() starts, before the lone-sentence
+  // lookahead runs, is what a passage-based engine's own dedup depends on.
+  const engine = new FakeEngine();
+  const chapter: SegmentedChapter = segmentChapter({
+    id: "c0",
+    title: "Chapter One",
+    blocks: [
+      { kind: "h1", text: "Chapter One." },
+      { kind: "p", text: "Prose begins here." },
+    ],
+  });
+  const player = new Player({
+    engine,
+    getChapter: (i) => (i === 0 ? chapter : undefined),
+    chapterCount: 1,
+    rate: 1,
+    voiceId: null,
+    onState: () => {},
+  });
+
+  player.play();
+
+  // Both offers for the heading's turn — the one before speak() and the one
+  // that plans past it — must land before the lone-sentence lookahead does.
+  const kinds = engine.calls.map((call) => call.type);
+  const prepareIndices = kinds.reduce<number[]>((acc, kind, i) => (kind === "prepare" ? [...acc, i] : acc), []);
+  const prefetchIndex = kinds.indexOf("prefetch");
+  assert.ok(prepareIndices.length >= 2, `expected at least 2 prepare calls, saw ${prepareIndices.length}`);
+  if (prefetchIndex !== -1) {
+    assert.ok(
+      prepareIndices[1] < prefetchIndex,
+      "the second prepare call must land before the lone-sentence prefetch, or the two race for the same text",
+    );
+  }
+
+  player.destroy();
+});
+
 test("a passage offered for a sentence the reader has not reached is the whole of it", async () => {
   const { engine, player } = build();
   player.seek(0, 1, 0);

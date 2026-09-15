@@ -445,6 +445,18 @@ export class Player {
       },
     );
 
+    // Offering again now, rather than only on the next sentence's turn,
+    // matters when this sentence's own offer (above, before speak()) was
+    // itself just consumed by speak() — normally harmless since a passage
+    // covers many sentences ahead and this is a no-op for an engine that's
+    // still mid-fetch or already holds one, but a heading's passage is
+    // exactly one sentence long, so without this the sentence after it goes
+    // unplanned for a full turn. It has to happen before prefetchNext below:
+    // once this starts the real passage fetch, prefetchNext's own guard
+    // sees it and skips, rather than racing it with a lone-sentence copy of
+    // the same text.
+    this.offerPassage(target.chapterIndex, target.sentenceIndex);
+
     this.prefetchNext(target.chapterIndex, target.sentenceIndex);
   }
 
