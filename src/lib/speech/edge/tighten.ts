@@ -45,6 +45,11 @@ export interface TightenSettings {
   /** What a silent run is cut down to, by what it separates. */
   sentencePauseMs: number;
   paragraphPauseMs: number;
+  /** The gap after a chapter heading, before the story starts. Scheduled
+   *  between passages rather than trimmed from the clip — see `pauseAfter`
+   *  in `edge/engine.ts` — so this value is not limited by what Edge
+   *  actually leaves after unpunctuated text. */
+  headingPauseMs: number;
   /** A long pause that isn't at a sentence end — a dash, a colon, a list. */
   otherPauseMs: number;
   leadMs: number;
@@ -58,6 +63,7 @@ export const DEFAULT_TIGHTEN: TightenSettings = {
   minRunMs: 450,
   sentencePauseMs: 380,
   paragraphPauseMs: 620,
+  headingPauseMs: 700,
   otherPauseMs: 480,
   leadMs: 40,
   trailMs: 0,

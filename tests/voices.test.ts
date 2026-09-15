@@ -2,7 +2,7 @@ import "./setup";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyVoice } from "@/lib/speech/webSpeechEngine";
-import { isUsefulVoice, pickDefaultVoice } from "@/lib/hooks/useSpeechEngine";
+import { isUsefulVoice, pickDefaultVoice, pickShowcaseVoice } from "@/lib/hooks/useSpeechEngine";
 import type { EngineVoice } from "@/lib/speech/engine";
 
 const voice = (voiceURI: string, name: string) => classifyVoice({ voiceURI, name });
@@ -84,4 +84,16 @@ test("the picker hides other languages and junk until asked", () => {
 test("falls back to another language rather than offering nothing", () => {
   const voices = [engineVoice({ id: "fr", lang: "fr-FR", tier: "premium", quality: 1 })];
   assert.equal(pickDefaultVoice(voices, "en-GB")?.id, "fr");
+});
+
+test("the showcase voice is whichever quality ranks highest, not a fixed name", () => {
+  // edge/engine.ts scores Microsoft's newest ("Multilingual") voice
+  // generation above its older narration-tagged voices; the showcase should
+  // follow that ranking rather than naming one voice outright, so a better
+  // voice wins automatically as soon as it ranks higher.
+  const voices = [
+    engineVoice({ id: "edge:en-US-ChristopherNeural", name: "Christopher", lang: "en-US", quality: 0.92 }),
+    engineVoice({ id: "edge:en-US-AvaMultilingualNeural", name: "Ava Multilingual", lang: "en-US", quality: 0.97 }),
+  ];
+  assert.equal(pickShowcaseVoice(voices, "en-US")?.id, "edge:en-US-AvaMultilingualNeural");
 });

@@ -12,6 +12,8 @@ export interface PassageInput {
   text: string;
   /** True when the next sentence begins a new paragraph. */
   endsParagraph: boolean;
+  /** A chapter heading, read alone — see `planPassage`. */
+  isHeading?: boolean;
 }
 
 /** Where one sentence sits inside the passage that was synthesised. */
@@ -23,6 +25,9 @@ export interface PassageSentence {
   end: number;
   /** A paragraph ends after this sentence, so its pause may run longer. */
   endsParagraph: boolean;
+  /** A chapter heading, so the gap after it is the dedicated heading pause
+   *  rather than the ordinary paragraph one — see `pauseAfter` in engine.ts. */
+  isHeading: boolean;
 }
 
 export interface PassagePlan {
@@ -83,8 +88,22 @@ export function planPassage(inputs: PassageInput[], maxChars: number): PassagePl
     }
 
     text = next;
-    sentences.push({ text: sentence, start, end: start + sentence.length, endsParagraph: input.endsParagraph });
+    sentences.push({
+      text: sentence,
+      start,
+      end: start + sentence.length,
+      endsParagraph: input.endsParagraph,
+      isHeading: input.isHeading ?? false,
+    });
     if (input.endsParagraph) lastParagraphEnd = sentences.length;
+
+    // A heading has no terminal punctuation for Edge's voice to land on, so
+    // the pause after it is too short to sound deliberate even when trimmed
+    // down like an ordinary paragraph break (measured: shorter than the gap
+    // between two plain sentences). Ending the passage here instead gives it
+    // the scheduled gap between passages — genuine dead air, not a trimmed
+    // one — so the title gets a real beat before the story starts.
+    if (input.isHeading) break;
   }
 
   if (!sentences.length) return null;
