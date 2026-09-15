@@ -18,6 +18,10 @@ from datetime import datetime, timedelta
 
 FROM = "Ronak at Aloud <hello@send.aloudreader.org>"
 
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location("outreach", pathlib.Path(__file__).with_name("send-outreach.py"))
+outreach = _ilu.module_from_spec(_spec); _spec.loader.exec_module(outreach)
+
 
 def from_env(name: str) -> str:
     m = re.search(rf"^{name}=(.+)$", pathlib.Path(".env.local").read_text(), re.M)
@@ -40,11 +44,37 @@ def api(path: str, body: dict | None, key: str) -> dict:
 
 
 def text_of(e: dict) -> str:
-    text = e["body"].rstrip() + "\n"
+    # The body ends on its sign-off line; the same signature as the outreach
+    # goes under it, so a reply looks like the mail it answers.
+    sig = "\n".join(outreach.signature_lines() + [outreach.SITE.replace("https://www.", "")])
+    if li := outreach.from_env("LINKEDIN_URL", required=False):
+        sig += "\n" + li.replace("https://www.", "")
+    text = e["body"].rstrip() + "\n\n" + sig + "\n"
     if q := e.get("quote"):
         quoted = "\n".join("> " + line for line in q["text"].strip().splitlines())
         text += f"\n{q['from_line']}\n{quoted}\n"
     return text
+
+
+def html_of(e: dict) -> str:
+    SANS, INK, LOGO, SITE = outreach.SANS, outreach.INK, outreach.LOGO, outreach.SITE
+    p = lambda t, b=18, s=15: f'<p style="margin:0 0 {b}px;font:400 {s}px/1.6 {SANS};color:{INK}">{t}</p>'
+    paras = [x.strip() for x in e["body"].strip().split("\n\n")]
+    links = f'<a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>'
+    if li := outreach.from_env("LINKEDIN_URL", required=False):
+        links += f' &nbsp;·&nbsp; <a href="{li}" style="color:#5b7fa6">LinkedIn</a>'
+    lines = outreach.signature_lines()
+    sig = f'<span style="font-weight:600">{lines[0]}</span><br>' + "<br>".join(lines[1:]) + "<br>" + links
+    out = f'<div style="max-width:520px;font-family:{SANS}">'
+    out += "".join(p(x.replace("\n", "<br>")) for x in paras[:-1]) + p(paras[-1], 12)
+    out += (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px"><tr>'
+            f'<td style="padding:0 14px 0 0;vertical-align:middle"><img src="{LOGO}" alt="Aloud" width="80" height="26" style="display:block;border:0;width:80px;height:26px"></td>'
+            f'<td style="vertical-align:middle;font:400 14px/1.5 {SANS};color:{INK}">{sig}</td></tr></table>')
+    if q := e.get("quote"):
+        quoted = q["text"].strip().replace("\n", "<br>")
+        out += (f'<div style="font:400 13px/1.5 {SANS};color:#5f6b7a;margin:0 0 6px">{q["from_line"]}</div>'
+                f'<blockquote style="margin:0 0 0 8px;padding-left:12px;border-left:2px solid #d5dbe1;font:400 14px/1.6 {SANS};color:#5f6b7a">{quoted}</blockquote>')
+    return out + "</div>"
 
 
 def main() -> None:
@@ -71,7 +101,7 @@ def main() -> None:
     if a.copy:
         for e in entries:
             r = api("/emails", {"from": FROM, "to": [a.copy], "reply_to": reply_to,
-                                "subject": f"[copy to {e['to']}] {e['subject']}", "text": text_of(e)}, key)
+                                "subject": f"[copy to {e['to']}] {e['subject']}", "text": text_of(e), "html": html_of(e)}, key)
             print("  copied", e["to"], "->", "ok" if "id" in r else r)
             time.sleep(0.6)
         return
@@ -86,7 +116,7 @@ def main() -> None:
     start = datetime.strptime(a.at, "%Y-%m-%dT%H:%M:%SZ") if a.at else None
     for i, e in enumerate(pending):
         body = {"from": FROM, "to": [e["to"]], "reply_to": reply_to, "subject": e["subject"],
-                "text": text_of(e),
+                "text": text_of(e), "html": html_of(e),
                 "headers": {"In-Reply-To": e["in_reply_to"], "References": e["references"]}}
         if start:
             body["scheduled_at"] = (start + timedelta(minutes=a.stagger_minutes * i)).strftime("%Y-%m-%dT%H:%M:%SZ")
