@@ -175,7 +175,10 @@ export function segmentChapter(chapter: Chapter): SegmentedChapter {
 
   chapter.blocks.forEach((block, blockIndex) => {
     const indices: number[] = [];
-    const parts = block.text.length ? splitSentences(block.text) : [];
+    // An image is never spoken, however long its alt text; only a caption,
+    // when there is one, reads like an ordinary paragraph.
+    const spokenText = block.kind === "image" ? (block.caption ?? "") : block.text;
+    const parts = spokenText.length ? splitSentences(spokenText) : [];
     for (const part of parts) {
       if (!part.length) continue;
       const speakable = part.trim();

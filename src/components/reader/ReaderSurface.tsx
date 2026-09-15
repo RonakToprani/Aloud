@@ -12,6 +12,8 @@ import styles from "./Reader.module.css";
 
 interface Props {
   chapter: SegmentedChapter;
+  /** Illustration bytes an image block's `src` looks itself up in. */
+  images: Record<string, Blob>;
   currentSentence: number;
   currentWord: number;
   highlight: HighlightStyle;
@@ -70,6 +72,31 @@ function SentenceWords({ sentence }: { sentence: Sentence }) {
   );
 }
 
+/** A block's sentences, current one lit word by word, the rest plain spans.
+ *  Shared between an ordinary block and an image's caption so the two stay
+ *  in exactly the same shape the highlight layer and tap handling expect. */
+function SentenceSpans({
+  sentences,
+  activeSentence,
+}: {
+  sentences: Sentence[];
+  activeSentence: number | null;
+}) {
+  return (
+    <>
+      {sentences.map((sentence) =>
+        sentence.index === activeSentence ? (
+          <SentenceWords key={sentence.index} sentence={sentence} />
+        ) : (
+          <span key={sentence.index} data-s={sentence.index} className={styles.sentence}>
+            {sentence.text}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
 interface BlockProps {
   block: Block;
   sentences: Sentence[];
@@ -90,21 +117,65 @@ const BlockView = memo(function BlockView({
       data-current={activeSentence !== null ? "true" : undefined}
       data-bookmarked={bookmarked ? "true" : undefined}
     >
-      {sentences.map((sentence) =>
-        sentence.index === activeSentence ? (
-          <SentenceWords key={sentence.index} sentence={sentence} />
-        ) : (
-          <span key={sentence.index} data-s={sentence.index} className={styles.sentence}>
-            {sentence.text}
-          </span>
-        ),
-      )}
+      <SentenceSpans sentences={sentences} activeSentence={activeSentence} />
     </Tag>
+  );
+});
+
+interface ImageBlockProps extends BlockProps {
+  images: Record<string, Blob>;
+}
+
+/**
+ * An illustration: object URL created on mount and revoked on unmount, same
+ * as BookCover. The caption, if there is one, is rendered as this block's
+ * sentences so it highlights and taps exactly like a paragraph — it just
+ * happens to live under a picture rather than on its own.
+ */
+const ImageBlockView = memo(function ImageBlockView({
+  block,
+  sentences,
+  activeSentence,
+  bookmarked,
+  images,
+}: ImageBlockProps) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const blob = block.src ? images[block.src] : undefined;
+    if (!blob) {
+      setUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [block.src, images]);
+
+  // No bytes to show: either this image landed past the per-book cap, or it
+  // failed to read. The book still reads fine without it.
+  if (!url) return null;
+
+  return (
+    <figure
+      className={styles.figure}
+      data-current={activeSentence !== null ? "true" : undefined}
+      data-bookmarked={bookmarked ? "true" : undefined}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- object URL, not a remote asset Next can optimise */}
+      <img className={styles.figureImage} src={url} alt={block.alt ?? ""} />
+      {sentences.length > 0 && (
+        <figcaption className={styles.figureCaption}>
+          <SentenceSpans sentences={sentences} activeSentence={activeSentence} />
+        </figcaption>
+      )}
+    </figure>
   );
 });
 
 export function ReaderSurface({
   chapter,
+  images,
   currentSentence,
   currentWord,
   highlight,
@@ -341,13 +412,25 @@ export function ReaderSurface({
       >
         {chapter.blocks.map((block, blockIndex) => {
           const indices = chapter.blockSentences[blockIndex] ?? [];
-          return (
+          const sentences = indices.map((index) => chapter.sentences[index]);
+          const activeSentence = blockIndex === currentBlock ? currentSentence : null;
+          const bookmarked = indices.some((index) => bookmarkedSentences.has(index));
+          return block.kind === "image" ? (
+            <ImageBlockView
+              key={blockIndex}
+              block={block}
+              sentences={sentences}
+              activeSentence={activeSentence}
+              bookmarked={bookmarked}
+              images={images}
+            />
+          ) : (
             <BlockView
               key={blockIndex}
               block={block}
-              sentences={indices.map((index) => chapter.sentences[index])}
-              activeSentence={blockIndex === currentBlock ? currentSentence : null}
-              bookmarked={indices.some((index) => bookmarkedSentences.has(index))}
+              sentences={sentences}
+              activeSentence={activeSentence}
+              bookmarked={bookmarked}
             />
           );
         })}

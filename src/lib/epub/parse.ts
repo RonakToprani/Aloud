@@ -23,6 +23,10 @@ export interface ParsedBook {
   author: string | null;
   chapters: Chapter[];
   cover?: Blob;
+  /** Illustrations referenced by image blocks, keyed by the same zip path a
+   *  block's `src` carries. Only images actually used in the text are read
+   *  from the zip, and only up to IMAGE_BUDGET_BYTES. */
+  images?: Record<string, Blob>;
 }
 
 const BLOCK_TAGS = new Set([
@@ -30,6 +34,10 @@ const BLOCK_TAGS = new Set([
 ]);
 const CONTAINER_TAGS = new Set([
   "DIV", "SECTION", "ARTICLE", "MAIN", "UL", "OL", "DL", "BLOCKQUOTE", "ASIDE", "FIGURE", "BODY",
+  // Standard Ebooks wraps its imprint logo in <header><h2/><img/></header>;
+  // without walking into it the image (and the heading) flatten into inline
+  // text and the logo is lost with no trace of having been there.
+  "HEADER",
 ]);
 const SKIP_TAGS = new Set([
   "SCRIPT", "STYLE", "NAV", "SVG", "IMG", "IMAGE", "AUDIO", "VIDEO", "HEAD", "LINK", "META", "RT", "RP",
@@ -124,15 +132,49 @@ interface Extracted {
   anchors: Map<string, number>;
 }
 
+/** Where an <img>, or an SVG <image>, points, before it is resolved against
+ *  the chapter file's own path. SVG spells this three different ways
+ *  depending on the producer and how strictly the file parsed. */
+function imageHref(el: Element): string | null {
+  return (
+    el.getAttribute("src") ??
+    el.getAttributeNS("http://www.w3.org/1999/xlink", "href") ??
+    el.getAttribute("xlink:href") ??
+    el.getAttribute("href")
+  );
+}
+
+/** The first <img> or SVG <image> inside an element, whichever markup was used. */
+function findImage(scope: Element): Element | null {
+  return scope.querySelector("img, image");
+}
+
 /** Walk the document in order, flushing loose inline text into paragraphs so
- *  nothing readable is dropped and nothing is emitted twice. */
-function extractBlocks(root: Element): Extracted {
+ *  nothing readable is dropped and nothing is emitted twice.
+ *
+ *  `basePath` is the chapter file's own zip path, which is what an image's
+ *  relative href is resolved against. */
+function extractBlocks(root: Element, basePath: string): Extracted {
   const out: Block[] = [];
   const anchors = new Map<string, number>();
 
   const note = (element: Element) => {
     const id = element.getAttribute("id") ?? element.getAttribute("name");
     if (id && !anchors.has(id)) anchors.set(id, out.length);
+  };
+
+  /** `container` is the <img>, <figure> or <svg>; `imgEl` is the element that
+   *  actually carries the href, which for a figure or an inline SVG is a
+   *  descendant of it. */
+  const pushImage = (container: Element, imgEl: Element) => {
+    const href = imageHref(imgEl);
+    if (!href) return;
+    const src = resolvePath(basePath, href);
+    if (!src) return;
+    const alt = clean(imgEl.getAttribute("alt") ?? container.getAttribute("aria-label") ?? "");
+    const figcaption = container.querySelector("figcaption");
+    const caption = figcaption ? clean(flatText(figcaption)) : undefined;
+    out.push({ kind: "image", text: "", src, alt, ...(caption ? { caption } : {}) });
   };
 
   const walk = (node: Element): void => {
@@ -152,6 +194,37 @@ function extractBlocks(root: Element): Extracted {
 
       const element = child as Element;
       const tag = element.tagName.toUpperCase();
+
+      // An illustration is a block of its own kind, never inline text.
+      // <figure> is checked before the generic container handling below so a
+      // figure that wraps an image keeps its caption attached to it, rather
+      // than the caption becoming a stray paragraph next to a dropped image.
+      if (tag === "FIGURE") {
+        const img = findImage(element);
+        if (img) {
+          flush();
+          note(element);
+          pushImage(element, img);
+          continue;
+        }
+        // A figure without an image (a table, say) is an ordinary container.
+      } else if (tag === "IMG") {
+        flush();
+        note(element);
+        pushImage(element, element);
+        continue;
+      } else if (tag === "SVG") {
+        // Standard Ebooks draws its own logo as an SVG wrapping an <image>;
+        // <svg> is otherwise decorative and its contents are never walked.
+        const img = findImage(element);
+        if (img) {
+          flush();
+          note(element);
+          pushImage(element, img);
+        }
+        continue;
+      }
+
       if (SKIP_TAGS.has(tag)) continue;
       if (tag === "BR") {
         pending += " ";
@@ -330,7 +403,11 @@ const SPLIT_WORDS = 4000;
 
 function wordCount(blocks: Block[]): number {
   let count = 0;
-  for (const block of blocks) count += block.text.split(/\s+/).length;
+  for (const block of blocks) {
+    // An image has nothing to count; a caption counts like any paragraph.
+    const text = block.kind === "image" ? (block.caption ?? "") : block.text;
+    if (text) count += text.split(/\s+/).length;
+  }
   return count;
 }
 
@@ -466,7 +543,7 @@ export async function parseEpub(
       const doc = parseXml(await file.async("text"), "application/xhtml+xml");
       const body = doc.body ?? doc.documentElement;
       if (!body) continue;
-      extracted = extractBlocks(body);
+      extracted = extractBlocks(body, entry.path);
       pageTitle = clean(doc.querySelector("title")?.textContent ?? "");
     } catch {
       continue;
@@ -477,7 +554,11 @@ export async function parseEpub(
     const words = wordCount(blocks);
     const looksLikeCover =
       /cover|title-?page|halftitle/i.test(entry.path) && words < 25;
-    if (looksLikeCover || words < 3) continue;
+    // A near-wordless page is ordinarily a stub a converter left behind, but
+    // a page that is nothing but a full-page illustration — a frontispiece,
+    // say — is exactly the kind of page this exists to show, not drop.
+    const hasImage = blocks.some((block) => block.kind === "image");
+    if (looksLikeCover || (words < 3 && !hasImage)) continue;
 
     const tocTitle = titles.get(entry.path);
     const leadHeading = /^h[1-3]$/.test(blocks[0].kind) ? blocks[0].text : null;
@@ -545,7 +626,50 @@ export async function parseEpub(
     );
   }
 
-  return { title, author, chapters, cover };
+  const images = await readImages(zip, chapters);
+
+  return { title, author, chapters, cover, images };
+}
+
+/** A fully illustrated novel runs to a few dozen plates at a few hundred KB
+ *  each; this is generous room for that without one lavish or malicious EPUB
+ *  filling a reader's device. Past the cap, later images are just left out —
+ *  the book still reads fine, it only loses pictures. */
+const IMAGE_BUDGET_BYTES = 40 * 1024 * 1024;
+
+/** Reads only the images an image block actually points at, in the order
+ *  they appear, stopping once the per-book budget is spent. Nothing here
+ *  holds the whole zip's images in memory: each is decompressed, kept if it
+ *  fits, and otherwise dropped immediately. */
+async function readImages(zip: JSZip, chapters: Chapter[]): Promise<Record<string, Blob> | undefined> {
+  const paths = new Set<string>();
+  for (const chapter of chapters) {
+    for (const block of chapter.blocks) {
+      if (block.kind === "image" && block.src) paths.add(block.src);
+    }
+  }
+  if (!paths.size) return undefined;
+
+  const images: Record<string, Blob> = {};
+  let used = 0;
+  let n = 0;
+  for (const path of paths) {
+    const file = zip.file(path);
+    if (file) {
+      try {
+        const blob = await file.async("blob");
+        if (used + blob.size <= IMAGE_BUDGET_BYTES) {
+          images[path] = blob;
+          used += blob.size;
+        }
+      } catch {
+        /* one unreadable image just means that picture is missing */
+      }
+    }
+    n += 1;
+    if (n % 8 === 0) await yieldToUi();
+  }
+  return Object.keys(images).length ? images : undefined;
 }
 
 /** Plain text and pasted text: blank lines separate paragraphs. */

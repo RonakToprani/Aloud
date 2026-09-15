@@ -1,10 +1,19 @@
 /** Shared domain types for the reader. */
 
-export type BlockKind = "h1" | "h2" | "h3" | "p" | "quote";
+export type BlockKind = "h1" | "h2" | "h3" | "p" | "quote" | "image";
 
 export interface Block {
   kind: BlockKind;
+  /** For every kind but "image" this is what's read aloud. An image block
+   *  carries no text of its own — its caption, below, is what may be spoken. */
   text: string;
+  /** image blocks only: path into the zip, resolved at parse time, used to
+   *  look the bytes up in the body's `images` map. */
+  src?: string;
+  alt?: string;
+  /** A figure's <figcaption>, read like an ordinary paragraph even though the
+   *  image itself is never spoken. */
+  caption?: string;
 }
 
 export interface Chapter {
@@ -41,6 +50,11 @@ export interface BookMeta {
 export interface BookBody {
   id: string;
   chapters: Chapter[];
+  /** Illustration bytes, keyed by the zip path an image block's `src` names.
+   *  Absent for a book with none, or once every image has been dropped for
+   *  going over the per-book cap (see IMAGE_BUDGET_BYTES in epub/parse.ts).
+   *  Never synced: the account layer only ever sees BookMeta. */
+  images?: Record<string, Blob>;
 }
 
 export interface Book extends BookMeta {
