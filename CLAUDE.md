@@ -11,7 +11,7 @@ This file is the things that are expensive to rediscover and easy to break.
 
 ```bash
 npm run dev          # localhost:3000
-npm test             # 121 tests, ~30s
+npm test             # ~160 tests, ~35s
 npm run typecheck
 npm run build
 node scripts/pdfjs-assets.mjs # copy the pdf.js worker and data files into public/
@@ -94,6 +94,32 @@ the point, and cannot tell you what actual typesetting does. Measure it by
 counting the pages of a real book that come out with none of their text in
 any block; on a 900-page textbook that number should be the table of
 contents and nothing else.
+
+**What is shown and what is spoken can differ, on purpose.** A Standard Ebooks
+chapter opens `<hgroup><h2 epub:type="z3998:roman">I</h2><p epub:type="title">A
+Fellow Traveller</p></hgroup>`, and the numeral must be read "one" while the
+page still shows "I". So a `Block` may carry `speakable`, a `Sentence` carries
+`speakableWords` beside `words`, and the synchronizer looks a boundary up in
+the spoken string and lights the displayed word of the same index. That only
+works when the two tokenise to the same count, which a roman numeral does
+("XXIII" is one token, "twenty-three" is one token); when they differ both
+arrays are emptied rather than misaligned. `<hgroup>` and `<header>` are
+containers the parser must walk: left as text they became a paragraph that
+never matched the synthesised chapter title and was read again after it,
+which is the "title read twice" Alex Cabal of Standard Ebooks reported.
+
+**Illustrations are blocks that say nothing.** An `<img>`, a `<figure>` or an
+inline SVG `<image>` becomes `{kind: "image"}`; it yields no sentences, so the
+player steps over it the way it steps over "* * *", and only a caption is read.
+Image bytes live in the book body in IndexedDB under a 40 MB per-book budget
+and are never synced. The Standard Ebooks logo sits in a `<header>` on the
+imprint, which is why that tag matters twice.
+
+**A chapter heading ends its passage.** Edge paces only off terminal
+punctuation, which a heading lacks, so the gap after a title was shorter than
+the gap between two sentences and `tighten.ts` can only shorten silence, never
+lengthen it. The pause after a heading therefore comes from the scheduled seam
+between passages (`headingPauseMs`), not from a trim.
 
 **Dropping a contents page is the rule most likely to eat a real one.** Half
 a book's pages have numbers on them: axis labels, tables, numbered exercises.
