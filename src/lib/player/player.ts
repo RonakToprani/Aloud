@@ -373,6 +373,7 @@ export class Player {
     const sync = new SentenceSynchronizer({
       sentenceText: sentence.speakable,
       words: sentence.words,
+      speakableWords: sentence.speakableWords,
       startWordIndex: startWord,
       rate: this.rate,
       voiceId: this.voiceId,

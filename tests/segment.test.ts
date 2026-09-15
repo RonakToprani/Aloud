@@ -77,16 +77,38 @@ test("a block's speakable override replaces a single-sentence block's spoken tex
   const chapter: Chapter = {
     id: "c",
     title: "Test",
-    blocks: [{ kind: "h1", text: "IV", speakable: "four" }],
+    blocks: [{ kind: "h1", text: "XXIII: Difficulties Ahead", speakable: "twenty-three: Difficulties Ahead" }],
   };
   const segmented = segmentChapter(chapter);
+  const sentence = segmented.sentences[0];
   assert.equal(segmented.sentences.length, 1);
-  assert.equal(segmented.sentences[0].text, "IV");
-  assert.equal(segmented.sentences[0].speakable, "four");
-  // The shown text and the spoken text no longer match character for
-  // character, so per-word offsets - reused against both strings elsewhere -
-  // are dropped rather than risk misaligning the highlight.
-  assert.equal(segmented.sentences[0].words.length, 0);
+  assert.equal(sentence.text, "XXIII: Difficulties Ahead");
+  assert.equal(sentence.speakable, "twenty-three: Difficulties Ahead");
+  // A roman numeral is one token whichever way it's written, so the two
+  // tokenize to the same count and word i in one is word i in the other -
+  // that's what lets the synchronizer light "XXIII" from a boundary reported
+  // against "twenty-three".
+  assert.equal(sentence.words.length, sentence.speakableWords.length);
+  assert.equal(sentence.words.length, 3);
+  assert.equal(sentence.text.slice(sentence.words[0].start, sentence.words[0].end), "XXIII");
+  assert.equal(
+    sentence.speakable.slice(sentence.speakableWords[0].start, sentence.speakableWords[0].end),
+    "twenty-three",
+  );
+});
+
+test("a speakable override that changes the token count drops the highlight rather than misalign it", () => {
+  const chapter: Chapter = {
+    id: "c",
+    title: "Test",
+    blocks: [{ kind: "h1", text: "MCMLXXXIV", speakable: "one thousand nine hundred eighty-four" }],
+  };
+  const segmented = segmentChapter(chapter);
+  const sentence = segmented.sentences[0];
+  // One token on the page, five in speech: there is no honest index to map
+  // through, so both are emptied rather than light the wrong word.
+  assert.equal(sentence.words.length, 0);
+  assert.equal(sentence.speakableWords.length, 0);
 });
 
 test("a speakable override is ignored on a block that splits into more than one sentence", () => {
