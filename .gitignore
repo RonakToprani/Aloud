@@ -19,4 +19,4 @@ emails/outreach*.json
 emails/repl*.json
 emails/suppressed.txt
 .claude/worktrees/
-emails/*offices*.json
+emails/*offices*
