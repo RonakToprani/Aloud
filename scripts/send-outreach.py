@@ -6,9 +6,11 @@ Resend so it goes out at a civilised hour without a machine staying awake.
     python3 scripts/send-outreach.py emails/outreach.json --at 2026-09-14T13:00:00Z --stagger-minutes 5
     python3 scripts/send-outreach.py emails/outreach.json --cancel       # before it fires
 
-Each entry: {"to", "greeting", "subject", "why"} and optionally "ask", where
-`why` is the one sentence that says why this organisation in particular.
-Everything else is shared. Resend ids go to a ledger beside the batch so a
+Each entry: {"to", "greeting", "subject", "why"} and optionally "ask" and
+"intro", where `why` is the one sentence that says why this organisation in
+particular. `intro` replaces the opening paragraph, which is written for
+literacy and language programmes; a batch to accessibility offices talks
+about course readings instead. Everything else is shared. Resend ids go to a ledger beside the batch so a
 scheduled send can be cancelled, and so a re-run never queues anyone twice.
 
 What keeps this in Gmail's Primary tab rather than Promotions, learned the
@@ -27,6 +29,9 @@ LOGO = f"{SITE}/email/logo.png"
 SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
 INK = "#1f2933"
 DEFAULT_ASK = "Would you try it with two or three of your learners and tell me what's missing?"
+DEFAULT_INTRO = ("I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights up each word as it's spoken. "
+                 "Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. "
+                 "It's free, and it's available right now.")
 
 
 def from_env(name: str, required: bool = True) -> str | None:
@@ -43,13 +48,17 @@ def signature_lines() -> list[str]:
     return lines
 
 
+def curly(t: str) -> str:
+    return t.replace("'", "\u2019")
+
+
 def text_of(e: dict) -> str:
     sig = "\n".join(signature_lines() + [SITE.replace("https://www.", "")])
     if li := from_env("LINKEDIN_URL", required=False):
         sig += "\n" + li.replace("https://www.", "")
     return f"""{e['greeting']}
 
-I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights up each word as it's spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It's free, and it's available right now.
+{e.get('intro', DEFAULT_INTRO)}
 
 {e['why']}
 
@@ -70,7 +79,7 @@ def html_of(e: dict) -> str:
     return (
         f'<div style="max-width:520px;font-family:{SANS}">'
         + p(e["greeting"])
-        + p("I’m Ronak, and I’m building Aloud: a reader that reads any book aloud and lights up each word as it’s spoken. Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. It’s free, and it’s available right now.")
+        + p(curly(e.get("intro", DEFAULT_INTRO)))
         + p(e["why"])
         + p(f'{e.get("ask", DEFAULT_ASK)} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. I’d love to hear any feedback, even a short point.')
         + p("Thank you,", 12)

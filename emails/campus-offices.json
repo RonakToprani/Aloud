@@ -1,0 +1,330 @@
+{
+ "gathered": "2026-09-17",
+ "note": "Public office inboxes and the assistive software each office's own pages name. Source of the campus and library batches.",
+ "offices": [
+  {
+   "institution": "Algoma University",
+   "office": "The Learning Centre and Accessibility Services",
+   "email": "learning@algomau.ca",
+   "tech": "text-to-speech devices, no product named"
+  },
+  {
+   "institution": "Brock University",
+   "office": "Student Accessibility Services",
+   "email": "asksas@brocku.ca",
+   "tech": "Kurzweil 3000 in the Computer Commons (ITS page); address read from archive, check live page"
+  },
+  {
+   "institution": "Carleton University",
+   "office": "Paul Menton Centre",
+   "email": "pmc@carleton.ca",
+   "tech": "Read&Write for all students, NaturalReader"
+  },
+  {
+   "institution": "University of Guelph",
+   "office": "Student Accessibility Services",
+   "email": "sas@uoguelph.ca",
+   "tech": "Kurzweil 3000 through Library Accessibility Services; most used tool in the exam centre"
+  },
+  {
+   "institution": "Lakehead University",
+   "office": "Student Accessibility Services",
+   "email": "sas@lakeheadu.ca",
+   "tech": "Kurzweil 3000 and Read&Write both listed"
+  },
+  {
+   "institution": "Laurentian University",
+   "office": "Accessibility Services",
+   "email": "accessibilityservicesinfo@laurentian.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "McMaster University",
+   "office": "Student Accessibility Services",
+   "email": "sas@mcmaster.ca",
+   "tech": "not stated by product"
+  },
+  {
+   "institution": "Nipissing University",
+   "office": "Student Accessibility Services",
+   "email": "sas@nipissingu.ca",
+   "tech": "Read&Write free to all students"
+  },
+  {
+   "institution": "OCAD University",
+   "office": "Student Accessibility Services",
+   "email": "sas@ocadu.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Ontario Tech University",
+   "office": "Student Accessibility Services",
+   "email": "studentaccessibility@ontariotechu.ca",
+   "tech": "Read&Write extension, OpenDyslexic; library workstation with Kurzweil 3000"
+  },
+  {
+   "institution": "University of Ottawa",
+   "office": "Academic Accommodations Service",
+   "email": "adapt@uottawa.ca",
+   "tech": "Read&Write campus licence"
+  },
+  {
+   "institution": "Queen's University",
+   "office": "Queen's Student Accessibility Services",
+   "email": "qsas.intake@queensu.ca",
+   "tech": "Kurzweil 3000 and Read&Write in the library Adaptive Technology Centre"
+  },
+  {
+   "institution": "Toronto Metropolitan University",
+   "office": "Academic Accommodation Support",
+   "email": "aasadmin@torontomu.ca",
+   "tech": "NaturalReader, Kurzweil 3000, Read&Write offered as text-to-speech options for tests"
+  },
+  {
+   "institution": "Trent University",
+   "office": "Student Accessibility Services",
+   "email": "sas@trentu.ca",
+   "tech": "Read&Write free to all; Kurzweil 3000 at the exam centre"
+  },
+  {
+   "institution": "University of Waterloo",
+   "office": "AccessAbility Services",
+   "email": "access@uwaterloo.ca",
+   "tech": "Kurzweil 3000 site licence through AccessAbility Services"
+  },
+  {
+   "institution": "University of Toronto St. George",
+   "office": "Accessibility Services",
+   "email": "accessibility.services@utoronto.ca",
+   "tech": "Kurzweil 3000, NaturalReader, Immersive Reader; laptops borrowable"
+  },
+  {
+   "institution": "University of Toronto Mississauga",
+   "office": "Accessibility Services",
+   "email": "access.utm@utoronto.ca",
+   "tech": "Kurzweil 3000 Firefly, Glean, Immersive Reader"
+  },
+  {
+   "institution": "University of Toronto Scarborough",
+   "office": "AccessAbility Services",
+   "email": "ability.utsc@utoronto.ca",
+   "tech": "Kurzweil 3000 in the Resource Lab"
+  },
+  {
+   "institution": "Western University",
+   "office": "Accessible Education",
+   "email": "aew@uwo.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Wilfrid Laurier University",
+   "office": "Accessible Learning",
+   "email": "accessible_learning@wlu.ca",
+   "tech": "university-wide Kurzweil 3000 licence; lists Read&Write, Speechify, NaturalReader"
+  },
+  {
+   "institution": "University of Windsor",
+   "office": "Student Accessibility Services",
+   "email": "sas@uwindsor.ca",
+   "tech": "text-to-speech via assistive technologist; Kurzweil unverified"
+  },
+  {
+   "institution": "York University",
+   "office": "Student Accessibility Services",
+   "email": "sasinfo@yorku.ca",
+   "tech": "Kurzweil 3000, Read&Write Gold in the AT lab"
+  },
+  {
+   "institution": "Royal Military College of Canada",
+   "office": "Academic Accommodations",
+   "email": "accommodation@rmc-cmr.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Université de Hearst",
+   "office": "Service d'accessibilité (Centre Labelle)",
+   "email": "centrelabellecentre@uhearst.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "NOSM University",
+   "office": "Learner Accommodations and Accessibility Services",
+   "email": "accessibilityadvisor@nosm.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Toronto Public Library",
+   "office": "Accessibility Services",
+   "email": "accessibleservices@tpl.ca",
+   "tech": "Kurzweil 1000 and 3000 on branch workstations"
+  },
+  {
+   "institution": "Ottawa Public Library",
+   "office": "Accessibility Office",
+   "email": "accessibility.office@biblioottawalibrary.ca",
+   "tech": "unnamed read-aloud software on AT workstations"
+  },
+  {
+   "institution": "London Public Library",
+   "office": "general inbox",
+   "email": "info@lpl.ca",
+   "tech": "Kurzweil 1000, JAWS, ZoomText"
+  },
+  {
+   "institution": "Hamilton Public Library",
+   "office": "Accessibility Services (Ask HPL)",
+   "email": "askhpl@hpl.ca",
+   "tech": "C-Pen readers, no read-aloud software"
+  },
+  {
+   "institution": "Algonquin College",
+   "office": "Centre for Accessible Learning",
+   "email": "welcomecentre@algonquincollege.com",
+   "tech": "Read&Write for all students"
+  },
+  {
+   "institution": "Cambrian College",
+   "office": "Glenn Crombie Centre",
+   "email": "gcc@cambriancollege.ca",
+   "tech": "Read&Write, Kurzweil, Dragon at the Test Centre"
+  },
+  {
+   "institution": "Canadore College",
+   "office": "Accessible Learning Services",
+   "email": "studentsuccessnow@canadorecollege.ca",
+   "tech": "text-to-speech, no product named"
+  },
+  {
+   "institution": "Centennial College",
+   "office": "CALCS",
+   "email": "calcs@centennialcollege.ca",
+   "tech": "Kurzweil 3000, Read&Write, NaturalReader, WordQ, Immersive Reader"
+  },
+  {
+   "institution": "Conestoga College",
+   "office": "Accessible Learning",
+   "email": "accessibility@conestogac.on.ca",
+   "tech": "Read&Write free to all students"
+  },
+  {
+   "institution": "Confederation College",
+   "office": "Student Accessibility Services",
+   "email": "sas@confederationcollege.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Durham College",
+   "office": "Access and Support Centre",
+   "email": "asc@durhamcollege.ca",
+   "tech": "Read&Write, Kurzweil 3000"
+  },
+  {
+   "institution": "Fanshawe College",
+   "office": "Accessibility Services",
+   "email": "accessibility@fanshawec.ca",
+   "tech": "Read&Write and Kurzweil 3000 free downloads"
+  },
+  {
+   "institution": "Fleming College",
+   "office": "Accessible Education Services",
+   "email": "caes@flemingcollege.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "George Brown College",
+   "office": "Accessible Learning Services",
+   "email": "alsregister@georgebrown.ca",
+   "tech": "Read&Write, NaturalReader; registration inbox, site blocks fetches"
+  },
+  {
+   "institution": "Georgian College",
+   "office": "Accessibility Advising",
+   "email": "studentsuccess@georgiancollege.ca",
+   "tech": "text-to-voice software, no product named"
+  },
+  {
+   "institution": "Humber Polytechnic",
+   "office": "Accessible Learning Services",
+   "email": "accessible-learning@humber.ca",
+   "tech": "Read&Write, Dragon, Kurzweil, ZoomText for accommodated tests"
+  },
+  {
+   "institution": "La Cité",
+   "office": "La Boussole",
+   "email": "laboussole@collegelacite.ca",
+   "tech": "not stated; francophone, not in the English batch"
+  },
+  {
+   "institution": "Lambton College",
+   "office": "Accessibility Centre",
+   "email": "ac@lambtoncollege.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Loyalist College",
+   "office": "AccessAbility Services",
+   "email": "AccessAbility@loyalistcollege.com",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Mohawk College",
+   "office": "Accessible Learning Services",
+   "email": "als@mohawkcollege.ca",
+   "tech": "NaturalReader"
+  },
+  {
+   "institution": "Niagara College",
+   "office": "Accessibility Services",
+   "email": "hwas@niagaracollege.ca",
+   "tech": "Read&Write, Dragon"
+  },
+  {
+   "institution": "Northern College",
+   "office": "Accessibility Services (Timmins)",
+   "email": "TimminsAccessibility@northern.on.ca",
+   "tech": "not stated; per-campus inboxes"
+  },
+  {
+   "institution": "Sault College",
+   "office": "Student Accessibility Services",
+   "email": "studentsupport@saultcollege.ca",
+   "tech": "not stated"
+  },
+  {
+   "institution": "Seneca Polytechnic",
+   "office": "Accessible Learning Services",
+   "email": "senecacnas@senecapolytechnic.ca",
+   "tech": "Kurzweil 3000, Read&Write 12, NaturalReader, WordQ, Dragon, JAWS"
+  },
+  {
+   "institution": "Sheridan College",
+   "office": "Accessible Learning (Trafalgar)",
+   "email": "trafalgar.als@sheridancollege.ca",
+   "tech": "not stated; per-campus inboxes"
+  },
+  {
+   "institution": "St. Clair College",
+   "office": "Accessibility Services",
+   "email": "studentservices@stclaircollege.ca",
+   "tech": "text-to-speech software, no product named"
+  },
+  {
+   "institution": "St. Lawrence College",
+   "office": "Accessibility Services",
+   "email": "swa@sl.on.ca",
+   "tech": "Kurzweil 3000, Read&Write, Dragon, Voice Dream, KNFB Reader"
+  },
+  {
+   "institution": "Collège Boréal",
+   "office": "Service d'accessibilité",
+   "email": "servicedaccessibilite@collegeboreal.ca",
+   "tech": "Kurzweil, Read&Write, NaturalReader, WordQ; francophone, not in the English batch"
+  },
+  {
+   "institution": "Université de Hearst",
+   "office": "Service d'accessibilité (Centre Labelle)",
+   "email": "centrelabellecentre@uhearst.ca",
+   "tech": "not stated; francophone, not in the English batch"
+  }
+ ]
+}
