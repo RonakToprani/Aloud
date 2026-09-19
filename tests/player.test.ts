@@ -271,6 +271,63 @@ test("a passage offered for a sentence the reader has not reached is the whole o
   assert.equal(engine.prepared[0]?.[0]?.text, "Bravo three four.");
 });
 
+function buildQuoted(msPerWord = 100) {
+  const engine = new FakeEngine();
+  engine.msPerWord = msPerWord;
+  const chapter: SegmentedChapter = segmentChapter({
+    id: "c0",
+    title: "Chapter 1",
+    blocks: [
+      { kind: "p" as const, text: "He spoke first." },
+      { kind: "p" as const, text: '"Quiet," she said.' },
+    ],
+  });
+  const player = new Player({
+    engine,
+    getChapter: (i) => (i === 0 ? chapter : undefined),
+    chapterCount: 1,
+    rate: 1,
+    voiceId: null,
+    onState: () => {},
+  });
+  return { engine, player };
+}
+
+test("a sentence that opens with a quotation mark keeps it when read from the start", async () => {
+  // Regression: the passage plan offers a lookahead sentence's text whole
+  // (it isn't "current" yet), but speak() used to slice the current sentence
+  // from its first word's own offset even at word 0 — one character short
+  // whenever a quote or bracket precedes that first word. The two texts then
+  // didn't match, so the plan missed and the sentence was fetched alone,
+  // stealing the connection from the passage already carrying it.
+  const { engine, player } = buildQuoted();
+  player.play();
+  await settle(500); // long enough to reach the quoted second sentence
+  player.destroy();
+
+  const planned = engine.prepared[0]?.find((s) => s.text.startsWith('"Quiet'));
+  assert.ok(planned, "the quoted sentence was offered in a passage plan");
+  assert.equal(planned?.text, '"Quiet," she said.');
+
+  const spokenQuote = engine.spoken.find((r) => r.text.startsWith('"Quiet'));
+  assert.ok(spokenQuote, "the quoted sentence was spoken");
+  assert.equal(spokenQuote?.text, '"Quiet," she said.');
+  // And the two must be exactly the same string, or passageFor's equality
+  // match still misses.
+  assert.equal(spokenQuote?.text, planned?.text);
+});
+
+test("resuming a quoted sentence mid-word still hands the engine only the tail", async () => {
+  // Starting fresh must not slice off the leading quote (above), but
+  // resuming after a tap on a later word must still slice from that word.
+  const { engine, player } = buildQuoted();
+  player.playFrom(0, 1, 1); // '"Quiet," she said.' -> from "she"
+  await settle(160);
+  player.destroy();
+
+  assert.equal(engine.spoken[0].text, "she said.");
+});
+
 test("a press of play after the voice gave up is a fresh attempt", async () => {
   const { engine, player, states } = build();
   // Safari's instant silent end: the utterance never really spoke.

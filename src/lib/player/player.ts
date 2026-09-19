@@ -1,6 +1,6 @@
 import type { SpeechEngine, SpeechError, UtteranceHandle } from "@/lib/speech/engine";
 import { SentenceSynchronizer, type SyncMode } from "@/lib/speech/synchronizer";
-import type { SegmentedChapter, Sentence } from "@/lib/text/segment";
+import { speechStartOffset, type SegmentedChapter, type Sentence } from "@/lib/text/segment";
 
 export type PlayerStatus = "idle" | "playing" | "paused" | "ended";
 
@@ -362,7 +362,7 @@ export class Player {
     }
 
     const startWord = Math.min(this.state.wordIndex, Math.max(0, sentence.words.length - 1));
-    const offset = sentence.words[startWord]?.start ?? 0;
+    const offset = speechStartOffset(sentence.words, startWord);
     const text = sentence.speakable.slice(offset);
     if (!text.trim()) {
       this.emit({ wordIndex: 0 });
@@ -527,7 +527,7 @@ export class Player {
       chapterIndex === this.state.chapterIndex && sentenceIndex === this.state.sentenceIndex;
     if (!isCurrent) return sentence.speakable;
     const startWord = Math.min(this.state.wordIndex, Math.max(0, sentence.words.length - 1));
-    return sentence.speakable.slice(sentence.words[startWord]?.start ?? 0);
+    return sentence.speakable.slice(speechStartOffset(sentence.words, startWord));
   }
 
   private prefetchAt(chapterIndex: number, sentenceIndex: number): void {

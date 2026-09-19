@@ -315,3 +315,18 @@ export function wordAtCharIndex(words: WordToken[], charIndex: number): number {
   }
   return best;
 }
+
+/**
+ * Where a sentence's spoken text begins for a given start word: the very
+ * start of the sentence when beginning it fresh, even if the first word
+ * token itself starts a character or two in (an opening quote or bracket
+ * precedes it) — never sliced away, because a passage plan built while this
+ * sentence was still ahead of playback offered its text whole, and the two
+ * have to agree exactly or the engine treats this as an unplanned sentence
+ * and fetches it alone. Resuming after a tap on a later word is still a
+ * real slice, from that word's own offset.
+ */
+export function speechStartOffset(words: WordToken[], startWord: number): number {
+  if (startWord <= 0) return 0;
+  return words[startWord]?.start ?? 0;
+}
