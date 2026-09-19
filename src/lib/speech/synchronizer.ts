@@ -1,5 +1,5 @@
 import { estimateWordDurations, getCalibration, recordCalibration } from "./estimator";
-import { wordAtCharIndex, type WordToken } from "@/lib/text/segment";
+import { speechStartOffset, wordAtCharIndex, type WordToken } from "@/lib/text/segment";
 
 export type SyncMode = "pending" | "events" | "estimated";
 
@@ -130,8 +130,12 @@ export class SentenceSynchronizer {
     // charIndex comes from the engine, measured against what it was actually
     // asked to say, so the lookup has to walk the same words rather than the
     // displayed ones — see `speakableWords`. The index it lands on is still
-    // valid into `words`, because the two are the same length.
-    const base = this.spoken[this.options.startWordIndex]?.start ?? 0;
+    // valid into `words`, because the two are the same length. The engine was
+    // given the sentence from this same offset (see `speechStartOffset`), so
+    // the base has to be computed the same way or a boundary lands one word
+    // off whenever the sentence opened on a quote or bracket the first word
+    // token doesn't include.
+    const base = speechStartOffset(this.spoken, this.options.startWordIndex);
     const index = wordAtCharIndex(this.spoken, base + charIndex);
 
     // Engines occasionally re-announce or briefly regress; within a sentence

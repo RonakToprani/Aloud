@@ -89,8 +89,10 @@ function splitSentencesFallback(text: string): string[] {
 /** Titles and initials that end in a period without ending a sentence. */
 const ABBREV_TAIL =
   /(?:^|[\s(\["'‘“])(?:mr|mrs|ms|mx|dr|prof|rev|hon|st|sr|jr|vs|etc|al|e\.g|i\.e|cf|fig|no|vol|ch|pp|approx|dept|est|inc|ltd|co|capt|col|gen|lt|sgt|maj|messrs|mt|ft|ave|blvd|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.$/i;
-/** A lone initial, as in "J. R. R. Tolkien". */
-const INITIAL_TAIL = /(?:^|\s)[A-Z]\.$/;
+/** A lone initial, as in "J. R. R. Tolkien". Also true right after an opening
+ *  bracket or quote ("[D. Anderson]"), where there is no preceding space for
+ *  the plain \s case to key off. */
+const INITIAL_TAIL = /(?:^|[\s(\["'‘“])[A-Z]\.$/;
 
 /**
  * Intl.Segmenter breaks after "Mrs." because browsers ship ICU without its
@@ -128,13 +130,66 @@ function shouldMerge(previous: string, next: string): boolean {
   return false;
 }
 
+/** A bracketed run, opening bracket to the matching close, nothing nested. */
+const BRACKETED_RUN = /[[(][^[\]()]*[\])]/y;
+/** A run that ends the way a sentence does, "(He had asked twice.)": a
+ *  sentence in brackets is still a sentence. */
+const SENTENCE_IN_BRACKETS = /[.!?…]["'’”»]*[\])]$/;
+/** What may open the sentence after a note: a capital, a quote, another note. */
+const RESUMES_SENTENCE = /^[\p{Lu}"'‘“(\[]/u;
+
+/**
+ * A bracketed note that a sentence break landed in front of - an
+ * attribution after a quote, `great service." [Scott D. Anderson]`, or an
+ * aside, "(per the editor)" - belongs to the sentence it follows: a reader
+ * says it in the same breath, and a break there put a full sentence pause
+ * at the opening bracket. The note is moved back onto the sentence before
+ * it, and the break moves to after the closing bracket, so what follows
+ * ("The next sentence...") still opens a sentence of its own. A run the
+ * segmenter split inside ("[Scott D. " then "Anderson] ...", off the
+ * initial) is taken whole. A full sentence in brackets, ending in its own
+ * stop, keeps the break it was given, and a paragraph that opens with a
+ * bracket has nothing to fold into and is left alone.
+ */
+function attachBracketedNotes(text: string, parts: string[]): string[] {
+  const queue = [...parts];
+  const out: string[] = [];
+  let offset = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const part = queue[i];
+    const partStart = offset;
+    let partEnd = offset + part.length;
+    const lead = part.length - part.trimStart().length;
+    const open = partStart + lead;
+    let run: RegExpExecArray | null = null;
+    if (out.length && lead < part.length && /[[(]/.test(text[open])) {
+      BRACKETED_RUN.lastIndex = open;
+      run = BRACKETED_RUN.exec(text);
+    }
+    if (!run || SENTENCE_IN_BRACKETS.test(run[0])) {
+      out.push(part);
+      offset = partEnd;
+      continue;
+    }
+    let cut = open + run[0].length;
+    while (cut < text.length && /\s/.test(text[cut])) cut++;
+    while (partEnd < cut && i + 1 < queue.length) partEnd += queue[++i].length;
+    // Whatever follows the note is only a sentence if it starts like one;
+    // "[1] the next thing" runs on into the same sentence.
+    if (!RESUMES_SENTENCE.test(text.slice(cut, partEnd))) cut = partEnd;
+    out[out.length - 1] += text.slice(partStart, cut);
+    if (cut < partEnd) queue.splice(i + 1, 0, text.slice(cut, partEnd));
+    offset = cut;
+  }
+  return out;
+}
+
 function splitSentences(text: string): string[] {
   const seg = segmenter("sentence");
-  if (!seg) return mergeFalseBreaks(splitSentencesFallback(text));
-  const parts: string[] = [];
-  for (const s of seg.segment(text)) parts.push(s.segment);
-  if (!parts.length) return mergeFalseBreaks(splitSentencesFallback(text));
-  return mergeFalseBreaks(parts);
+  let parts: string[] = [];
+  if (seg) for (const s of seg.segment(text)) parts.push(s.segment);
+  if (!parts.length) parts = splitSentencesFallback(text);
+  return mergeFalseBreaks(attachBracketedNotes(text, parts));
 }
 
 const WORD_RE = /[\p{L}\p{N}][\p{L}\p{N}'’‐‑-]*/gu;
@@ -188,7 +243,13 @@ export function segmentChapter(chapter: Chapter): SegmentedChapter {
     // An image is never spoken, however long its alt text; only a caption,
     // when there is one, reads like an ordinary paragraph.
     const spokenText = block.kind === "image" ? (block.caption ?? "") : block.text;
-    const parts = spokenText.length ? splitSentences(spokenText) : [];
+    let parts = spokenText.length ? splitSentences(spokenText) : [];
+    // A heading's own punctuation ("Act III. Scene II.") can read like two
+    // sentences to the splitter above, but a heading is one line, spoken
+    // whole, and an override can only attach to a single sentence — so a
+    // heading that carries one stays whole rather than losing it to a split
+    // the heading never asked for.
+    if (/^h[1-3]$/.test(block.kind) && block.speakable && parts.length > 1) parts = [spokenText];
     // A block-level override (currently just a roman numeral read as a word)
     // replaces the sentence text wholesale, so it only applies when the
     // whole block is one sentence: splitting it further would leave no
@@ -253,4 +314,19 @@ export function wordAtCharIndex(words: WordToken[], charIndex: number): number {
     }
   }
   return best;
+}
+
+/**
+ * Where a sentence's spoken text begins for a given start word: the very
+ * start of the sentence when beginning it fresh, even if the first word
+ * token itself starts a character or two in (an opening quote or bracket
+ * precedes it) — never sliced away, because a passage plan built while this
+ * sentence was still ahead of playback offered its text whole, and the two
+ * have to agree exactly or the engine treats this as an unplanned sentence
+ * and fetches it alone. Resuming after a tap on a later word is still a
+ * real slice, from that word's own offset.
+ */
+export function speechStartOffset(words: WordToken[], startWord: number): number {
+  if (startWord <= 0) return 0;
+  return words[startWord]?.start ?? 0;
 }

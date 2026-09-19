@@ -122,3 +122,105 @@ test("a speakable override is ignored on a block that splits into more than one 
   assert.equal(segmented.sentences[0].speakable, "First.");
   assert.equal(segmented.sentences[1].speakable, "Second.");
 });
+
+test("a bracketed attribution after a quote does not open its own sentence", () => {
+  // Real report: a reader on a cloud voice heard a pause "for no reason" at
+  // the opening bracket. That's this sentence boundary - ICU (and our
+  // abbreviation stitching, keying off "D.") treats "[Scott D. Anderson]" as
+  // starting a new sentence right after the quote, so the passage planner
+  // gives it a full sentence pause before "[" that a human reader wouldn't.
+  const chapter = chapterOf(
+    'He read the card once more. "This was great service." [Scott D. Anderson] It made him smile.',
+  );
+  const segmented = segmentChapter(chapter);
+
+  // The quote and its bracketed attribution must stay in the same sentence,
+  // so no pause is scheduled at the bracket.
+  const withBracket = segmented.sentences.find((s) => s.speakable.includes("[Scott"));
+  assert.ok(withBracket, "expected a sentence containing the bracketed attribution");
+  assert.match(withBracket!.speakable, /great service\."\s*\[Scott D\. Anderson\]/);
+  assert.equal(
+    segmented.sentences.some((s) => s.speakable.trim() === "[Scott D. Anderson]"),
+    false,
+    "the attribution must not stand alone as its own sentence",
+  );
+  // What follows the attribution is a sentence of its own, as it was
+  // before: the note moves back, the break moves past it.
+  assert.deepEqual(
+    segmented.sentences.map((s) => s.speakable),
+    ["He read the card once more.", '"This was great service." [Scott D. Anderson]', "It made him smile."],
+  );
+
+  // Concatenating the sentences must still reproduce the block exactly.
+  const rebuilt = segmented.sentences.map((s) => s.text).join("");
+  assert.equal(rebuilt, chapter.blocks[0].text);
+});
+
+test("a bracketed attribution ending a paragraph folds into the sentence before it", () => {
+  const chapter = chapterOf('This was great service." [Scott D. Anderson]');
+  const segmented = segmentChapter(chapter);
+
+  assert.equal(segmented.sentences.length, 1);
+  assert.equal(segmented.sentences[0].speakable, 'This was great service." [Scott D. Anderson]');
+});
+
+test("an initial as the first word inside brackets does not fragment", () => {
+  // Without a word before it, "[D." has no leading whitespace for the
+  // initial-abbreviation check to key off, so it used to become its own
+  // one-token sentence, with "Anderson]" as another.
+  const chapter = chapterOf('This was great service." [D. Anderson]');
+  const segmented = segmentChapter(chapter);
+
+  assert.equal(segmented.sentences.length, 1);
+  assert.equal(
+    segmented.sentences.every((s) => s.speakable.trim().length > 2),
+    true,
+    "no fragment sentence like \"[D.\" or \"Anderson]\"",
+  );
+});
+
+test("a whole sentence in brackets keeps its own sentence", () => {
+  // A parenthesis that is a sentence ("(He had asked twice.)") is read as
+  // one, with a pause either side; only a note without a stop of its own
+  // folds into what it follows.
+  const chapter = chapterOf("She refused. (He had asked twice.) They left.");
+  const segmented = segmentChapter(chapter);
+  assert.deepEqual(
+    segmented.sentences.map((s) => s.speakable),
+    ["She refused.", "(He had asked twice.)", "They left."],
+  );
+  assert.equal(segmented.sentences.map((s) => s.text).join(""), chapter.blocks[0].text);
+});
+
+test("a parenthesis holding several sentences is not folded back", () => {
+  const chapter = chapterOf("She refused. (He asked. She said no.) They left.");
+  const segmented = segmentChapter(chapter);
+  assert.equal(segmented.sentences[0].speakable, "She refused.");
+  assert.equal(segmented.sentences.at(-1)?.speakable, "They left.");
+  assert.equal(segmented.sentences.map((s) => s.text).join(""), chapter.blocks[0].text);
+});
+
+test("a paragraph that opens with a bracket has nothing to fold into", () => {
+  const sentence = chapterOf("(He had asked twice.) They left.");
+  const asSentence = segmentChapter(sentence);
+  assert.deepEqual(
+    asSentence.sentences.map((s) => s.speakable),
+    ["(He had asked twice.)", "They left."],
+  );
+  assert.equal(asSentence.sentences.map((s) => s.text).join(""), sentence.blocks[0].text);
+
+  const note = chapterOf("[Editor's note] The chapter begins here.");
+  const asNote = segmentChapter(note);
+  assert.equal(asNote.sentences.length, 1);
+  assert.equal(asNote.sentences[0].speakable, "[Editor's note] The chapter begins here.");
+});
+
+test("a bracketed note that runs on in lower case stays in one sentence", () => {
+  const chapter = chapterOf("It was shown. [1] the next thing happened. And another.");
+  const segmented = segmentChapter(chapter);
+  assert.deepEqual(
+    segmented.sentences.map((s) => s.speakable),
+    ["It was shown. [1] the next thing happened.", "And another."],
+  );
+  assert.equal(segmented.sentences.map((s) => s.text).join(""), chapter.blocks[0].text);
+});

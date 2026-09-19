@@ -6,8 +6,8 @@ Resend so it goes out at a civilised hour without a machine staying awake.
     python3 scripts/send-outreach.py emails/outreach.json --at 2026-09-14T13:00:00Z --stagger-minutes 5
     python3 scripts/send-outreach.py emails/outreach.json --cancel       # before it fires
 
-Each entry: {"to", "greeting", "subject", "why"} and optionally "ask" and
-"intro", where `why` is the one sentence that says why this organisation in
+Each entry: {"to", "greeting", "subject", "why"} and optionally "ask",
+"intro" and "close", where `why` is the one sentence that says why this organisation in
 particular. `intro` replaces the opening paragraph, which is written for
 literacy and language programmes; a batch to accessibility offices talks
 about course readings instead. Everything else is shared. Resend ids go to a ledger beside the batch so a
@@ -29,6 +29,7 @@ LOGO = f"{SITE}/email/logo.png"
 SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
 INK = "#1f2933"
 DEFAULT_ASK = "Would you try it with two or three of your learners and tell me what's missing?"
+DEFAULT_CLOSE = "I'd love to hear any feedback, even a short point."
 DEFAULT_INTRO = ("I'm Ronak, and I'm building Aloud: a reader that reads any book aloud and lights up each word as it's spoken. "
                  "Readers bring their own EPUB or PDF, or pick from nearly 3,000 classics, and the text never leaves their device. "
                  "It's free, and it's available right now.")
@@ -62,7 +63,7 @@ def text_of(e: dict) -> str:
 
 {e['why']}
 
-{e.get('ask', DEFAULT_ASK)} It's at {SITE}, with nothing to install and no sign-up needed. I'd love to hear any feedback, even a short point.
+{e.get('ask', DEFAULT_ASK)} It's at {SITE}, with nothing to install and no sign-up needed. {e.get('close', DEFAULT_CLOSE)}
 
 Thank you,
 
@@ -81,7 +82,7 @@ def html_of(e: dict) -> str:
         + p(e["greeting"])
         + p(curly(e.get("intro", DEFAULT_INTRO)))
         + p(e["why"])
-        + p(f'{e.get("ask", DEFAULT_ASK)} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. I’d love to hear any feedback, even a short point.')
+        + p(f'{curly(e.get("ask", DEFAULT_ASK))} It’s at <a href="{SITE}" style="color:#5b7fa6">aloudreader.org</a>, with nothing to install and no sign-up needed. {curly(e.get("close", DEFAULT_CLOSE))}'.rstrip())
         + p("Thank you,", 12)
         # The one table in the email: the logo beside the name, the way a
         # signature block looks in a mail client. Nothing else is laid out.

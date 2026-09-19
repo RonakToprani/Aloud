@@ -9,6 +9,8 @@ import styles from "./Home.module.css";
  * The home hero: how much has been read aloud, by how many, and how many
  * are listening this minute. Counts on load rather than landing, holds the
  * last cached figure until a fresh one arrives, and never shows a skeleton.
+ * The weekly count is worded as readers, never "active": the word invites a
+ * comparison with the total that a small number loses.
  */
 export function StatsHero() {
   const stats = useReadingStats();
@@ -25,12 +27,12 @@ export function StatsHero() {
       <span className={styles.readers}>
         {unit}, by {plural(stats.readers, "reader", "readers")}
       </span>
-      <Presence listeningNow={stats.listeningNow} activeReaders={stats.activeReaders} />
+      <Presence listeningNow={stats.listeningNow} weekly={stats.activeReaders} />
     </div>
   );
 }
 
-function Presence({ listeningNow, activeReaders }: { listeningNow: number; activeReaders: number }) {
+function Presence({ listeningNow, weekly }: { listeningNow: number; weekly: number }) {
   if (listeningNow > 0) {
     return (
       <span className={styles.presence}>
@@ -39,11 +41,11 @@ function Presence({ listeningNow, activeReaders }: { listeningNow: number; activ
       </span>
     );
   }
-  if (activeReaders > 0) {
+  if (weekly > 0) {
     return (
       <span className={styles.presence}>
         <span className={styles.presenceDot} aria-hidden="true" />
-        {plural(activeReaders, "reader this week", "readers this week")}
+        {plural(weekly, "reader this week", "readers this week")}
       </span>
     );
   }
@@ -71,7 +73,7 @@ export function StatsStrip() {
       {stats.listeningNow === 0 && stats.activeReaders > 0 && (
         <>
           <span className={styles.stripDot}>·</span>
-          {formatInteger(stats.activeReaders)} active this week
+          {formatInteger(stats.activeReaders)} readers this week
         </>
       )}
     </p>

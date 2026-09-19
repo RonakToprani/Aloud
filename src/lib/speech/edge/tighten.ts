@@ -73,6 +73,10 @@ export const DEFAULT_TIGHTEN: TightenSettings = {
  *  is matched to a silent run with this much slack either side. */
 const BOUNDARY_SLACK_MS = 350;
 
+/** The most sound a tail may have behind it and still be the tail: a breath
+ *  or a click, not a word. */
+const BREATH_MS = 150;
+
 interface SilentRun {
   fromMs: number;
   toMs: number;
@@ -146,10 +150,35 @@ export function planCuts(
     ? Math.max(...words.map((w) => w.offsetMs + w.durationMs))
     : 0;
 
-  for (const run of runs) {
+  // Sound left after each run, so a run can tell a breath behind it from a
+  // sentence: runs come in order, so it is the audio after the run less the
+  // silent runs that follow.
+  const soundAfter = new Array<number>(runs.length);
+  let silentAfter = 0;
+  for (let i = runs.length - 1; i >= 0; i--) {
+    soundAfter[i] = totalMs - runs[i].toMs - silentAfter;
+    silentAfter += runs[i].toMs - runs[i].fromMs;
+  }
+
+  for (const [i, run] of runs.entries()) {
     const length = run.toMs - run.fromMs;
     const isLead = run.fromMs === 0;
-    const isTail = run.toMs >= totalMs - settings.frameMs;
+    // A run that starts after the last spoken word is trailing silence even
+    // when it doesn't reach the buffer's literal end. Edge sometimes leaves a
+    // soft breath after a closing quote, bracket or ellipsis, which splits
+    // one long tail into two silent runs with that sound between them; the
+    // earlier one used to fall into the ordinary per-sentence bucket and was
+    // only trimmed to otherPauseMs, leaving hundreds of ms of dead air baked
+    // into the passage on top of the paragraph pause scheduled after it.
+    // Only a long run with nothing but a blip behind it qualifies: the last
+    // word's timing runs early, so a short gap inside it (a stop consonant)
+    // is not a tail, and neither is the pause before a sentence the voice
+    // returned no timings for, which the timings alone cannot see.
+    const afterLastWord =
+      run.fromMs >= lastWordEnd - BOUNDARY_SLACK_MS &&
+      length >= settings.minRunMs &&
+      soundAfter[i] <= BREATH_MS;
+    const isTail = run.toMs >= totalMs - settings.frameMs || afterLastWord;
 
     if (isLead) {
       if (length > settings.leadMs) cuts.push({ fromMs: 0, toMs: length - settings.leadMs });

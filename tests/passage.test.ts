@@ -86,3 +86,22 @@ test("a heading gets the dedicated pause rather than the ordinary paragraph one"
   assert.equal(pauseAfter(withSentence), DEFAULT_TIGHTEN.sentencePauseMs);
   assert.ok(DEFAULT_TIGHTEN.headingPauseMs > DEFAULT_TIGHTEN.paragraphPauseMs);
 });
+
+// A heading ends its passage but does not begin one: the tail of the
+// paragraph before it is synthesised in the same request, so the pause
+// before the heading is Edge's paragraph break, trimmed like any other,
+// while the pause after it is the scheduled seam. Making a heading open its
+// own passage would leave a passage a second long between two fetches, and
+// the engine only looks one passage ahead, so the story after it would
+// more often than not be waited for rather than scheduled.
+test("a heading after a paragraph is synthesised with it and still ends the passage", () => {
+  const inputs = [s("End of the chapter.", true), heading("Part Two"), s("The story goes on."), s("And on.", true)];
+  const plan = planPassage(inputs, 1500)!;
+  assert.deepEqual(
+    plan.sentences.map((sentence) => sentence.text),
+    ["End of the chapter.", "Part Two"],
+  );
+  assert.equal(plan.text, "End of the chapter.\n\nPart Two");
+  assert.equal(plan.sentences[1].isHeading, true);
+  assert.equal(pauseAfter(plan), DEFAULT_TIGHTEN.headingPauseMs);
+});

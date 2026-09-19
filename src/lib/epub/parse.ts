@@ -8,6 +8,7 @@ import {
   numberToWords,
   romanToInt,
   ROMAN,
+  speakHeadingNumerals,
 } from "@/lib/text/headings";
 import type { Block, BlockKind, Chapter } from "@/lib/types";
 
@@ -226,7 +227,14 @@ function combineHgroup(hgroup: Element): Block | null {
 
   const pieces = parts.map((el) => {
     const both = flatTextBoth(el);
-    return { text: clean(both.text), speakable: clean(both.speakable) };
+    const text = clean(both.text);
+    // Each line is a heading in its own right, so a numeral that fills a
+    // line ("I") or follows a label ("Part V") is read as a number even when
+    // nothing marks it up; converting line by line rather than the joined
+    // text is what keeps an unmarked "I" beside "A Fellow Traveller" a
+    // numeral, where in the joined line it would read as a title's pronoun.
+    const spoken = clean(both.speakable);
+    return { text, speakable: speakHeadingNumerals(spoken) ?? spoken };
   });
   const texts = pieces.map((p) => p.text).filter(Boolean);
   if (!texts.length) return null;
@@ -386,9 +394,15 @@ function extractBlocks(root: Element, basePath: string): Extracted {
           const text = clean(both.text);
           if (text) {
             const kind = kindOf(tag);
-            const speakable = clean(both.speakable);
+            const finalKind = kind === "p" && looksLikeHeading(text, element) ? "h2" : kind;
+            let speakable = clean(both.speakable);
+            // A converted-book heading rarely carries epub:type at all, so a
+            // numeral in it never met flatTextBoth's conversion; catch it
+            // here once the block is known to be a heading, one way or the
+            // other, rather than only when it happens to be marked up.
+            if (/^h[1-3]$/.test(finalKind)) speakable = speakHeadingNumerals(speakable) ?? speakable;
             out.push({
-              kind: kind === "p" && looksLikeHeading(text, element) ? "h2" : kind,
+              kind: finalKind,
               text,
               ...(speakable !== text ? { speakable } : {}),
             });
@@ -765,6 +779,9 @@ export async function parseEpub(
         titleSpeakable = part[0].speakable;
         part = part.slice(1);
       }
+      // A title that came only from the table of contents ("Chapter IV")
+      // has been through no conversion at all, and is a heading too.
+      titleSpeakable ??= speakHeadingNumerals(chapterTitle) ?? undefined;
       chapters.push({
         id: seg === 0 ? entry.path : `${entry.path}#${bounds[seg]}`,
         title: chapterTitle,
