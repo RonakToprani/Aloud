@@ -9,6 +9,8 @@ import styles from "./Home.module.css";
  * The home hero: how much has been read aloud, by how many, and how many
  * are listening this minute. Counts on load rather than landing, holds the
  * last cached figure until a fresh one arrives, and never shows a skeleton.
+ * The weekly active count is deliberately not shown: a small number there
+ * reads as a product nobody uses, and the line is better empty than that.
  */
 export function StatsHero() {
   const stats = useReadingStats();
@@ -25,29 +27,19 @@ export function StatsHero() {
       <span className={styles.readers}>
         {unit}, by {plural(stats.readers, "reader", "readers")}
       </span>
-      <Presence listeningNow={stats.listeningNow} activeReaders={stats.activeReaders} />
+      <Presence listeningNow={stats.listeningNow} />
     </div>
   );
 }
 
-function Presence({ listeningNow, activeReaders }: { listeningNow: number; activeReaders: number }) {
-  if (listeningNow > 0) {
-    return (
-      <span className={styles.presence}>
-        <span className={styles.presenceDot} data-live="true" aria-hidden="true" />
-        {plural(listeningNow, "listening right now", "listening right now")}
-      </span>
-    );
-  }
-  if (activeReaders > 0) {
-    return (
-      <span className={styles.presence}>
-        <span className={styles.presenceDot} aria-hidden="true" />
-        {plural(activeReaders, "reader this week", "readers this week")}
-      </span>
-    );
-  }
-  return null;
+function Presence({ listeningNow }: { listeningNow: number }) {
+  if (listeningNow === 0) return null;
+  return (
+    <span className={styles.presence}>
+      <span className={styles.presenceDot} data-live="true" aria-hidden="true" />
+      {plural(listeningNow, "listening right now", "listening right now")}
+    </span>
+  );
 }
 
 /** The same figures, one quiet line, above a populated library. */
@@ -66,12 +58,6 @@ export function StatsStrip() {
           <span className={styles.stripDot}>·</span>
           <span className={styles.presenceDot} data-live="true" aria-hidden="true" />
           {formatInteger(stats.listeningNow)} listening now
-        </>
-      )}
-      {stats.listeningNow === 0 && stats.activeReaders > 0 && (
-        <>
-          <span className={styles.stripDot}>·</span>
-          {formatInteger(stats.activeReaders)} active this week
         </>
       )}
     </p>
