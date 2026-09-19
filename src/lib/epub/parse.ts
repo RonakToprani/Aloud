@@ -227,7 +227,14 @@ function combineHgroup(hgroup: Element): Block | null {
 
   const pieces = parts.map((el) => {
     const both = flatTextBoth(el);
-    return { text: clean(both.text), speakable: clean(both.speakable) };
+    const text = clean(both.text);
+    // Each line is a heading in its own right, so a numeral that fills a
+    // line ("I") or follows a label ("Part V") is read as a number even when
+    // nothing marks it up; converting line by line rather than the joined
+    // text is what keeps an unmarked "I" beside "A Fellow Traveller" a
+    // numeral, where in the joined line it would read as a title's pronoun.
+    const spoken = clean(both.speakable);
+    return { text, speakable: speakHeadingNumerals(spoken) ?? spoken };
   });
   const texts = pieces.map((p) => p.text).filter(Boolean);
   if (!texts.length) return null;
@@ -239,12 +246,7 @@ function combineHgroup(hgroup: Element): Block | null {
   const joiner = ordinal && texts.length > 1 ? ": " : " ";
   const text = texts.join(joiner);
   const speakables = pieces.map((p) => p.speakable).filter(Boolean);
-  let speakable = speakables.length === texts.length ? speakables.join(joiner) : text;
-  // A title line ("Part V") carries no epub:type of its own, so a numeral
-  // in it never went through flatTextBoth's conversion; an hgroup is always
-  // a heading, so it's safe to also convert anything that reads as a bare
-  // roman numeral here, the way the h2's "I" already was.
-  speakable = speakHeadingNumerals(speakable) ?? speakable;
+  const speakable = speakables.length === texts.length ? speakables.join(joiner) : text;
 
   const outerKind = kindOf(parts[0].tagName.toUpperCase());
   const kind: BlockKind = outerKind === "p" ? "h2" : outerKind;
@@ -777,6 +779,9 @@ export async function parseEpub(
         titleSpeakable = part[0].speakable;
         part = part.slice(1);
       }
+      // A title that came only from the table of contents ("Chapter IV")
+      // has been through no conversion at all, and is a heading too.
+      titleSpeakable ??= speakHeadingNumerals(chapterTitle) ?? undefined;
       chapters.push({
         id: seg === 0 ? entry.path : `${entry.path}#${bounds[seg]}`,
         title: chapterTitle,

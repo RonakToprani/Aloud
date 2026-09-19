@@ -95,31 +95,103 @@ export function numberToWords(n: number): string {
     .join(" ");
 }
 
-/** A whole word made only of roman-numeral letters, so a run that merely
- *  contains them ("Vitamin", "Louis") never qualifies — \b anchors the match
- *  to the full word, and a stray English word spelled entirely in I, V, X,
- *  L, C, D, M ("MIX") is left to romanToInt's stricter grammar to reject. */
-const ROMAN_WORD = /\b[IVXLCDM]+\b/gi;
+/** Words that announce a number: what follows "Chapter" or "Part" in a
+ *  heading is a numeral, whatever letters it happens to be spelled with. */
+const LABEL_WORD =
+  /^(?:book|part|chapter|chap|act|scene|canto|volume|vol|section|sect|letter|stave|epistle|bk|pt)$/i;
+const ROMAN_LETTERS = /^[IVXLCDM]+$/i;
+/** What a heading may put between a label and its numeral: "Chapter: IV". */
+const BETWEEN_LABEL_AND_NUMERAL = /^[.:]?$/;
+/** After a leading numeral: "I. The Arrival", "IV: Home", "II — The Sea". */
+const AFTER_LEADING_NUMERAL = /^[.:\-–—]/;
+/** Before a closing numeral: "Part Two — IV", where the label is further back. */
+const BEFORE_CLOSING_NUMERAL = /[,\-–—]$/;
+
+interface HeadingToken {
+  /** The letters and digits, or empty for a token that is only punctuation. */
+  word: string;
+  /** Punctuation glued to the word, split off so "IV." is a numeral with a
+   *  full stop after it rather than a word the numeral grammar rejects. */
+  before: string;
+  after: string;
+}
+
+/** One token per run of non-whitespace, so the text can be rebuilt from
+ *  them over its own spacing. */
+function headingTokens(text: string): HeadingToken[] {
+  return (text.match(/\S+/g) ?? []).map((raw) => {
+    const m = /^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/su.exec(raw)!;
+    return { before: m[1], word: m[2], after: m[3] };
+  });
+}
 
 /**
- * Converts every roman numeral word in a heading to how it's read out loud
+ * Whether the token at `at` sits where a heading puts a number. A roman
+ * numeral is only a numeral there; the same letters anywhere else are
+ * words, so "Why I Left" keeps its pronoun and "MIX", "CIVIL" and "The XL
+ * Files" stay what they say. Numerals are set in one case, so "Mix" is
+ * never one either.
+ */
+function isNumeralPosition(tokens: HeadingToken[], at: number): boolean {
+  const token = tokens[at];
+  const word = token.word;
+  if (!ROMAN_LETTERS.test(word) || romanToInt(word) === null) return false;
+  if (word !== word.toUpperCase() && word !== word.toLowerCase()) return false;
+
+  const worded = tokens.filter((t) => t.word);
+  // The whole heading: "IV", "XIV.", "I —".
+  if (worded.length === 1) return true;
+
+  // Punctuation set off by spaces ("Chapter : IV", "I — Home") belongs to
+  // the word beside it.
+  const punctuationOnly = (t: HeadingToken | undefined) => t !== undefined && !t.word;
+  const previous = punctuationOnly(tokens[at - 1]) ? tokens[at - 2] : tokens[at - 1];
+  const betweenPrevious = (punctuationOnly(tokens[at - 1]) ? tokens[at - 1].before : "") + token.before;
+  const after = token.after + (punctuationOnly(tokens[at + 1]) ? tokens[at + 1].before : "");
+
+  // Right after a label: "Chapter IV", "Book the IV", "Part: II".
+  const labelled = (label: HeadingToken | undefined, between: string) =>
+    label !== undefined && LABEL_WORD.test(label.word) && BETWEEN_LABEL_AND_NUMERAL.test(label.after + between);
+  if (labelled(previous, betweenPrevious)) return true;
+  if (previous && /^the$/i.test(previous.word) && !previous.after && !betweenPrevious) {
+    const label = tokens[tokens.indexOf(previous) - 1];
+    if (labelled(label, previous.before)) return true;
+  }
+
+  // Opening the heading, then a stop or a dash: "I. The Arrival".
+  if (worded[0] === token && !token.before && AFTER_LEADING_NUMERAL.test(after)) return true;
+
+  // Closing the heading after a comma or dash, with a label earlier on.
+  if (worded[worded.length - 1] === token && previous && BEFORE_CLOSING_NUMERAL.test(previous.after + betweenPrevious)) {
+    return tokens.slice(0, at).some((t) => LABEL_WORD.test(t.word));
+  }
+  return false;
+}
+
+/**
+ * Converts the roman numerals in a heading to how they are read out loud
  * ("Book II, Chapter IV" -> "Book two, Chapter four"), one token in for one
- * token out so the word offsets that drive the highlight still line up.
+ * token out so the word offsets that drive the highlight still line up,
+ * and only in the positions a heading puts a number (see
+ * `isNumeralPosition`): a heading is where "I" and "V" are numbers, but a
+ * heading also holds a title, and "I Am Legend" is not chapter one.
  *
  * Only ever called on text already known to be a heading (see
- * `isChapterHeading` / `looksLikeHeading`). Run against ordinary prose it
- * would turn "Louis XIV" or "a grade of C" into a sentence about numbers —
- * nothing outside a heading block calls this for exactly that reason.
- * Returns null when nothing in the text was a numeral, so a caller can tell
- * "unchanged" from "converted to itself".
+ * `isChapterHeading` / `looksLikeHeading`). Returns null when nothing in the
+ * text was a numeral, so a caller can tell "unchanged" from "converted to
+ * itself".
  */
 export function speakHeadingNumerals(text: string): string | null {
+  const tokens = headingTokens(text);
   let changed = false;
-  const result = text.replace(ROMAN_WORD, (word) => {
-    const value = romanToInt(word);
-    if (value === null) return word;
+  let at = 0;
+  const spoken = text.replace(/\S+/g, (raw) => {
+    const token = tokens[at];
+    const numeral = isNumeralPosition(tokens, at);
+    at++;
+    if (!numeral) return raw;
     changed = true;
-    return numberToWords(value);
+    return token.before + numberToWords(romanToInt(token.word)!) + token.after;
   });
-  return changed ? result : null;
+  return changed ? spoken : null;
 }

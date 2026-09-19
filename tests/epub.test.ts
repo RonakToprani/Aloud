@@ -292,6 +292,47 @@ test("roman-looking words inside an ordinary paragraph are never touched", async
   assert.equal(block?.speakable, undefined);
 });
 
+// A heading holds a title as well as a number, and a title is prose. Any
+// word spelled only in roman letters used to be read as a number, so this
+// chapter was read "why one left".
+test("a roman-looking word in a heading's title stays a word", async () => {
+  for (const title of ["Why I Left", "I Am Legend", "MIX AND MATCH", "CIVIL WAR", "The XL Files"]) {
+    const body = `<h2>${title}</h2>${filler(4)}`;
+    const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+    assert.equal(book.chapters[0].blocks[0].text, title);
+    assert.equal(book.chapters[0].blocks[0].speakable, undefined, title);
+  }
+});
+
+// Each line of an hgroup is a heading in its own right, so a numeral that
+// fills its line is a number even with nothing marking it up, where the
+// same "I" at the head of the joined line would read as a title's pronoun.
+test("an unmarked ordinal line in an hgroup is still spoken as a number", async () => {
+  const body = `<hgroup><h2>I</h2><p>A Fellow Traveller</p></hgroup>${filler(4)}`;
+  const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
+  const block = book.chapters[0].blocks[0];
+  assert.equal(block.text, "I A Fellow Traveller");
+  assert.equal(block.speakable, "one A Fellow Traveller");
+});
+
+// A chapter whose title comes only from the table of contents has no heading
+// block to carry a spoken form over from, and is a heading all the same.
+test("a chapter title that came only from the contents speaks its numeral", async () => {
+  const nav = `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="ch1.xhtml">Chapter IV</a></li></ol></nav></body></html>`;
+  const body = `<h2>The Arrival</h2>${filler(4)}`;
+  const book = await parseEpub(
+    await makeEpub({
+      chapters: [{ id: "c1", href: "ch1.xhtml", title: "Chapter IV", body }],
+      extraFiles: { "nav.xhtml": nav },
+      extraManifest: `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    }),
+  );
+  assert.equal(book.chapters[0].title, "Chapter IV");
+  assert.equal(book.chapters[0].blocks[0].kind, "h1");
+  assert.equal(book.chapters[0].blocks[0].speakable, "Chapter four");
+  assert.equal(book.chapters[0].blocks[1].text, "The Arrival");
+});
+
 test("an unmarked capital I in prose stays the pronoun, not a numeral", async () => {
   const body = `<p>I stopped there and looked around before I went on.</p>`;
   const book = await parseEpub(await makeEpub({ chapters: [{ id: "c1", href: "ch1.xhtml", body }] }));
