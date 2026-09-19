@@ -102,6 +102,21 @@ test("without an outline, chapter headings are found in the type", async () => {
   assert.deepEqual(book.chapters.map((chapter) => chapter.title), ["Chapter One", "Chapter Two"]);
 });
 
+// A PDF heading carries no markup at all — there is nothing like an EPUB's
+// epub:type to say "this is a numeral" — so both roman numerals in it have
+// to be found and spoken as words from the text alone.
+test("a PDF heading with two roman numerals speaks both as numbers", async () => {
+  const heading = (title: string): PdfLineSpec[] => [
+    { x: LEFT, y: TOP + 40, size: 22, text: title, bold: true },
+  ];
+  const pdf = makePdf([{ lines: [...heading("Book II, Chapter IV"), ...bodyPage(SENTENCES).lines] }]);
+  const book = await parsePdf(pdf, "Fallback");
+  assert.equal(book.chapters[0].title, "Book II, Chapter IV");
+  assert.equal(book.chapters[0].blocks[0].kind, "h1");
+  assert.equal(book.chapters[0].blocks[0].text, "Book II, Chapter IV");
+  assert.equal(book.chapters[0].blocks[0].speakable, "Book two, Chapter four");
+});
+
 test("outline entries landing on one page make one chapter, named by the last", async () => {
   // A contents list and the chapter after it often point at the same place
   // once the contents pages themselves have been dropped.

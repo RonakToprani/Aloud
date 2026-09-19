@@ -94,3 +94,32 @@ export function numberToWords(n: number): string {
     .filter(Boolean)
     .join(" ");
 }
+
+/** A whole word made only of roman-numeral letters, so a run that merely
+ *  contains them ("Vitamin", "Louis") never qualifies — \b anchors the match
+ *  to the full word, and a stray English word spelled entirely in I, V, X,
+ *  L, C, D, M ("MIX") is left to romanToInt's stricter grammar to reject. */
+const ROMAN_WORD = /\b[IVXLCDM]+\b/gi;
+
+/**
+ * Converts every roman numeral word in a heading to how it's read out loud
+ * ("Book II, Chapter IV" -> "Book two, Chapter four"), one token in for one
+ * token out so the word offsets that drive the highlight still line up.
+ *
+ * Only ever called on text already known to be a heading (see
+ * `isChapterHeading` / `looksLikeHeading`). Run against ordinary prose it
+ * would turn "Louis XIV" or "a grade of C" into a sentence about numbers —
+ * nothing outside a heading block calls this for exactly that reason.
+ * Returns null when nothing in the text was a numeral, so a caller can tell
+ * "unchanged" from "converted to itself".
+ */
+export function speakHeadingNumerals(text: string): string | null {
+  let changed = false;
+  const result = text.replace(ROMAN_WORD, (word) => {
+    const value = romanToInt(word);
+    if (value === null) return word;
+    changed = true;
+    return numberToWords(value);
+  });
+  return changed ? result : null;
+}
