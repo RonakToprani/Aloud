@@ -89,8 +89,10 @@ function splitSentencesFallback(text: string): string[] {
 /** Titles and initials that end in a period without ending a sentence. */
 const ABBREV_TAIL =
   /(?:^|[\s(\["'‘“])(?:mr|mrs|ms|mx|dr|prof|rev|hon|st|sr|jr|vs|etc|al|e\.g|i\.e|cf|fig|no|vol|ch|pp|approx|dept|est|inc|ltd|co|capt|col|gen|lt|sgt|maj|messrs|mt|ft|ave|blvd|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.$/i;
-/** A lone initial, as in "J. R. R. Tolkien". */
-const INITIAL_TAIL = /(?:^|\s)[A-Z]\.$/;
+/** A lone initial, as in "J. R. R. Tolkien". Also true right after an opening
+ *  bracket or quote ("[D. Anderson]"), where there is no preceding space for
+ *  the plain \s case to key off. */
+const INITIAL_TAIL = /(?:^|[\s(\["'‘“])[A-Z]\.$/;
 
 /**
  * Intl.Segmenter breaks after "Mrs." because browsers ship ICU without its
@@ -125,6 +127,12 @@ function shouldMerge(previous: string, next: string): boolean {
   if (/\d\.$/.test(left) && /^\d/.test(right)) return true;
   // Real sentences don't begin in lower case or with a clause separator.
   if (/^[\p{Ll},;:)]/u.test(right)) return true;
+  // A bracketed editorial note or attribution - "[Scott D. Anderson]",
+  // "(per the editor)" - reads as a continuation of what precedes it, not a
+  // new sentence with a pause of its own. Without this, "[Scott D." breaking
+  // as its own ICU segment right after a quote put a full sentence pause at
+  // the opening bracket, which a human reader wouldn't.
+  if (/^[[(]/.test(right)) return true;
   return false;
 }
 

@@ -122,3 +122,53 @@ test("a speakable override is ignored on a block that splits into more than one 
   assert.equal(segmented.sentences[0].speakable, "First.");
   assert.equal(segmented.sentences[1].speakable, "Second.");
 });
+
+test("a bracketed attribution after a quote does not open its own sentence", () => {
+  // Real report: a reader on a cloud voice heard a pause "for no reason" at
+  // the opening bracket. That's this sentence boundary - ICU (and our
+  // abbreviation stitching, keying off "D.") treats "[Scott D. Anderson]" as
+  // starting a new sentence right after the quote, so the passage planner
+  // gives it a full sentence pause before "[" that a human reader wouldn't.
+  const chapter = chapterOf(
+    'He read the card once more. "This was great service." [Scott D. Anderson] It made him smile.',
+  );
+  const segmented = segmentChapter(chapter);
+
+  // The quote and its bracketed attribution must stay in the same sentence,
+  // so no pause is scheduled at the bracket.
+  const withBracket = segmented.sentences.find((s) => s.speakable.includes("[Scott"));
+  assert.ok(withBracket, "expected a sentence containing the bracketed attribution");
+  assert.match(withBracket!.speakable, /great service\."\s*\[Scott D\. Anderson\]/);
+  assert.equal(
+    segmented.sentences.some((s) => s.speakable.trim() === "[Scott D. Anderson]"),
+    false,
+    "the attribution must not stand alone as its own sentence",
+  );
+
+  // Concatenating the sentences must still reproduce the block exactly.
+  const rebuilt = segmented.sentences.map((s) => s.text).join("");
+  assert.equal(rebuilt, chapter.blocks[0].text);
+});
+
+test("a bracketed attribution ending a paragraph folds into the sentence before it", () => {
+  const chapter = chapterOf('This was great service." [Scott D. Anderson]');
+  const segmented = segmentChapter(chapter);
+
+  assert.equal(segmented.sentences.length, 1);
+  assert.equal(segmented.sentences[0].speakable, 'This was great service." [Scott D. Anderson]');
+});
+
+test("an initial as the first word inside brackets does not fragment", () => {
+  // Without a word before it, "[D." has no leading whitespace for the
+  // initial-abbreviation check to key off, so it used to become its own
+  // one-token sentence, with "Anderson]" as another.
+  const chapter = chapterOf('This was great service." [D. Anderson]');
+  const segmented = segmentChapter(chapter);
+
+  assert.equal(segmented.sentences.length, 1);
+  assert.equal(
+    segmented.sentences.every((s) => s.speakable.trim().length > 2),
+    true,
+    "no fragment sentence like \"[D.\" or \"Anderson]\"",
+  );
+});
