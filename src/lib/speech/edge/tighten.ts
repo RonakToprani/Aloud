@@ -149,7 +149,16 @@ export function planCuts(
   for (const run of runs) {
     const length = run.toMs - run.fromMs;
     const isLead = run.fromMs === 0;
-    const isTail = run.toMs >= totalMs - settings.frameMs;
+    // A run that starts after the last spoken word is trailing silence even
+    // when it doesn't reach the buffer's literal end. Edge sometimes leaves a
+    // soft breath after a closing quote, bracket or ellipsis, which splits
+    // one long tail into two silent runs with that sound between them - the
+    // earlier one used to miss both this check and the tail branch's own
+    // cut-to-trailMs, so it fell into the ordinary per-sentence bucket and
+    // was only trimmed to otherPauseMs, leaving hundreds of ms of dead air
+    // baked into the passage on top of the paragraph pause scheduled after it.
+    const isTail =
+      run.toMs >= totalMs - settings.frameMs || run.fromMs >= lastWordEnd - BOUNDARY_SLACK_MS;
 
     if (isLead) {
       if (length > settings.leadMs) cuts.push({ fromMs: 0, toMs: length - settings.leadMs });

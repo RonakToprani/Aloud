@@ -94,6 +94,36 @@ describe("planning cuts", () => {
     const cuts = planCuts(signal(parts), SR, words, sentences, { ...DEFAULT_TIGHTEN, trailMs: null });
     assert.equal(cuts.length, 2);
   });
+
+  it("trims the whole tail even when a breath after a closing quote splits it in two", () => {
+    // Edge's voice sometimes leaves a soft trailing sound - a breath after a
+    // closing quote, bracket or ellipsis - partway through what should be one
+    // long silent tail. That breaks findSilentRuns' single tail run into two:
+    // a long one that doesn't touch the buffer's literal end (so it used to
+    // fall through to the ordinary per-sentence bucket and only get cut to
+    // otherPauseMs, 480ms, instead of the tail's own trailMs) and a short one
+    // that does. Left alone, that's several hundred ms of dead air baked into
+    // the passage's own audio, on top of the paragraph pause scheduled after
+    // it - the "odd extra pause" a reader hears reaching a new paragraph.
+    const lastSentence: [number, boolean][] = [
+      [50, false], // lead
+      [700, true], // the sentence itself, ending e.g. in a quote or ellipsis
+      [800, false], // a long silence...
+      [15, true], // ...broken by a breath...
+      [80, false], // ...before the buffer's true end
+    ];
+    const w: TimedWordLike[] = [{ charIndex: 0, charLength: 8, offsetMs: 50, durationMs: 700 }];
+    const span: SentenceSpan[] = [{ start: 0, end: 8, endsParagraph: true }];
+
+    const cuts = planCuts(signal(lastSentence), SR, w, span);
+    const kept = applyCuts(signal(lastSentence), SR, cuts);
+    const keptMs = (kept.length / SR) * 1000;
+
+    // Everything after the word (750ms in) should be gone but for the lead
+    // trim's usual 40ms and the unavoidable 15ms of real sound - nowhere near
+    // the ~500ms an unrecognised tail fragment used to leave behind.
+    assert.ok(keptMs < 800, `tightened buffer kept ${keptMs}ms, expected the whole tail trimmed`);
+  });
 });
 
 describe("applying cuts", () => {
