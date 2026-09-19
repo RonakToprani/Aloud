@@ -124,6 +124,57 @@ describe("planning cuts", () => {
     // the ~500ms an unrecognised tail fragment used to leave behind.
     assert.ok(keptMs < 800, `tightened buffer kept ${keptMs}ms, expected the whole tail trimmed`);
   });
+
+  it("leaves a short gap inside the last word alone", () => {
+    // The last word's timing ends early, so a silence that starts before it
+    // is reported to end can still be part of the word: the closure before
+    // a final stop consonant is a near-silent gap of tens of milliseconds.
+    // Taken for the tail it would be cut to nothing, and the word would lose
+    // its consonant on every passage.
+    const parts: [number, boolean][] = [
+      [50, false],
+      [400, true], // "attitu"
+      [60, false], // the closure before the "d"
+      [200, true], // "de"
+      [900, false],
+    ];
+    const w: TimedWordLike[] = [{ charIndex: 0, charLength: 8, offsetMs: 50, durationMs: 700 }];
+    const span: SentenceSpan[] = [{ start: 0, end: 8, endsParagraph: true }];
+
+    const cuts = planCuts(signal(parts), SR, w, span);
+    const inside = cuts.filter((cut) => cut.fromMs < 510 && cut.toMs > 450);
+    assert.deepEqual(inside, [], "the gap inside the word must not be cut");
+    // The real tail after the word still goes.
+    assert.ok(cuts.some((cut) => cut.fromMs >= 710 && cut.toMs >= 1600));
+  });
+
+  it("keeps the pause before a sentence the voice returned no timings for", () => {
+    // Edge sometimes reports no words for a sentence (locateSentences in
+    // engine.ts allows for it). The timings then end a whole sentence early,
+    // and the pause before that sentence looks like it sits after the last
+    // word. It is a sentence pause, with speech behind it, and must be
+    // trimmed like one rather than to nothing.
+    const parts: [number, boolean][] = [
+      [50, false],
+      [700, true], // the timed sentence
+      [1000, false], // the pause between sentences
+      [1400, true], // the untimed sentence
+      [900, false],
+    ];
+    const w: TimedWordLike[] = [{ charIndex: 0, charLength: 9, offsetMs: 50, durationMs: 700 }];
+    const span: SentenceSpan[] = [
+      { start: 0, end: 9, endsParagraph: false },
+      { start: 10, end: 20, endsParagraph: true },
+    ];
+
+    const cuts = planCuts(signal(parts), SR, w, span);
+    const between = cuts.filter((cut) => cut.fromMs >= 750 && cut.toMs <= 1750);
+    assert.equal(between.length, 1);
+    const removed = between[0].toMs - between[0].fromMs;
+    assert.ok(1000 - removed >= DEFAULT_TIGHTEN.sentencePauseMs, `only ${1000 - removed}ms of pause left`);
+    // The untimed sentence's own audio is untouched.
+    assert.equal(cuts.some((cut) => cut.fromMs > 1750 && cut.toMs < 3150), false);
+  });
 });
 
 describe("applying cuts", () => {
