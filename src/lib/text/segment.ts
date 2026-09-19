@@ -127,22 +127,69 @@ function shouldMerge(previous: string, next: string): boolean {
   if (/\d\.$/.test(left) && /^\d/.test(right)) return true;
   // Real sentences don't begin in lower case or with a clause separator.
   if (/^[\p{Ll},;:)]/u.test(right)) return true;
-  // A bracketed editorial note or attribution - "[Scott D. Anderson]",
-  // "(per the editor)" - reads as a continuation of what precedes it, not a
-  // new sentence with a pause of its own. Without this, "[Scott D." breaking
-  // as its own ICU segment right after a quote put a full sentence pause at
-  // the opening bracket, which a human reader wouldn't.
-  if (/^[[(]/.test(right)) return true;
   return false;
+}
+
+/** A bracketed run, opening bracket to the matching close, nothing nested. */
+const BRACKETED_RUN = /[[(][^[\]()]*[\])]/y;
+/** A run that ends the way a sentence does, "(He had asked twice.)": a
+ *  sentence in brackets is still a sentence. */
+const SENTENCE_IN_BRACKETS = /[.!?…]["'’”»]*[\])]$/;
+/** What may open the sentence after a note: a capital, a quote, another note. */
+const RESUMES_SENTENCE = /^[\p{Lu}"'‘“(\[]/u;
+
+/**
+ * A bracketed note that a sentence break landed in front of - an
+ * attribution after a quote, `great service." [Scott D. Anderson]`, or an
+ * aside, "(per the editor)" - belongs to the sentence it follows: a reader
+ * says it in the same breath, and a break there put a full sentence pause
+ * at the opening bracket. The note is moved back onto the sentence before
+ * it, and the break moves to after the closing bracket, so what follows
+ * ("The next sentence...") still opens a sentence of its own. A run the
+ * segmenter split inside ("[Scott D. " then "Anderson] ...", off the
+ * initial) is taken whole. A full sentence in brackets, ending in its own
+ * stop, keeps the break it was given, and a paragraph that opens with a
+ * bracket has nothing to fold into and is left alone.
+ */
+function attachBracketedNotes(text: string, parts: string[]): string[] {
+  const queue = [...parts];
+  const out: string[] = [];
+  let offset = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const part = queue[i];
+    const partStart = offset;
+    let partEnd = offset + part.length;
+    const lead = part.length - part.trimStart().length;
+    const open = partStart + lead;
+    let run: RegExpExecArray | null = null;
+    if (out.length && lead < part.length && /[[(]/.test(text[open])) {
+      BRACKETED_RUN.lastIndex = open;
+      run = BRACKETED_RUN.exec(text);
+    }
+    if (!run || SENTENCE_IN_BRACKETS.test(run[0])) {
+      out.push(part);
+      offset = partEnd;
+      continue;
+    }
+    let cut = open + run[0].length;
+    while (cut < text.length && /\s/.test(text[cut])) cut++;
+    while (partEnd < cut && i + 1 < queue.length) partEnd += queue[++i].length;
+    // Whatever follows the note is only a sentence if it starts like one;
+    // "[1] the next thing" runs on into the same sentence.
+    if (!RESUMES_SENTENCE.test(text.slice(cut, partEnd))) cut = partEnd;
+    out[out.length - 1] += text.slice(partStart, cut);
+    if (cut < partEnd) queue.splice(i + 1, 0, text.slice(cut, partEnd));
+    offset = cut;
+  }
+  return out;
 }
 
 function splitSentences(text: string): string[] {
   const seg = segmenter("sentence");
-  if (!seg) return mergeFalseBreaks(splitSentencesFallback(text));
-  const parts: string[] = [];
-  for (const s of seg.segment(text)) parts.push(s.segment);
-  if (!parts.length) return mergeFalseBreaks(splitSentencesFallback(text));
-  return mergeFalseBreaks(parts);
+  let parts: string[] = [];
+  if (seg) for (const s of seg.segment(text)) parts.push(s.segment);
+  if (!parts.length) parts = splitSentencesFallback(text);
+  return mergeFalseBreaks(attachBracketedNotes(text, parts));
 }
 
 const WORD_RE = /[\p{L}\p{N}][\p{L}\p{N}'’‐‑-]*/gu;
