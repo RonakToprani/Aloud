@@ -10,7 +10,7 @@ import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist/legacy/build/pdf
 import type { ParsedBook } from "@/lib/epub/parse";
 import { layoutLines, pageLines, type LaidOutBlock, type PdfLine, type PdfTextItem } from "@/lib/pdf/layout";
 import { assetOptions, loadPdfJs } from "@/lib/pdf/pdfjs";
-import { clean, isChapterHeading } from "@/lib/text/headings";
+import { clean, isChapterHeading, speakHeadingNumerals } from "@/lib/text/headings";
 import type { Block, Chapter } from "@/lib/types";
 
 export class PdfParseError extends Error {
@@ -137,6 +137,15 @@ function headingCuts(blocks: LaidOutBlock[]): number[] {
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/** A PDF heading carries no markup at all, so a roman numeral in it never
+ *  meets a conversion the way an EPUB's epub:type-marked one does; give it
+ *  a spoken form here, once a line is already known to be a heading. */
+function withHeadingSpeakable(block: Block): Block {
+  if (!/^h[1-3]$/.test(block.kind)) return block;
+  const speakable = speakHeadingNumerals(block.text);
+  return speakable ? { ...block, speakable } : block;
+}
+
 function buildChapters(blocks: LaidOutBlock[], cuts: Cut[], bookTitle: string): Chapter[] {
   let bounds: number[] = [];
   let names: (string | null)[] = [];
@@ -172,7 +181,7 @@ function buildChapters(blocks: LaidOutBlock[], cuts: Cut[], bookTitle: string): 
   const edges = [0, ...bounds, blocks.length];
   const chapters: Chapter[] = [];
   for (let i = 0; i + 1 < edges.length; i++) {
-    let part: Block[] = blocks.slice(edges[i], edges[i + 1]).map((entry) => entry.block);
+    let part: Block[] = blocks.slice(edges[i], edges[i + 1]).map((entry) => withHeadingSpeakable(entry.block));
     if (!part.length) continue;
 
     const heading = /^h[1-3]$/.test(part[0].kind) ? part[0].text : null;
@@ -191,7 +200,7 @@ function buildChapters(blocks: LaidOutBlock[], cuts: Cut[], bookTitle: string): 
     chapters.push({
       id: `page-${blocks[edges[i]].page}-${edges[i]}`,
       title,
-      blocks: [{ kind: "h1", text: title }, ...part],
+      blocks: [withHeadingSpeakable({ kind: "h1", text: title }), ...part],
     });
   }
   // Unless that is all there is, in which case a short book beats no book.

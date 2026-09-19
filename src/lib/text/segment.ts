@@ -196,7 +196,13 @@ export function segmentChapter(chapter: Chapter): SegmentedChapter {
     // An image is never spoken, however long its alt text; only a caption,
     // when there is one, reads like an ordinary paragraph.
     const spokenText = block.kind === "image" ? (block.caption ?? "") : block.text;
-    const parts = spokenText.length ? splitSentences(spokenText) : [];
+    let parts = spokenText.length ? splitSentences(spokenText) : [];
+    // A heading's own punctuation ("Act III. Scene II.") can read like two
+    // sentences to the splitter above, but a heading is one line, spoken
+    // whole, and an override can only attach to a single sentence — so a
+    // heading that carries one stays whole rather than losing it to a split
+    // the heading never asked for.
+    if (/^h[1-3]$/.test(block.kind) && block.speakable && parts.length > 1) parts = [spokenText];
     // A block-level override (currently just a roman numeral read as a word)
     // replaces the sentence text wholesale, so it only applies when the
     // whole block is one sentence: splitting it further would leave no

@@ -8,6 +8,7 @@ import {
   numberToWords,
   romanToInt,
   ROMAN,
+  speakHeadingNumerals,
 } from "@/lib/text/headings";
 import type { Block, BlockKind, Chapter } from "@/lib/types";
 
@@ -238,7 +239,12 @@ function combineHgroup(hgroup: Element): Block | null {
   const joiner = ordinal && texts.length > 1 ? ": " : " ";
   const text = texts.join(joiner);
   const speakables = pieces.map((p) => p.speakable).filter(Boolean);
-  const speakable = speakables.length === texts.length ? speakables.join(joiner) : text;
+  let speakable = speakables.length === texts.length ? speakables.join(joiner) : text;
+  // A title line ("Part V") carries no epub:type of its own, so a numeral
+  // in it never went through flatTextBoth's conversion; an hgroup is always
+  // a heading, so it's safe to also convert anything that reads as a bare
+  // roman numeral here, the way the h2's "I" already was.
+  speakable = speakHeadingNumerals(speakable) ?? speakable;
 
   const outerKind = kindOf(parts[0].tagName.toUpperCase());
   const kind: BlockKind = outerKind === "p" ? "h2" : outerKind;
@@ -386,9 +392,15 @@ function extractBlocks(root: Element, basePath: string): Extracted {
           const text = clean(both.text);
           if (text) {
             const kind = kindOf(tag);
-            const speakable = clean(both.speakable);
+            const finalKind = kind === "p" && looksLikeHeading(text, element) ? "h2" : kind;
+            let speakable = clean(both.speakable);
+            // A converted-book heading rarely carries epub:type at all, so a
+            // numeral in it never met flatTextBoth's conversion; catch it
+            // here once the block is known to be a heading, one way or the
+            // other, rather than only when it happens to be marked up.
+            if (/^h[1-3]$/.test(finalKind)) speakable = speakHeadingNumerals(speakable) ?? speakable;
             out.push({
-              kind: kind === "p" && looksLikeHeading(text, element) ? "h2" : kind,
+              kind: finalKind,
               text,
               ...(speakable !== text ? { speakable } : {}),
             });
