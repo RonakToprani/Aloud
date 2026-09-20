@@ -37,6 +37,8 @@ export async function GET(): Promise<Response> {
         /** Listening recorded by the app itself, without the pre-tracking baseline. */
         measured_hours: Math.floor(((row.measured_seconds ?? row.total_seconds) / 3600) * 10) / 10,
         hours_listened_label: hours >= 100 ? Math.floor(hours).toLocaleString("en-US") : (Math.floor(hours * 10) / 10).toString(),
+        minutes_listened: Math.floor(row.total_seconds / 60),
+        minutes_listened_label: Math.floor(row.total_seconds / 60).toLocaleString("en-US"),
         readers: row.readers,
         active_readers_7d: row.active_readers,
         updated_at: row.updated_at,

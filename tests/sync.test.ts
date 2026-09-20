@@ -5,16 +5,16 @@ import { formatListened, plural } from "../src/lib/sync/format";
 import { DEFAULT_SETTINGS, normalizeSettings, settingsEqual } from "../src/lib/storage/prefs";
 
 describe("the home counter", () => {
-  it("reads in minutes until there is an hour to show", () => {
+  it("reads in minutes", () => {
     assert.deepEqual(formatListened(0), { figure: "0", unit: "minutes" });
     assert.deepEqual(formatListened(90), { figure: "1", unit: "minute" });
     assert.deepEqual(formatListened(45 * 60), { figure: "45", unit: "minutes" });
   });
 
-  it("shows a decimal while the hours are few, then whole hours", () => {
-    assert.deepEqual(formatListened(3600), { figure: "1.0", unit: "hours" });
-    assert.deepEqual(formatListened(12.46 * 3600), { figure: "12.4", unit: "hours" });
-    assert.deepEqual(formatListened(412806 * 3600 + 1200), { figure: "412,806", unit: "hours" });
+  it("keeps reading in minutes however long it gets", () => {
+    assert.deepEqual(formatListened(3600), { figure: "60", unit: "minutes" });
+    assert.deepEqual(formatListened(12.46 * 3600), { figure: "747", unit: "minutes" });
+    assert.deepEqual(formatListened(412806 * 3600 + 1200), { figure: "24,768,380", unit: "minutes" });
   });
 
   it("pluralises readers", () => {
