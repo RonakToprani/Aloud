@@ -20,3 +20,4 @@ emails/repl*.json
 emails/suppressed.txt
 .claude/worktrees/
 emails/*offices*
+brag-output*/
