@@ -30,6 +30,10 @@ export interface ScheduledStart {
   voice: string;
   when: number;
   offset: number;
+  /** How much of the buffer is left to play from `offset`, in seconds. */
+  seconds: number;
+  /** Context time it was cut off at, if it was. */
+  stopAt: number | null;
   /** Wall-clock ms since the harness started. */
   at: number;
   loop: boolean;
@@ -117,12 +121,13 @@ class StubBufferSource {
   onended: (() => void) | null = null;
   private stopped = false;
   private watch: ReturnType<typeof setInterval> | null = null;
+  private record: ScheduledStart | null = null;
 
   constructor(private readonly ctx: StubAudioContext) {}
   connect(): void {}
   disconnect(): void {}
   start(when = this.ctx.currentTime, offset = 0): void {
-    this.ctx.record(this, when, offset);
+    this.record = this.ctx.record(this, when, offset);
     if (this.loop) return;
     // A real source fires `ended` when the buffer runs out, and an offset past
     // the end of the buffer means it ends without ever making a sound — which
@@ -139,9 +144,10 @@ class StubBufferSource {
     if (this.watch !== null) clearInterval(this.watch);
     this.watch = null;
   }
-  stop(): void {
+  stop(when?: number): void {
     if (this.stopped) return;
     this.stopped = true;
+    if (this.record) this.record.stopAt = when ?? this.ctx.currentTime;
     this.clearWatch();
   }
 }
@@ -168,15 +174,51 @@ export class StubAudioContext {
     return this.elapsed;
   }
 
-  record(source: StubBufferSource, when: number, offset: number): void {
+  record(source: StubBufferSource, when: number, offset: number): ScheduledStart {
     const peak = source.buffer?.peak() ?? 0;
-    this.starts.push({
+    const entry: ScheduledStart = {
       voice: source.loop || peak === 0 ? "silence" : voiceForAmplitude(peak),
       when,
       offset,
+      seconds: Math.max(0, (source.buffer?.duration ?? 0) - offset),
+      stopAt: null,
       at: Date.now() - this.t0,
       loop: source.loop,
+    };
+    this.starts.push(entry);
+    return entry;
+  }
+
+  /** Is any real audio coming out at this instant? A source scheduled for
+   *  later, one whose buffer has run out, and one started past the end of its
+   *  own buffer all make no sound, however live they look. */
+  sounding(): boolean {
+    return this.soundingWithin(0);
+  }
+
+  /** Sounding now, or due to start within `ms`. The gap a passage owes the
+   *  next one is real silence and at most 700ms of it, so this is how a seam
+   *  is told apart from a reading that has stopped. */
+  soundingWithin(ms: number): boolean {
+    if (this.state !== "running") return false;
+    const now = this.currentTime;
+    return this.starts.some((start) => {
+      if (start.loop || start.voice === "silence") return false;
+      const until = Math.min(start.when + start.seconds, start.stopAt ?? Infinity);
+      return now + ms / 1000 >= start.when && now < until;
     });
+  }
+
+  /** Which voices are audible at this instant. */
+  soundingVoices(): string[] {
+    const now = this.currentTime;
+    const voices = new Set<string>();
+    for (const start of this.starts) {
+      if (start.loop || start.voice === "silence") continue;
+      const until = Math.min(start.when + start.seconds, start.stopAt ?? Infinity);
+      if (now >= start.when && now < until) voices.add(start.voice);
+    }
+    return [...voices];
   }
 
   createBufferSource(): StubBufferSource {
@@ -219,13 +261,19 @@ export interface Harness {
   latencyMs: number | null;
   /** Audio actually scheduled, silence and keep-alive feeds excluded. */
   audible(): ScheduledStart[];
+  /** Whether a sound is coming out right now. */
+  sounding(): boolean;
+  /** Whether a sound is coming out now or is due within `ms`. */
+  soundingWithin(ms: number): boolean;
+  /** Which voices are being heard at this instant. */
+  soundingVoices(): string[];
   /** Voices whose audio was scheduled, in order. */
   voiceOrder(): string[];
   sessionHolderPaused(): boolean;
   restore(): void;
 }
 
-const WORD_MS = 240;
+const WORD_MS = 170;
 const SENTENCE_SILENCE_MS = 1000;
 
 /** Times a passage the way Edge does: a word every WORD_MS, a second of dead
@@ -283,6 +331,9 @@ export function installHarness(): Harness {
     calls,
     latencyMs: 20,
     audible: () => ctx.starts.filter((start) => !start.loop && start.voice !== "silence"),
+    sounding: () => ctx.sounding(),
+    soundingWithin: (ms: number) => ctx.soundingWithin(ms),
+    soundingVoices: () => ctx.soundingVoices(),
     voiceOrder: () => {
       const order: string[] = [];
       for (const start of harness.audible()) {
