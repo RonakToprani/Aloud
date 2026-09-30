@@ -1,0 +1,186 @@
+/* The same rows as the Add a book sheet, so the two choices read as choices
+   the product already offers rather than as a pitch. */
+
+.note {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ui-muted);
+  text-wrap: pretty;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 16px;
+  background: var(--inset);
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
+}
+
+.option:hover {
+  background: var(--segment);
+}
+
+.option:active {
+  background: var(--segment);
+  transform: scale(0.985);
+}
+
+.icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--accent-strong);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink-strong);
+}
+
+.hint {
+  font-size: 12.5px;
+  color: var(--ui-muted);
+}
+
+/* ---------- The three questions before a booking ---------- */
+
+/* Same field geometry as the Paste text sheet, so this reads as a form the
+   product already has rather than a new one. */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--inset);
+  border: 1px solid var(--hairline-soft);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  /* A long answer in a narrow box is sliced mid-letter otherwise, which reads
+     as a rendering fault rather than as text that carries on. */
+  text-overflow: ellipsis;
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
+/* Under 16px, iOS Safari zooms in to focus a field and never zooms back out,
+   which on a sheet leaves the buttons off-screen. */
+@media (pointer: coarse) {
+  .input {
+    font-size: 16px;
+  }
+}
+
+/* On the narrowest phones 16px leaves about 270px of box, which a job title
+   or a number with a country code and an extension runs past. The sheet's own
+   side padding is what there is to give back. */
+@media (max-width: 360px) {
+  .fields {
+    margin-inline: -8px;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.back,
+.go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft),
+    opacity var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
+}
+
+.back {
+  color: var(--ui-muted);
+}
+
+.back:hover {
+  background: var(--inset);
+  color: var(--ui);
+}
+
+.go {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+
+.go:hover {
+  background: var(--accent);
+}
+
+/* A phone has no hover, and the tap highlight is off everywhere, so without
+   this nothing answers the finger. */
+.back:active,
+.go:active {
+  transform: scale(0.97);
+}
+
+/* Not disabled, so it stays reachable and a screen reader can still read it;
+   the click is stopped in the handler instead. */
+.go[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.go[aria-disabled="true"]:active {
+  transform: none;
+}

@@ -33,6 +33,7 @@ import { bookFraction } from "@/lib/library/progress";
 import { addGutenbergBook } from "@/lib/library/gutenberg";
 import { addSampleBook } from "@/lib/library/sample";
 import { BookCover } from "./BookCover";
+import { MakerSheet } from "./MakerSheet";
 import type { BookBody, BookMeta } from "@/lib/types";
 import styles from "./Library.module.css";
 
@@ -152,6 +153,7 @@ export function LibraryView() {
   const [pasteBody, setPasteBody] = useState("");
   const [dragging, setDragging] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [makerOpen, setMakerOpen] = useState(false);
   /** The account-only book the reader tapped, waiting for its text. */
   const [missingBook, setMissingBook] = useState<BookMeta | null>(null);
 
@@ -713,6 +715,20 @@ export function LibraryView() {
               </ul>
             </section>
           )}
+          {/* The one place in the app that asks for anything. At the foot of
+              a library the reader already owns, in the same register as the
+              rest of the quiet text, and absent on a first visit where there
+              is nothing yet to have an opinion about. */}
+          <footer className={styles.maker}>
+            <button
+              type="button"
+              className={styles.makerLine}
+              aria-haspopup="dialog"
+              onClick={() => setMakerOpen(true)}
+            >
+              Tell us how Aloud is going
+            </button>
+          </footer>
         </>
       )}
 
@@ -882,6 +898,8 @@ export function LibraryView() {
       </Sheet>
 
       <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} />
+
+      <MakerSheet open={makerOpen} onClose={() => setMakerOpen(false)} />
 
       {dragging && (
         <div className={styles.dropVeil} aria-hidden="true">
