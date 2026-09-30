@@ -99,6 +99,9 @@
   color: var(--ink);
   font-size: 14px;
   line-height: 1.55;
+  /* A long answer in a narrow box is sliced mid-letter otherwise, which reads
+     as a rendering fault rather than as text that carries on. */
+  text-overflow: ellipsis;
 }
 
 .input:focus-visible {
@@ -111,6 +114,15 @@
 @media (pointer: coarse) {
   .input {
     font-size: 16px;
+  }
+}
+
+/* On the narrowest phones 16px leaves about 270px of box, which a job title
+   or a number with a country code and an extension runs past. The sheet's own
+   side padding is what there is to give back. */
+@media (max-width: 360px) {
+  .fields {
+    margin-inline: -8px;
   }
 }
 
