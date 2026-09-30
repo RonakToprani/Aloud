@@ -23,7 +23,7 @@ export function MakerSheet({ open, onClose }: Props) {
     <Sheet open={open} title="Say hello" onClose={onClose}>
       <p className={styles.note}>
         I&rsquo;m building Aloud on my own, and I&rsquo;d like to hear how it&rsquo;s going for
-        you. A short call or a written note, whichever suits you.
+        you. A short call or a written note, either is welcome.
       </p>
       <div className={styles.list}>
         <a className={styles.option} href={CALL_URL} target="_blank" rel="noopener noreferrer">
