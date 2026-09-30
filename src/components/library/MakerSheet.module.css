@@ -66,3 +66,109 @@
   font-size: 12.5px;
   color: var(--ui-muted);
 }
+
+/* ---------- The three questions before a booking ---------- */
+
+/* Same field geometry as the Paste text sheet, so this reads as a form the
+   product already has rather than a new one. */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--inset);
+  border: 1px solid var(--hairline-soft);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
+/* Under 16px, iOS Safari zooms in to focus a field and never zooms back out,
+   which on a sheet leaves the buttons off-screen. */
+@media (pointer: coarse) {
+  .input {
+    font-size: 16px;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.back,
+.go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--dur-ui) var(--ease-soft), color var(--dur-ui) var(--ease-soft),
+    opacity var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
+}
+
+.back {
+  color: var(--ui-muted);
+}
+
+.back:hover {
+  background: var(--inset);
+  color: var(--ui);
+}
+
+.go {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+
+.go:hover {
+  background: var(--accent);
+}
+
+/* A phone has no hover, and the tap highlight is off everywhere, so without
+   this nothing answers the finger. */
+.back:active,
+.go:active {
+  transform: scale(0.97);
+}
+
+/* Not disabled, so it stays reachable and a screen reader can still read it;
+   the click is stopped in the handler instead. */
+.go[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.go[aria-disabled="true"]:active {
+  transform: none;
+}
