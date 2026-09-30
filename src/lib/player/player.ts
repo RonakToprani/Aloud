@@ -127,7 +127,17 @@ export class Player {
   }
 
   play(): void {
-    if (this.state.status === "playing") return;
+    if (this.state.status === "playing") {
+      // Pressing play while we already believe we are playing is the reader
+      // telling us we are not, and they can hear and we cannot. Believe them
+      // whenever the engine agrees that nothing is coming out: otherwise this
+      // was the one press that could not be answered, and no number of
+      // presses of play and pause got the reading back.
+      if (this.options.engine.isSpeaking()) return;
+      this.recoveries = 0;
+      this.speakCurrent();
+      return;
+    }
     // A press of play is a fresh attempt. Without this, a voice that had
     // already spent its recovery budget stayed spent: the error it left
     // stood for the life of the page and playing again gave up at the first
@@ -228,14 +238,30 @@ export class Player {
   setRate(rate: number): void {
     if (rate === this.rate) return;
     this.rate = rate;
-    // A rate change only takes effect on a new utterance.
-    if (this.state.status === "playing") this.speakCurrent();
+    this.revoice();
   }
 
   setVoice(voiceId: string | null): void {
     if (voiceId === this.voiceId) return;
     this.voiceId = voiceId;
-    if (this.state.status === "playing") this.speakCurrent();
+    this.revoice();
+  }
+
+  /**
+   * A new voice or a new speed only arrives on a new utterance, so the one in
+   * hand has to go — whether it is playing or waiting to be resumed.
+   *
+   * Dropping it while paused matters as much as re-speaking while playing:
+   * an utterance kept for a resume is the old voice's, and resuming it would
+   * bring that voice back after the reader had chosen another. With nothing
+   * held, the next press of play speaks afresh.
+   */
+  private revoice(): void {
+    if (this.state.status === "playing") {
+      this.speakCurrent();
+      return;
+    }
+    this.stopSpeaking();
   }
 
   destroy(): void {
@@ -340,6 +366,10 @@ export class Player {
 
   private speakCurrent(): void {
     if (this.destroyed) return;
+    // Whatever the last pause had to do to stop the engine, a fresh utterance
+    // settles it. Left set, it sent the next ordinary resume down the
+    // re-speak path and restarted a sentence that only needed carrying on.
+    this.pausedByCancel = false;
     this.stopSpeaking();
 
     const target = this.resolveSentence(this.state.chapterIndex, this.state.sentenceIndex, 1);
