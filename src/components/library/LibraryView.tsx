@@ -726,7 +726,7 @@ export function LibraryView() {
               aria-haspopup="dialog"
               onClick={() => setMakerOpen(true)}
             >
-              Made by one person. Say hello
+              Tell us how Aloud is going
             </button>
           </footer>
         </>
