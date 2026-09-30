@@ -1,0 +1,68 @@
+/* The same rows as the Add a book sheet, so the two choices read as choices
+   the product already offers rather than as a pitch. */
+
+.note {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ui-muted);
+  text-wrap: pretty;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 16px;
+  background: var(--inset);
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color var(--dur-ui) var(--ease-soft), transform var(--dur-tap) var(--ease-soft);
+}
+
+.option:hover {
+  background: var(--segment);
+}
+
+.option:active {
+  background: var(--segment);
+  transform: scale(0.985);
+}
+
+.icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--accent-strong);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink-strong);
+}
+
+.hint {
+  font-size: 12.5px;
+  color: var(--ui-muted);
+}
