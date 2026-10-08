@@ -18,6 +18,8 @@ node scripts/pdfjs-assets.mjs # copy the pdf.js worker and data files into publi
 node scripts/icons.mjs        # regenerate app icons from the logo geometry
 node scripts/screenshots.mjs  # every screen and theme (needs Chrome)
 node scripts/measure-gap.mjs  # how cloud audio is scheduled, through the real player
+node scripts/check-offline.mjs       # the app opens with the server stopped (needs a production build)
+node scripts/check-offline-voice.mjs # the offline voice reads through the real reader (production build; BACKEND=wasm for the CPU model)
 npx tsx scripts/gutenberg-shelf.ts  # re-bake the public library catalogue (a few times a year)
 python3 scripts/send-email.py --help  # write to the readers; dry run unless --send
 ```
@@ -27,9 +29,13 @@ contributors need a PR plus a review, though the owner can push directly.
 
 ## Map
 
-- `src/lib/speech/` — the `SpeechEngine` interface and its two implementations
-  (device speech, cloud voices in `edge/`). Everything above this seam is
+- `src/lib/speech/` — the `SpeechEngine` interface and its three
+  implementations: device speech (`webSpeechEngine.ts`), and two
+  `SynthesisSource`s behind one `passageEngine.ts` — the cloud voices in
+  `edge/` and the offline model in `kokoro/`. Everything above this seam is
   engine-agnostic.
+- `src/lib/offline/` — keeping the shell openable with no connection; the
+  service worker itself is `public/sw.js`.
 - `src/lib/player/player.ts` — playback, one sentence per utterance.
 - `src/lib/speech/synchronizer.ts` — which word is lit, on two clocks.
 - `src/lib/epub/parse.ts`, `src/lib/pdf/`, `src/lib/text/segment.ts` — books
@@ -55,6 +61,72 @@ Things that look like they could be simplified and cannot.
 **The speech seam.** Nothing above `SpeechEngine` may know which engine is
 playing. A new engine returning audio plus word timings should drop in without
 the reader changing.
+
+**One passage engine, two sources.** `passageEngine.ts` owns everything
+hard about playing synthesised prose: passages, the seam between them,
+pausing, the audio session, the race between a pause and audio already on
+the clock. A `SynthesisSource` turns a `PassageRequest` into a buffer with
+word timings and nothing else. The cloud source fetches and decodes an MP3;
+the offline source assembles clips from a worker. Fix a playback bug in the
+engine and both voices get it; put playback logic in a source and the other
+voice does not. The harness in `tests/edgeHarness.ts` drives the engine
+through the cloud source, which is the one with a fetch to stub.
+
+**The offline voice renders ahead, never at the margin.** Kokoro (82M
+parameters, `kokoro-js`) measured in headless Chrome on an M-series Mac:
+WebAssembly without threads runs at about half real time (RTF 0.53 on the
+q8 model), with threads about real time (1.05), WebGPU fp16 at about four
+times (4.2). Threads need cross-origin isolation headers, which a soft
+navigation from the library would not carry, so they are not used. A phone
+on the CPU path is therefore slower than speech, and the design assumes it:
+the engine's `prepare()` hands the source the run of sentences ahead
+(`lookahead` 400, where the player's default offer is 12), and the worker
+renders them in order into the clip store (`kokoro/store.ts`, IndexedDB
+`aloud-audio`, 300 MB budget, least recently used out first) at a lower
+priority than anything the reader is waiting on. A passage is assembled
+from clips already there. Passage budgets are small (`[140, 320, 600]`
+chars) because a passage is ready only when its last sentence is. On
+WebGPU the same arrangement simply runs far ahead. WebGPU fp16 is tried
+when the adapter offers `shader-f16`; a failure there is remembered
+(`aloud.offlineVoice.v1`) and the q8 CPU model used from then on.
+
+**The following passage is planned when one is promoted,** not at the next
+sentence boundary. A chapter heading reads as a passage of its own and
+lasts a second; waiting for the player's next offer meant the passage
+after every heading was requested on the seam and arrived after it.
+
+**Word timings for the offline voice are estimated,** by the model's own
+phonemiser, weighted per phoneme with a fixed cost per word, and anchored
+to the silences actually in the clip wherever a silent run can be matched
+to a comma or a dash (`kokoro/align.ts`). The model gives no alignment of
+its own. `providesWordTimings` is still true on the engine: the estimate is
+anchored to the real clip length and the synchroniser treats it as
+boundary events.
+
+**The runtime's WebAssembly is served from our origin.** transformers.js
+fetches onnxruntime from jsdelivr unless told otherwise, and a CDN is
+exactly what is not there offline. `scripts/ort-assets.mjs` copies the
+`jsep` build (WebGPU and WebAssembly in one) into
+`public/ort/<transformers version>/`, which the service worker keeps like
+`/pdfjs/`; `npm run dev`, `build` and `start` run it first. The model's
+own files come from the Hugging Face hub once and live in the browser's
+`transformers-cache`, which is also how "is it downloaded" is answered
+without waking the worker. A worker's requests do not appear in
+puppeteer's page events; look in the service worker's cache instead.
+
+**A page is cached with its assets, or not at all.** The first service
+worker cached the library's HTML alone and left the chunks to "cache on
+first use", which for the very first visit never happened, so the installed
+app opened offline was a blank page. `sw.js` now parses every page it
+caches for its scripts, styles and the chunks named in its flight data, and
+fetches those too. A client-side navigation produces no navigation fetch,
+so the shelf and the reader ask for the reader pages to be kept
+(`offline/shell.ts`). A page never seen offline is sent to the library
+rather than served another page's HTML, which would hydrate as that page.
+After a deploy the cached pages are re-fetched in the background and only
+assets no cached page names are dropped. Chrome's offline emulation does
+not reach the service worker's own fetches, so `check-offline.mjs` stops
+the server instead.
 
 **Two timing strategies.** `synchronizer.ts` uses real word-boundary events
 when they arrive and a learned per-voice estimate when they do not, switching
@@ -258,6 +330,11 @@ localStorage, all prefixed `aloud.`:
 | `homescreenNote.v1` | the end-of-book home screen note has been waved away |
 | `signupNudge.v1` | when the shelf last asked for an account; it asks again a week later |
 | `listened.v1` | seconds listened on this device |
+| `offlineVoice.v1` | a backend the offline voice failed on here, so it is not tried again |
+
+IndexedDB `aloud-audio` holds the offline voice's rendered sentences, apart
+from the books; the browser's `transformers-cache` and `kokoro-voices`
+caches hold the model.
 
 `sessionStorage`: `aloud.autoplay` (one-shot request to start reading on
 arrival), `aloud.presence` (presence channel key).
@@ -321,7 +398,9 @@ Selectors worth knowing:
 Headless Chrome has no device voices, so anything that has to actually speak
 needs a cloud voice written into `settings.v1` before the page loads, plus
 the book's id in `voiceChosen.v1`, or the first-run voice chooser sits in
-front of the reader.
+front of the reader. The offline voice (`kokoro:af_heart`) does speak in
+headless Chrome, and picks WebGPU there; `check-offline-voice.mjs` shows
+the whole recipe.
 
 Adding a book without a file: click `Paste text`, then set the title input
 (`input[placeholder*="article"]`) and the textarea by calling the native value

@@ -104,7 +104,12 @@ instant the current one's closing pause ends.
 
 **Local first.** Parsed books live in IndexedDB; reading place, voice, speed
 and appearance in localStorage. Once open, the app reads with no network and
-no account, and a small service worker keeps the shell available offline.
+no account. A service worker keeps the library and every shelved book
+openable offline, and an offline voice (Kokoro, an 82M-parameter model run
+in the browser through `kokoro-js`) reads without a connection once it has
+been downloaded: it renders the sentences ahead of the reader into
+IndexedDB in a worker, so playback never waits on the model, and on a
+device with WebGPU it runs several times faster than speech.
 On top of that, `src/lib/sync/` keeps book metadata, places,
 bookmarks, settings and listening time on the account: newest copy wins,
 positions are written on pause and as the page closes, and the home counter
