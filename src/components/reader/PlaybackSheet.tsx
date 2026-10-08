@@ -2,6 +2,7 @@
 
 import { Field, Slider } from "@/components/ui/Controls";
 import { Sheet } from "@/components/ui/Sheet";
+import { useOfflineVoice } from "@/lib/hooks/useOfflineVoice";
 import type { EngineVoice } from "@/lib/speech/engine";
 import { RATE_STEPS } from "@/lib/storage/prefs";
 import styles from "./Sheets.module.css";
@@ -24,6 +25,12 @@ interface Props {
   sleepMinutes: number | null;
   sleepRemaining: number | null;
   onSleep: (minutes: number | null) => void;
+  /** Render the open chapter with the offline voice, for reading with no
+   *  connection. Absent where the offline voice cannot run. */
+  onPrepareOffline?: () => void;
+  onStopPreparing?: () => void;
+  /** The offline voice a prepared chapter would be read in. */
+  offlineVoiceName?: string;
 }
 
 const SLEEP_OPTIONS = [15, 30, 45, 60];
@@ -57,8 +64,13 @@ export function PlaybackSheet({
   sleepMinutes,
   sleepRemaining,
   onSleep,
+  onPrepareOffline,
+  onStopPreparing,
+  offlineVoiceName,
 }: Props) {
   const rateIndex = nearestRateIndex(rate);
+  const offline = useOfflineVoice();
+  const preparing = offline.preparing;
 
   return (
     <Sheet open={open} title="Voice & speed" onClose={onClose} tall tip={tip}>
@@ -116,6 +128,51 @@ export function PlaybackSheet({
           previewing={previewing}
         />
       </Field>
+
+      {/* Only once the model is here: before that the download is the step
+          that matters, and the voice list is already asking for it. */}
+      {onPrepareOffline && offline.downloaded && (
+        <Field label="Read offline">
+          {preparing ? (
+            <div className={styles.offlineNote}>
+              <div
+                className={styles.progress}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={preparing.total}
+                aria-valuenow={preparing.done}
+                aria-label="Preparing this chapter"
+              >
+                <span
+                  className={styles.progressBar}
+                  style={{ width: `${Math.max(2, Math.round((preparing.done / Math.max(1, preparing.total)) * 100))}%` }}
+                />
+                <span className={styles.progressLabel}>
+                  {preparing.active
+                    ? `Preparing this chapter: ${preparing.done} of ${preparing.total} sentences`
+                    : "This chapter is ready to read offline."}
+                </span>
+              </div>
+              {preparing.active && onStopPreparing && (
+                <button type="button" className={styles.moreVoices} onClick={onStopPreparing}>
+                  Stop preparing
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className={styles.offlineNote}>
+              <button type="button" className={styles.prepare} onClick={onPrepareOffline}>
+                Prepare this chapter for offline
+              </button>
+              <p className={styles.hint}>
+                Reads every sentence of this chapter with {offlineVoiceName ?? "the offline voice"} on this
+                device now, so it plays straight through with no connection. A few minutes on a phone;
+                best done plugged in.
+              </p>
+            </div>
+          )}
+        </Field>
+      )}
     </Sheet>
   );
 }

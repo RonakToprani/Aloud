@@ -9,7 +9,7 @@ import { getOfflineVoice, type OfflineVoiceState } from "@/lib/speech/kokoro/sou
 export function useOfflineVoice(): OfflineVoiceState {
   const [state, setState] = useState<OfflineVoiceState>(() =>
     typeof window === "undefined"
-      ? { status: "idle", progress: 0, downloadBytes: 0, backend: null, pending: 0, downloaded: false, error: null }
+      ? { status: "idle", progress: 0, downloadBytes: 0, backend: null, pending: 0, downloaded: false, error: null, preparing: null }
       : getOfflineVoice().current,
   );
   useEffect(() => {

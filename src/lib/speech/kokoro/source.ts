@@ -48,6 +48,9 @@ export interface OfflineVoiceState {
    *  voice can be relied on with no connection. */
   downloaded: boolean;
   error: string | null;
+  /** A chapter being rendered in full at the reader's request, or the one
+   *  just finished. Null when nothing was asked for. */
+  preparing: { done: number; total: number; active: boolean } | null;
 }
 
 /** How far ahead of the reader to render, in characters of text: about
@@ -129,6 +132,12 @@ interface Waiting {
   priority: "now" | "ahead";
 }
 
+/** A whole chapter asked for ahead of time; see `prepareAll`. */
+interface PrepareJob {
+  keys: Set<string>;
+  done: Set<string>;
+}
+
 export class KokoroSource implements SynthesisSource {
   readonly id = "kokoro";
   readonly prefix = KOKORO_PREFIX;
@@ -147,6 +156,8 @@ export class KokoroSource implements SynthesisSource {
   /** Render-ahead requests in flight, by clip key. */
   private readonly aheadInFlight = new Map<string, number>();
   private readonly listeners = new Set<(state: OfflineVoiceState) => void>();
+  private job: PrepareJob | null = null;
+  private readonly storedQueries = new Map<number, (keys: Set<string>) => void>();
   private state: OfflineVoiceState = {
     status: "idle",
     progress: 0,
@@ -155,6 +166,7 @@ export class KokoroSource implements SynthesisSource {
     pending: 0,
     downloaded: false,
     error: null,
+    preparing: null,
   };
 
   constructor() {
@@ -255,6 +267,7 @@ export class KokoroSource implements SynthesisSource {
         this.stored.add(waiting.key);
         if (waiting.priority === "ahead") this.aheadInFlight.delete(waiting.key);
         else this.update({ pending: Math.max(0, this.state.pending - 1) });
+        this.noteStored(waiting.key);
         waiting.resolve(message);
         return;
       }
@@ -267,13 +280,88 @@ export class KokoroSource implements SynthesisSource {
         waiting.reject(new Error(message.message));
         return;
       }
-      case "stored":
+      case "stored": {
+        const resolve = this.storedQueries.get(message.id);
+        this.storedQueries.delete(message.id);
+        resolve?.(new Set(message.keys));
         return;
+      }
     }
   }
 
+  /** A clip the chapter being prepared was waiting on has landed. */
+  private noteStored(key: string): void {
+    const job = this.job;
+    if (!job || !job.keys.has(key) || job.done.has(key)) return;
+    job.done.add(key);
+    const done = job.done.size;
+    const total = job.keys.size;
+    this.update({ preparing: { done, total, active: done < total } });
+  }
+
+  private whichStored(keys: string[]): Promise<Set<string>> {
+    const id = this.nextId++;
+    return new Promise<Set<string>>((resolve) => {
+      this.storedQueries.set(id, resolve);
+      this.send({ type: "stored", id, keys });
+    });
+  }
+
+  /**
+   * Render a whole chapter now, at the reader's request, so it can be read
+   * with no connection and with no pause for thought. Everything already in
+   * the store counts straight away; the rest is queued behind anything the
+   * reader is waiting on, and `preparing` says how far along it is.
+   */
+  prepareAll(texts: string[], voice: string, rate: number): void {
+    if (!this.supported()) return;
+    void this.ensureLoaded();
+    this.stopPreparing();
+    const wanted = new Map<string, string>();
+    for (const raw of texts) {
+      const text = raw.trim();
+      if (text) wanted.set(clipKey(voice, rate, text), text);
+    }
+    if (!wanted.size) return;
+    const job: PrepareJob = { keys: new Set(wanted.keys()), done: new Set() };
+    this.job = job;
+    this.update({ preparing: { done: 0, total: job.keys.size, active: true } });
+    void this.whichStored([...wanted.keys()]).then((present) => {
+      if (this.job !== job) return;
+      for (const key of present) {
+        this.stored.add(key);
+        job.done.add(key);
+      }
+      this.update({ preparing: { done: job.done.size, total: job.keys.size, active: job.done.size < job.keys.size } });
+      for (const [key, text] of wanted) {
+        if (present.has(key) || this.aheadInFlight.has(key)) continue;
+        void this.requestClip(text, voice, rate, "ahead", true).catch(() => {});
+      }
+    });
+  }
+
+  /** Call off a chapter being prepared; what is already rendered stays. */
+  stopPreparing(): void {
+    const job = this.job;
+    this.job = null;
+    if (!job) return;
+    const stale: number[] = [];
+    for (const [key, id] of this.aheadInFlight) {
+      if (job.keys.has(key) && !job.done.has(key)) {
+        this.aheadInFlight.delete(key);
+        if (id >= 0) {
+          stale.push(id);
+          this.waiting.delete(id);
+        }
+      }
+    }
+    if (stale.length) this.send({ type: "cancel", ids: stale });
+    this.update({ preparing: null });
+  }
+
   private failed(message: string): void {
-    this.update({ status: "failed", error: message, pending: 0 });
+    this.job = null;
+    this.update({ status: "failed", error: message, pending: 0, preparing: null });
     for (const waiting of this.waiting.values()) waiting.reject(new Error(message));
     this.waiting.clear();
     this.aheadInFlight.clear();
@@ -334,7 +422,9 @@ export class KokoroSource implements SynthesisSource {
     }
     const stale: number[] = [];
     for (const [key, id] of this.aheadInFlight) {
-      if (!wanted.has(key)) {
+      // A chapter being prepared in full is not stale for having fallen
+      // behind the reader's window; that is the point of it.
+      if (!wanted.has(key) && !this.job?.keys.has(key)) {
         this.aheadInFlight.delete(key);
         if (id < 0) continue; // reserved but never posted
         stale.push(id);
@@ -363,6 +453,8 @@ export class KokoroSource implements SynthesisSource {
     this.worker = null;
     this.waiting.clear();
     this.aheadInFlight.clear();
+    this.storedQueries.clear();
+    this.job = null;
   }
 }
 

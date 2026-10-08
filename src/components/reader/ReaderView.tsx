@@ -12,6 +12,7 @@ import { useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { peekAutoplay, takeAutoplay } from "@/lib/library/autoplay";
+import { offlineVoiceFor, prepareChapterOffline, stopPreparingOffline } from "@/lib/offline/prepare";
 import { keepPagesOffline, readerPath } from "@/lib/offline/shell";
 import { formatMegabytes, useOfflineVoice } from "@/lib/hooks/useOfflineVoice";
 import { useOnline } from "@/lib/hooks/useOnline";
@@ -531,6 +532,18 @@ export function ReaderView({ bookId }: { bookId: string }) {
     },
     [preview, voices],
   );
+
+  /* ---------------- reading offline ---------------- */
+
+  const offlineSupported = useMemo(() => voices.some((voice) => voice.offline), [voices]);
+  const offlineVoiceName = useMemo(() => {
+    const id = offlineVoiceFor(settings.voiceId);
+    return voices.find((voice) => voice.id === id)?.name;
+  }, [voices, settings.voiceId]);
+  const onPrepareOffline = useCallback(() => {
+    const chapter = getChapter(stateRef.current.chapterIndex);
+    if (chapter) prepareChapterOffline(chapter, settings.voiceId, settings.rate);
+  }, [getChapter, settings.voiceId, settings.rate]);
 
   const onStartWithVoice = useCallback(() => {
     stopPreview();
@@ -1069,6 +1082,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
         sleepMinutes={sleepMinutes}
         sleepRemaining={sleepRemaining}
         onSleep={setSleepMinutes}
+        onPrepareOffline={offlineSupported ? onPrepareOffline : undefined}
+        onStopPreparing={stopPreparingOffline}
+        offlineVoiceName={offlineVoiceName}
       />
       <ContentsSheet
         open={sheet === "contents"}

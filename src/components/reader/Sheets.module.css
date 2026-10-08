@@ -470,6 +470,22 @@
   color: var(--ui);
 }
 
+.prepare {
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ui);
+  background: var(--segment);
+  transition: background-color var(--dur-ui) var(--ease-soft);
+}
+
+.prepare:hover {
+  background: color-mix(in oklab, var(--segment) 80%, var(--ui) 20%);
+}
+
 .moreVoices {
   align-self: flex-start;
   min-height: 40px;

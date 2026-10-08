@@ -90,6 +90,19 @@ WebGPU the same arrangement simply runs far ahead. WebGPU fp16 is tried
 when the adapter offers `shader-f16`; a failure there is remembered
 (`aloud.offlineVoice.v1`) and the q8 CPU model used from then on.
 
+**Preparing a chapter is explicit.** "Prepare this chapter for offline" in
+the Voice & speed sheet (`offline/prepare.ts`, `KokoroSource.prepareAll`)
+renders every sentence of the open chapter into the store, behind anything
+the reader is waiting on, with progress. It is a button and not automatic
+because on the CPU path it is minutes of full CPU, and a phone's battery
+is not ours to spend unasked; the fifteen-minute render-ahead that runs
+while listening is the automatic part. A clip is found by its exact text,
+so a chapter is prepared from `sentence.speakable`, the string the player
+hands to `speak()`. Reopening a book part way through a sentence asks for
+the tail of that sentence, which is a different string and is rendered
+afresh (a few seconds on the CPU path, once); slicing the stored clip at
+the word's offset would avoid that and has not been done.
+
 **The following passage is planned when one is promoted,** not at the next
 sentence boundary. A chapter heading reads as a passage of its own and
 lasts a second; waiting for the player's next offer meant the passage
