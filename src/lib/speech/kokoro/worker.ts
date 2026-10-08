@@ -159,24 +159,26 @@ async function serve(request: ClipRequest): Promise<void> {
   try {
     const stored = await store.get(key);
     if (stored) {
-      note(request, true, stored.durationMs, Date.now() - began);
-      if (request.storeOnly) post({ type: "clip", id: request.id, durationMs: stored.durationMs, words: stored.words, cached: true });
+      const tookMs = Date.now() - began;
+      note(request, true, stored.durationMs, tookMs);
+      if (request.storeOnly) post({ type: "clip", id: request.id, durationMs: stored.durationMs, words: stored.words, cached: true, tookMs });
       else {
         const pcm = stored.pcm.slice(0);
-        post({ type: "clip", id: request.id, pcm, durationMs: stored.durationMs, words: stored.words, cached: true }, [pcm]);
+        post({ type: "clip", id: request.id, pcm, durationMs: stored.durationMs, words: stored.words, cached: true, tookMs }, [pcm]);
       }
       return;
     }
     if (!tts && !loading) throw new Error("The offline voice has not been loaded.");
     const model = await (loading ?? Promise.resolve(tts!));
-    post({ type: "working", id: request.id });
+    post({ type: "working", id: request.id, text: request.text.slice(0, 48) });
     const { pcm, durationMs, words } = await render(model, request);
-    note(request, false, durationMs, Date.now() - began);
+    const tookMs = Date.now() - began;
+    note(request, false, durationMs, tookMs);
     void store.put({ key, pcm, durationMs, words, bytes: pcm.byteLength, at: Date.now() });
-    if (request.storeOnly) post({ type: "clip", id: request.id, durationMs, words, cached: false });
+    if (request.storeOnly) post({ type: "clip", id: request.id, durationMs, words, cached: false, tookMs });
     else {
       const copy = pcm.slice(0);
-      post({ type: "clip", id: request.id, pcm: copy, durationMs, words, cached: false }, [copy]);
+      post({ type: "clip", id: request.id, pcm: copy, durationMs, words, cached: false, tookMs }, [copy]);
     }
   } catch (error) {
     post({ type: "clip-failed", id: request.id, message: error instanceof Error ? error.message : String(error) });

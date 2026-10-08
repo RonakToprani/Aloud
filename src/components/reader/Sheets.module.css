@@ -446,6 +446,19 @@
   font-weight: 500;
 }
 
+.offlineLog {
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  border-radius: 8px;
+  background: var(--segment);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ui-muted);
+  overflow-wrap: anywhere;
+}
+
 .progress {
   position: relative;
   height: 22px;

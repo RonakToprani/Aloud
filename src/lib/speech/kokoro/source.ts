@@ -51,6 +51,11 @@ export interface OfflineVoiceState {
   /** A chapter being rendered in full at the reader's request, or the one
    *  just finished. Null when nothing was asked for. */
   preparing: { done: number; total: number; active: boolean } | null;
+  /** The last few things the worker did, newest last, in plain words: what
+   *  it is rendering, how long each sentence took against the speech it
+   *  made. Shown in the voice sheet so a reader on a device we cannot see
+   *  can say what happened. */
+  events: string[];
 }
 
 /** How far ahead of the reader to render, in characters of text: about
@@ -184,6 +189,7 @@ export class KokoroSource implements SynthesisSource {
     downloaded: false,
     error: null,
     preparing: null,
+    events: [],
   };
 
   constructor() {
@@ -209,6 +215,14 @@ export class KokoroSource implements SynthesisSource {
   private update(patch: Partial<OfflineVoiceState>): void {
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener(this.state);
+  }
+
+  private static readonly EVENTS_KEPT = 6;
+
+  private event(line: string): void {
+    const stamp = new Date().toLocaleTimeString(undefined, { hour12: false });
+    const events = [...this.state.events, `${stamp}  ${line}`].slice(-KokoroSource.EVENTS_KEPT);
+    this.update({ events });
   }
 
   supported(): boolean {
@@ -250,6 +264,9 @@ export class KokoroSource implements SynthesisSource {
       if (this.worker !== worker) return;
       this.choice = choice;
       this.update({ backend: choice.backend, downloadBytes: MODEL_BYTES[choice.dtype] });
+      this.event(
+        `Loading the ${choice.dtype} model on ${choice.backend === "webgpu" ? "the GPU (WebGPU)" : "the CPU (WebAssembly)"}`,
+      );
       this.send({ type: "load", choice });
     });
   }
@@ -289,6 +306,7 @@ export class KokoroSource implements SynthesisSource {
   private receive(message: FromWorker): void {
     switch (message.type) {
       case "working":
+        this.event(`Rendering: ${message.text}…`);
         return;
       case "progress":
         if (this.state.status === "loading" && message.total > 0) {
@@ -297,6 +315,7 @@ export class KokoroSource implements SynthesisSource {
         return;
       case "ready":
         this.update({ status: "ready", progress: 1, downloaded: true, error: null });
+        this.event("Model ready");
         return;
       case "failed":
         // The GPU path is the one that can fail on a device that claims to
@@ -320,6 +339,12 @@ export class KokoroSource implements SynthesisSource {
         if (waiting.priority === "ahead") this.aheadInFlight.delete(waiting.key);
         else this.update({ pending: Math.max(0, this.state.pending - 1) });
         this.noteStored(waiting.key);
+        if (!message.cached) {
+          this.event(
+            `Rendered ${(message.durationMs / 1000).toFixed(1)} s of speech in ${(message.tookMs / 1000).toFixed(1)} s` +
+              (message.tookMs > 0 ? ` (${(message.durationMs / message.tookMs).toFixed(2)}× real time)` : ""),
+          );
+        }
         waiting.resolve(message);
         return;
       }
@@ -329,6 +354,7 @@ export class KokoroSource implements SynthesisSource {
         if (!waiting) return;
         if (waiting.priority === "ahead") this.aheadInFlight.delete(waiting.key);
         else this.update({ pending: Math.max(0, this.state.pending - 1) });
+        this.event(`A sentence failed: ${message.message}`);
         waiting.reject(new Error(message.message));
         return;
       }
@@ -416,6 +442,7 @@ export class KokoroSource implements SynthesisSource {
     if (this.watchdog) clearInterval(this.watchdog);
     this.watchdog = null;
     this.update({ status: "failed", error: message, pending: 0, preparing: null });
+    this.event(`Failed: ${message}`);
     for (const waiting of this.waiting.values()) waiting.reject(new Error(message));
     this.waiting.clear();
     this.aheadInFlight.clear();
@@ -424,11 +451,14 @@ export class KokoroSource implements SynthesisSource {
   }
 
   /** How long to wait for the first sound: minutes while the model is still
-   *  arriving, with progress on screen, and long enough afterwards for a
-   *  phone slower than speech to render the opening sentence. */
+   *  arriving, with progress on screen, and afterwards longer than the
+   *  watchdog, which is the real detector of a voice that has died. A phone
+   *  CPU may need the better part of a minute for an opening passage, and
+   *  giving up at thirty seconds restarted that render three times over and
+   *  then blamed the voice for making no sound. */
   startBudgetMs(): number {
     if (this.state.status !== "ready") return 10 * 60 * 1000;
-    return 30_000;
+    return KokoroSource.STALL_MS + 30_000;
   }
 
   /* -------------------------------------------------------------- clips */

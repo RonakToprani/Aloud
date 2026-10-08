@@ -125,6 +125,13 @@ export function VoiceList({
                 ? "It couldn't be loaded here just now."
                 : `The first one you pick downloads about ${formatMegabytes(offline.downloadBytes)}, once.`}
           </p>
+          {offline.events.length > 0 && (
+            <ul className={styles.offlineLog} aria-label="What the offline voice is doing">
+              {offline.events.map((line, i) => (
+                <li key={`${i}-${line}`}>{line}</li>
+              ))}
+            </ul>
+          )}
           {offline.status === "loading" && (
             <div className={styles.progress} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(offline.progress * 100)} aria-label="Downloading the offline voice">
               <span className={styles.progressBar} style={{ width: `${Math.max(2, Math.round(offline.progress * 100))}%` }} />

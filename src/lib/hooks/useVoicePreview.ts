@@ -10,6 +10,12 @@ export function voiceIntro(name: string): string {
   return `Hi, I'm ${plain}. I'll read your books at whatever speed you like, and light up each word as I say it. If you like how I sound, choose me and press play.`;
 }
 
+/** The offline voice's audition: short, because it is rendered on the
+ *  device before a word of it is heard. */
+export function offlineVoiceIntro(name: string): string {
+  return `Hi, I'm ${name}. I read on this device, so I work with no connection.`;
+}
+
 /**
  * Plays a short sample in a voice, one at a time. Tapping the voice that is
  * already playing stops it. Anything playing is stopped when the owner

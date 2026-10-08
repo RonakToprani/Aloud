@@ -146,6 +146,7 @@ test("a passage is assembled with the agreed gaps and re-based words", () => {
       pcm: pcm(1000),
       durationMs: 1000,
       cached: true,
+      tookMs: 1,
       words: [
         { charIndex: 0, charLength: 3, offsetMs: 40, durationMs: 400 },
         { charIndex: 4, charLength: 4, offsetMs: 440, durationMs: 500 },
@@ -157,6 +158,7 @@ test("a passage is assembled with the agreed gaps and re-based words", () => {
       pcm: pcm(500),
       durationMs: 500,
       cached: true,
+      tookMs: 1,
       words: [{ charIndex: 0, charLength: 6, offsetMs: 40, durationMs: 400 }],
     },
   ];

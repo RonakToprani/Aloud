@@ -60,13 +60,15 @@ export interface ClipResult {
   words: AlignedWord[];
   /** Came from the store rather than being synthesised now. */
   cached: boolean;
+  /** Wall time the worker spent on it, store lookup included. */
+  tookMs: number;
 }
 
 export type FromWorker =
   | { type: "progress"; loaded: number; total: number }
   /** The model has begun on this request. A heartbeat: the page uses it to
    *  tell a slow render from a worker that has died. */
-  | { type: "working"; id: number }
+  | { type: "working"; id: number; text: string }
   | { type: "ready"; choice: ModelChoice }
   | { type: "failed"; message: string; choice: ModelChoice }
   | ClipResult

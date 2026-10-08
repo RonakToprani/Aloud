@@ -8,7 +8,7 @@ import { BackIcon } from "@/components/ui/Icons";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
 import { pickDefaultVoice, pickShowcaseVoice, useSpeechEngine } from "@/lib/hooks/useSpeechEngine";
 import { useMediaSession } from "@/lib/hooks/useMediaSession";
-import { useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
+import { offlineVoiceIntro, useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { peekAutoplay, takeAutoplay } from "@/lib/library/autoplay";
@@ -468,12 +468,37 @@ export function ReaderView({ bookId }: { bookId: string }) {
     offlineVoice.pending > 0 &&
     playerState.status === "playing" &&
     playerState.syncMode === "pending";
+  // The wait is told as it happens and for as long as it lasts: the toast
+  // counts the seconds and goes the moment the audio does. A phone CPU can
+  // take most of a minute over an opening passage, and a notice that
+  // vanished after five seconds left the reader staring at a still page.
   useEffect(() => {
     if (!stalled) return;
+    const id = Date.now();
+    const began = Date.now();
+    let shown = false;
+    const tick = () => {
+      const seconds = Math.round((Date.now() - began) / 1000);
+      shown = true;
+      setToast({
+        id,
+        text: `Preparing the next sentences on this device${seconds >= 3 ? `, ${seconds} s` : ""}. Prepare the chapter in Voice & speed to avoid these waits.`,
+        durationMs: 60_000,
+      });
+    };
     // A moment's grace: a passage from the store lands well inside this.
-    const timer = setTimeout(() => showToast("Preparing the next sentences, one moment."), 1500);
-    return () => clearTimeout(timer);
-  }, [stalled, showToast]);
+    const first = setTimeout(() => {
+      tick();
+    }, 1500);
+    const timer = setInterval(() => {
+      if (shown) tick();
+    }, 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+      if (shown) setToast((current) => (current?.id === id ? null : current));
+    };
+  }, [stalled]);
 
   // Going offline mid-book with a cloud voice: switch to something that can
   // speak here, rather than let the next passage fail and the player retry
@@ -562,7 +587,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
     (voiceId: string) => {
       playerRef.current?.pause();
       const voice = voices.find((v) => v.id === voiceId);
-      preview(voiceId, voiceIntro(voice?.name ?? ""));
+      // A voice synthesising on the device pays for every word before the
+      // first is heard, so its audition is a sentence, not a speech.
+      preview(voiceId, voice?.offline ? offlineVoiceIntro(voice.name) : voiceIntro(voice?.name ?? ""));
     },
     [preview, voices],
   );
