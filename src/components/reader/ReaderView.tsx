@@ -12,6 +12,7 @@ import { useVoicePreview, voiceIntro } from "@/lib/hooks/useVoicePreview";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { peekAutoplay, takeAutoplay } from "@/lib/library/autoplay";
+import { keepPagesOffline, readerPath } from "@/lib/offline/shell";
 import { bookFraction } from "@/lib/library/progress";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
 import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
@@ -187,6 +188,12 @@ export function ReaderView({ bookId }: { bookId: string }) {
   useEffect(() => {
     if (peekAutoplay(bookId)) engine.unlock();
   }, [bookId, engine]);
+
+  // Reached by a client-side navigation, this page was never fetched as a
+  // document, so the service worker has no copy of it to serve offline.
+  useEffect(() => {
+    keepPagesOffline([readerPath(bookId)]);
+  }, [bookId]);
 
   /* ---------------- loading ---------------- */
 

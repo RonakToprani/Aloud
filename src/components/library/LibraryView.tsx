@@ -17,6 +17,7 @@ import {
   type ImportOptions,
   type ImportProgress,
 } from "@/lib/library/import";
+import { keepPagesOffline, readerPath } from "@/lib/offline/shell";
 import { deleteBook, listBooks, putBook, getBookBody } from "@/lib/storage/db";
 import { clearPosition, loadPosition, savePosition } from "@/lib/storage/prefs";
 import {
@@ -180,6 +181,12 @@ export function LibraryView() {
       setBooks((current) => current ?? []);
     }
   }, []);
+
+  // Every book on the shelf should open offline, not only the ones that
+  // have been opened through a full page load.
+  useEffect(() => {
+    if (books?.length) keepPagesOffline(books.map((book) => readerPath(book.id)));
+  }, [books]);
 
   useEffect(() => {
     setRemoteBooks(readRemoteCache());
