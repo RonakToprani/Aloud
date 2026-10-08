@@ -441,6 +441,40 @@ export function ReaderView({ bookId }: { bookId: string }) {
     if (isKokoroVoice(settings.voiceId)) getOfflineVoice().download();
   }, [settings.voiceId]);
 
+  // What the offline voice is up to, as passing notices over the page and
+  // never as a block in it: a download starting, the model ready, a
+  // failure, and a wait for sentences still being rendered.
+  const lastOfflineStatus = useRef(offlineVoice.status);
+  useEffect(() => {
+    const was = lastOfflineStatus.current;
+    lastOfflineStatus.current = offlineVoice.status;
+    if (was === offlineVoice.status) return;
+    if (offlineVoice.status === "loading") {
+      showToast(
+        offlineVoice.downloaded
+          ? "Getting the offline voice ready."
+          : `Getting the offline voice ready: downloading about ${formatMegabytes(offlineVoice.downloadBytes)}, once. Reading starts the moment it's done.`,
+      );
+    } else if (offlineVoice.status === "ready" && was === "loading") {
+      showToast("The offline voice is ready.");
+    } else if (offlineVoice.status === "failed") {
+      showToast(offlineVoice.error ?? "The offline voice couldn't be loaded on this device. Pick another voice in Voice & speed.");
+    }
+  }, [offlineVoice.status, offlineVoice.downloaded, offlineVoice.downloadBytes, offlineVoice.error, showToast]);
+
+  const stalled =
+    isKokoroVoice(settings.voiceId) &&
+    offlineVoice.status === "ready" &&
+    offlineVoice.pending > 0 &&
+    playerState.status === "playing" &&
+    playerState.syncMode === "pending";
+  useEffect(() => {
+    if (!stalled) return;
+    // A moment's grace: a passage from the store lands well inside this.
+    const timer = setTimeout(() => showToast("Preparing the next sentences, one moment."), 1500);
+    return () => clearTimeout(timer);
+  }, [stalled, showToast]);
+
   // Going offline mid-book with a cloud voice: switch to something that can
   // speak here, rather than let the next passage fail and the player retry
   // into an error. The offline voice first, if it is on the device.
@@ -974,31 +1008,6 @@ export function ReaderView({ bookId }: { bookId: string }) {
             {playerState.error.message}
           </div>
         )}
-        {isKokoroVoice(settings.voiceId) && offlineVoice.status === "loading" && (
-          <div className={styles.banner} role="status">
-            <strong>Getting the offline voice ready.</strong>
-            {offlineVoice.progress < 1
-              ? `Downloading about ${formatMegabytes(offlineVoice.downloadBytes)}, once: ${Math.round(offlineVoice.progress * 100)}% so far. `
-              : "Loading the model. "}
-            Reading starts the moment it&rsquo;s done.
-          </div>
-        )}
-        {isKokoroVoice(settings.voiceId) && offlineVoice.status === "failed" && (
-          <div className={styles.banner} role="alert">
-            <strong>The offline voice couldn&rsquo;t be loaded here.</strong>
-            {offlineVoice.error ?? "This device may not have the memory for it."} Pick another voice in Voice &amp; speed.
-          </div>
-        )}
-        {isKokoroVoice(settings.voiceId) &&
-          offlineVoice.status === "ready" &&
-          offlineVoice.pending > 0 &&
-          playerState.status === "playing" &&
-          playerState.syncMode === "pending" && (
-            <div className={styles.banner} role="status">
-              Preparing the next sentences&hellip;
-            </div>
-          )}
-
         <ReaderSurface
           chapter={chapter}
           images={book.images}

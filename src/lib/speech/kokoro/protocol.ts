@@ -64,6 +64,9 @@ export interface ClipResult {
 
 export type FromWorker =
   | { type: "progress"; loaded: number; total: number }
+  /** The model has begun on this request. A heartbeat: the page uses it to
+   *  tell a slow render from a worker that has died. */
+  | { type: "working"; id: number }
   | { type: "ready"; choice: ModelChoice }
   | { type: "failed"; message: string; choice: ModelChoice }
   | ClipResult

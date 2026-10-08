@@ -169,6 +169,7 @@ async function serve(request: ClipRequest): Promise<void> {
     }
     if (!tts && !loading) throw new Error("The offline voice has not been loaded.");
     const model = await (loading ?? Promise.resolve(tts!));
+    post({ type: "working", id: request.id });
     const { pcm, durationMs, words } = await render(model, request);
     note(request, false, durationMs, Date.now() - began);
     void store.put({ key, pcm, durationMs, words, bytes: pcm.byteLength, at: Date.now() });

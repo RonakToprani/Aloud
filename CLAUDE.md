@@ -87,8 +87,27 @@ priority than anything the reader is waiting on. A passage is assembled
 from clips already there. Passage budgets are small (`[140, 320, 600]`
 chars) because a passage is ready only when its last sentence is. On
 WebGPU the same arrangement simply runs far ahead. WebGPU fp16 is tried
-when the adapter offers `shader-f16`; a failure there is remembered
-(`aloud.offlineVoice.v1`) and the q8 CPU model used from then on.
+when the adapter offers `shader-f16`, except on WebKit: on an iPhone the
+runtime's WebGPU backend loaded the model and then never answered a
+request, and the reader sat on "preparing the next sentences" for good, so
+every browser on iPhone and iPad, and Safari anywhere, gets the CPU model
+until the GPU path is measured working there. A failure on the GPU path is
+remembered (`aloud.offlineVoice.v1`) and the CPU model used from then on.
+
+**Silence from the worker is a failure.** A worker the browser has killed
+for memory, or a backend that has wedged, raises no error and returns no
+result. The source therefore keeps a watchdog: while anything is waited on
+(a download, a render ahead or a passage), the worker must have said
+something in the last two minutes (progress, a `working` heartbeat as a
+render begins, a clip) or it is terminated and the voice marked failed,
+which rejects every waiting request so the player can recover and the
+reader be told. Without it the stall is invisible and permanent.
+
+**Offline-voice messages are toasts, never blocks in the page.** The
+download starting, the model ready, a failure, and a wait for sentences
+still rendering all go through the reader's floating toast, which dismisses
+itself; a banner in the reading column was the wrong shape for a passing
+state.
 
 **Preparing a chapter is explicit.** "Prepare this chapter for offline" in
 the Voice & speed sheet (`offline/prepare.ts`, `KokoroSource.prepareAll`)

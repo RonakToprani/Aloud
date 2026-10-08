@@ -109,12 +109,26 @@ async function isDownloaded(dtype: Dtype): Promise<boolean> {
   }
 }
 
+/** Every browser on iPhone and iPad is WebKit, and so is Safari on a Mac.
+ *  WebKit offers WebGPU with 16-bit floats, and the runtime's WebGPU
+ *  backend loads the model there and then never answers a request: the
+ *  reader saw "preparing the next sentences" for good. Until that is
+ *  measured working, WebKit gets the CPU model. */
+function isWebKit(): boolean {
+  const ua = navigator.userAgent;
+  // Any browser on an iPhone or iPad, including an iPad calling itself a
+  // Mac; and Safari itself anywhere.
+  if (/iPhone|iPad|iPod/.test(ua)) return true;
+  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return true;
+  return /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg|OPR|Firefox/.test(ua);
+}
+
 /** The GPU path needs WebGPU with 16-bit floats; everything else runs the
  *  8-bit model on the CPU. */
 async function chooseBackend(): Promise<ModelChoice> {
   const avoid = readRemembered().avoid;
   const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<{ features: Set<string> } | null> } }).gpu;
-  if (avoid !== "webgpu" && gpu) {
+  if (avoid !== "webgpu" && gpu && !isWebKit()) {
     try {
       const adapter = await gpu.requestAdapter();
       if (adapter?.features.has("shader-f16")) return { backend: "webgpu", dtype: "fp16", wasmPaths: WASM_PATHS };
@@ -158,6 +172,9 @@ export class KokoroSource implements SynthesisSource {
   private readonly listeners = new Set<(state: OfflineVoiceState) => void>();
   private job: PrepareJob | null = null;
   private readonly storedQueries = new Map<number, (keys: Set<string>) => void>();
+  /** When the worker last said anything, and the watchdog that reads it. */
+  private lastHeard = 0;
+  private watchdog: ReturnType<typeof setInterval> | null = null;
   private state: OfflineVoiceState = {
     status: "idle",
     progress: 0,
@@ -220,10 +237,15 @@ export class KokoroSource implements SynthesisSource {
     this.update({ status: "loading", progress: 0, error: null });
     const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     this.worker = worker;
-    worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
+    this.lastHeard = Date.now();
+    worker.onmessage = (event: MessageEvent<FromWorker>) => {
+      this.lastHeard = Date.now();
+      this.receive(event.data);
+    };
     worker.onerror = (event) => {
       this.failed(event.message || "The offline voice stopped unexpectedly.");
     };
+    this.startWatchdog();
     return chooseBackend().then((choice) => {
       if (this.worker !== worker) return;
       this.choice = choice;
@@ -236,8 +258,38 @@ export class KokoroSource implements SynthesisSource {
     this.worker?.postMessage(message);
   }
 
+  /** A worker the browser has killed for memory, or a backend that has
+   *  wedged, says nothing at all: no error, no result. So silence is the
+   *  signal. While the reader is waiting on something, the worker must have
+   *  spoken within this long — a download reports progress, a render says
+   *  when it begins, and no single sentence takes this long on any device
+   *  the model is usable on. */
+  private static readonly STALL_MS = 120_000;
+
+  private startWatchdog(): void {
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = setInterval(() => {
+      const waiting = this.state.status === "loading" || this.state.pending > 0 || this.aheadInFlight.size > 0;
+      if (!waiting) {
+        this.lastHeard = Date.now();
+        return;
+      }
+      if (Date.now() - this.lastHeard < KokoroSource.STALL_MS) return;
+      // The GPU path is the one that wedges; remember, so the next attempt
+      // goes straight to the CPU model.
+      if (this.choice?.backend === "webgpu") remember({ avoid: "webgpu" });
+      this.failed(
+        this.state.status === "loading"
+          ? "The offline voice stopped downloading. Check the connection and pick it again to retry."
+          : "The offline voice stopped responding on this device. Pick another voice, or pick it again to retry.",
+      );
+    }, 5000);
+  }
+
   private receive(message: FromWorker): void {
     switch (message.type) {
+      case "working":
+        return;
       case "progress":
         if (this.state.status === "loading" && message.total > 0) {
           this.update({ progress: Math.min(1, message.loaded / message.total), downloadBytes: message.total });
@@ -361,6 +413,8 @@ export class KokoroSource implements SynthesisSource {
 
   private failed(message: string): void {
     this.job = null;
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = null;
     this.update({ status: "failed", error: message, pending: 0, preparing: null });
     for (const waiting of this.waiting.values()) waiting.reject(new Error(message));
     this.waiting.clear();
@@ -449,6 +503,8 @@ export class KokoroSource implements SynthesisSource {
   }
 
   destroy(): void {
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = null;
     this.worker?.terminate();
     this.worker = null;
     this.waiting.clear();
