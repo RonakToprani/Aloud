@@ -38,6 +38,10 @@ export interface EngineVoice {
   lang: string;
   /** Installed on the device rather than streamed from a server. */
   local: boolean;
+  /** Read by a model that runs on this device, so it keeps working with no
+   *  connection; the picker says so. Device voices are offline too, but
+   *  the system owns them and says nothing we can repeat. */
+  offline?: boolean;
   isDefault: boolean;
   tier: VoiceTier;
   /** What the provider says this voice is built for, when it says anything —
@@ -128,6 +132,21 @@ export interface SpeechEngine {
   prepare?(sentences: PreparedSentence[], options: Omit<SpeakOptions, "text">): void;
 
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle;
+
+  /**
+   * Optional. How long the player should give this voice to make its first
+   * sound before concluding it never will. A device voice speaks within a
+   * couple of seconds or not at all; a cloud voice has a round trip to pay;
+   * a model still downloading has minutes to go, and says so here, so the
+   * reader sees a progress bar rather than "this voice produced no sound".
+   */
+  startBudgetMs?(voiceId: string | null): number | undefined;
+
+  /** Optional. How many sentences ahead `prepare` should be offered. An
+   *  engine that renders ahead of the reader wants far more than one that
+   *  only groups a paragraph. */
+  readonly lookahead?: number;
+
   pause(): void;
   resume(): void;
   cancel(): void;

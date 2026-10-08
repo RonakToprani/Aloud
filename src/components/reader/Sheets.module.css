@@ -434,6 +434,42 @@
   opacity: 0.7;
 }
 
+.offlineNote {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.offlineNote strong {
+  color: var(--ui);
+  font-weight: 500;
+}
+
+.progress {
+  position: relative;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--segment);
+  overflow: hidden;
+}
+
+.progressBar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in oklab, var(--accent-strong) 35%, transparent);
+  transition: width 300ms var(--ease-soft);
+}
+
+.progressLabel {
+  position: relative;
+  display: block;
+  padding: 0 10px;
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--ui);
+}
+
 .moreVoices {
   align-self: flex-start;
   min-height: 40px;

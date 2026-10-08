@@ -75,6 +75,14 @@ export interface SynthesisSource {
   loadVoices(): Promise<EngineVoice[]>;
   /** Buffers are created on `ctx`, which may still be suspended. */
   synthesize(request: PassageRequest, ctx: BaseAudioContext, signal: AbortSignal): Promise<SynthesisedAudio>;
+  /** Optional. The run of sentences the reader is heading for, every time
+   *  the player offers one, before the engine plans a passage from it. For
+   *  a source that renders ahead of the reader. */
+  offer?(sentences: PassageInput[], voice: string, rate: number): void;
+  /** Optional. See `SpeechEngine.startBudgetMs`. */
+  startBudgetMs?(voice: string): number | undefined;
+  /** Optional. How many sentences ahead to be offered; see `SpeechEngine.lookahead`. */
+  readonly lookahead?: number;
   /** Runs inside the gesture that unlocked audio, for anything that must. */
   warm?(): void;
   /** The engine is going away. */
@@ -1046,6 +1054,9 @@ export class PassageSpeechEngine implements SpeechEngine {
   private nextPassage: DecodedPassage | null = null;
   private inFlight: PassageInFlight | null = null;
   private passagesPlanned = 0;
+  /** The run of sentences last offered, so the passage after the one just
+   *  promoted can be planned at once rather than at the next sentence. */
+  private lastOffer: { sentences: PassageInput[]; options: Omit<SpeakOptions, "text"> } | null = null;
   private deferredStop: ReturnType<typeof setTimeout> | null = null;
   /** Which voice, at which speed, everything currently fetched, decoded or
    *  scheduled was made for. A passage is matched to a sentence by its text,
@@ -1066,7 +1077,19 @@ export class PassageSpeechEngine implements SpeechEngine {
 
   constructor(protected readonly source: SynthesisSource) {
     this.id = source.id;
+    this.lookahead = source.lookahead;
   }
+
+  readonly lookahead: number | undefined;
+
+  startBudgetMs(voiceId: string | null): number | undefined {
+    const voice = this.voiceOf(voiceId);
+    if (!voice) return undefined;
+    return this.source.startBudgetMs?.(voice) ?? PassageSpeechEngine.DEFAULT_START_BUDGET_MS;
+  }
+
+  /** A synthesised voice has a round trip to pay before its first sound. */
+  private static readonly DEFAULT_START_BUDGET_MS = 9000;
 
   get supported(): boolean {
     return typeof window !== "undefined" && typeof Audio !== "undefined" && this.source.supported();
@@ -1165,6 +1188,7 @@ export class PassageSpeechEngine implements SpeechEngine {
     this.dropQueued();
     this.nextPassage = null;
     this.inFlight = null;
+    this.lastOffer = null;
     // The budget starts over: the next thing played deserves the small,
     // quick first passage rather than a minute of someone else's voice.
     this.passagesPlanned = 0;
@@ -1201,6 +1225,8 @@ export class PassageSpeechEngine implements SpeechEngine {
     const voice = this.voiceOf(options.voiceId);
     if (!this.supported || !voice || !sentences.length) return;
     this.useVoice(voice, options.rate);
+    this.source.offer?.(sentences, voice, options.rate);
+    this.lastOffer = { sentences, options };
 
     // One passage ahead is enough. This is called at every sentence with a
     // window that slides forward, so without this the plan would change
@@ -1293,6 +1319,13 @@ export class PassageSpeechEngine implements SpeechEngine {
     const inNext = this.nextPassage?.plan.sentences.findIndex((s) => s.text === trimmed);
     if (this.nextPassage && inNext !== undefined && inNext >= 0) {
       const playback = this.promote();
+      // The passage after this one is planned now, while this one plays,
+      // rather than when the player next offers sentences — which is the
+      // next sentence boundary, and for a one-sentence passage (a chapter
+      // heading reads alone) that is the seam itself. Left until then, the
+      // following passage was requested at the moment it was due and every
+      // heading was followed by a hole the length of a synthesis.
+      if (playback && this.lastOffer) this.prepare(this.lastOffer.sentences, this.lastOffer.options);
       return playback ? { playback, index: inNext } : null;
     }
     return null;
@@ -1484,6 +1517,7 @@ export class PassageSpeechEngine implements SpeechEngine {
       this.nextPassage = null;
       this.inFlight = null;
       this.passagesPlanned = 0;
+      this.lastOffer = null;
     }, 0);
   }
 

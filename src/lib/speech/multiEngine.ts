@@ -1,17 +1,21 @@
 import { EdgeSpeechEngine } from "./edge/engine";
 import type {
   PreparedSentence, EngineVoice, SpeakCallbacks, SpeakOptions, SpeechEngine, UtteranceHandle } from "./engine";
+import { getOfflineVoice } from "./kokoro/source";
+import { KOKORO_PREFIX } from "./kokoro/voices";
+import { PassageSpeechEngine } from "./passageEngine";
 import { WebSpeechEngine } from "./webSpeechEngine";
 
 const EDGE_PREFIX = "edge:";
 
 /**
- * Combines the on-device Web Speech engine with Microsoft's cloud voices
- * behind one `SpeechEngine`, so everything above this file — the player, the
- * synchronizer, the voice picker — keeps working unmodified. A voice's id
- * says which engine owns it (`edge:` for a cloud voice); everything else
- * (pause/resume/cancel/isSpeaking/isPaused) is delegated to both, since an
- * idle engine's version of each is already a safe no-op.
+ * Combines the on-device Web Speech engine, Microsoft's cloud voices and the
+ * offline model behind one `SpeechEngine`, so everything above this file —
+ * the player, the synchronizer, the voice picker — keeps working unmodified.
+ * A voice's id says which engine owns it (`edge:` for a cloud voice,
+ * `kokoro:` for the offline model); everything else
+ * (pause/resume/cancel/isSpeaking/isPaused) is delegated to all of them,
+ * since an idle engine's version of each is already a safe no-op.
  */
 export class MultiSpeechEngine implements SpeechEngine {
   readonly id = "multi";
@@ -23,78 +27,92 @@ export class MultiSpeechEngine implements SpeechEngine {
   constructor(
     private readonly webEngine: WebSpeechEngine,
     private readonly edgeEngine: EdgeSpeechEngine,
+    private readonly offlineEngine: PassageSpeechEngine,
   ) {}
 
+  private get all(): SpeechEngine[] {
+    return [this.webEngine, this.edgeEngine, this.offlineEngine];
+  }
+
+  /** The engine that synthesises passages for this voice, if any. */
+  private passageEngineFor(voiceId: string | null | undefined): PassageSpeechEngine | null {
+    if (voiceId?.startsWith(EDGE_PREFIX)) return this.edgeEngine;
+    if (voiceId?.startsWith(KOKORO_PREFIX)) return this.offlineEngine;
+    return null;
+  }
+
   get supported(): boolean {
-    return this.webEngine.supported || this.edgeEngine.supported;
+    return this.all.some((engine) => engine.supported);
   }
 
   async ready(): Promise<void> {
-    await Promise.all([this.webEngine.ready(), this.edgeEngine.ready()]);
+    await Promise.all(this.all.map((engine) => engine.ready()));
   }
 
   listVoices(): EngineVoice[] {
-    return [...this.webEngine.listVoices(), ...this.edgeEngine.listVoices()];
+    return this.all.flatMap((engine) => engine.listVoices());
   }
 
   subscribeVoices(listener: (voices: EngineVoice[]) => void): () => void {
     const emit = () => listener(this.listVoices());
-    const unsubscribeWeb = this.webEngine.subscribeVoices(emit);
-    const unsubscribeEdge = this.edgeEngine.subscribeVoices(emit);
+    const unsubscribes = this.all.map((engine) => engine.subscribeVoices(emit));
     return () => {
-      unsubscribeWeb();
-      unsubscribeEdge();
+      for (const unsubscribe of unsubscribes) unsubscribe();
     };
   }
 
   unlock(): void {
-    this.webEngine.unlock();
-    this.edgeEngine.unlock();
+    for (const engine of this.all) engine.unlock();
+  }
+
+  /** The most any engine wants to see ahead; the others ignore the rest. */
+  get lookahead(): number | undefined {
+    return this.all.reduce<number | undefined>(
+      (most, engine) => (engine.lookahead !== undefined && (most === undefined || engine.lookahead > most) ? engine.lookahead : most),
+      undefined,
+    );
+  }
+
+  startBudgetMs(voiceId: string | null): number | undefined {
+    return this.passageEngineFor(voiceId)?.startBudgetMs(voiceId);
   }
 
   prepare(sentences: PreparedSentence[], options: Omit<SpeakOptions, "text">): void {
-    // Only the cloud engine can synthesise sentences together; the device
+    // Only the synthesising engines can take sentences together; the device
     // voices speak whatever they are handed, one utterance at a time.
-    if (options.voiceId?.startsWith(EDGE_PREFIX)) this.edgeEngine.prepare(sentences, options);
+    this.passageEngineFor(options.voiceId)?.prepare(sentences, options);
   }
 
   prefetch(options: SpeakOptions): void {
-    if (options.voiceId?.startsWith(EDGE_PREFIX)) this.edgeEngine.prefetch(options);
+    this.passageEngineFor(options.voiceId)?.prefetch(options);
   }
 
   speak(options: SpeakOptions, callbacks: SpeakCallbacks): UtteranceHandle {
-    if (options.voiceId?.startsWith(EDGE_PREFIX)) {
-      return this.edgeEngine.speak(options, callbacks);
-    }
-    return this.webEngine.speak(options, callbacks);
+    return (this.passageEngineFor(options.voiceId) ?? this.webEngine).speak(options, callbacks);
   }
 
   pause(): void {
-    this.webEngine.pause();
-    this.edgeEngine.pause();
+    for (const engine of this.all) engine.pause();
   }
 
   resume(): void {
-    this.webEngine.resume();
-    this.edgeEngine.resume();
+    for (const engine of this.all) engine.resume();
   }
 
   cancel(): void {
-    this.webEngine.cancel();
-    this.edgeEngine.cancel();
+    for (const engine of this.all) engine.cancel();
   }
 
   isSpeaking(): boolean {
-    return this.webEngine.isSpeaking() || this.edgeEngine.isSpeaking();
+    return this.all.some((engine) => engine.isSpeaking());
   }
 
   isPaused(): boolean {
-    return this.webEngine.isPaused() || this.edgeEngine.isPaused();
+    return this.all.some((engine) => engine.isPaused());
   }
 
   destroy(): void {
-    this.webEngine.destroy();
-    this.edgeEngine.destroy();
+    for (const engine of this.all) engine.destroy();
   }
 }
 
@@ -104,7 +122,11 @@ export function getSpeechEngine(): MultiSpeechEngine {
   if (!singleton) {
     const localePrefix =
       typeof navigator !== "undefined" ? `${navigator.language.split("-")[0]}-` : "en-";
-    singleton = new MultiSpeechEngine(new WebSpeechEngine(), new EdgeSpeechEngine({ localePrefix }));
+    singleton = new MultiSpeechEngine(
+      new WebSpeechEngine(),
+      new EdgeSpeechEngine({ localePrefix }),
+      new PassageSpeechEngine(getOfflineVoice()),
+    );
   }
   return singleton;
 }

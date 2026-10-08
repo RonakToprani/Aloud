@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CheckIcon, SpeakerIcon, StopIcon } from "@/components/ui/Icons";
+import { formatMegabytes, useOfflineVoice } from "@/lib/hooks/useOfflineVoice";
 import { groupVoices } from "@/lib/hooks/useSpeechEngine";
 import type { EngineVoice, VoiceTier } from "@/lib/speech/engine";
 import styles from "./Sheets.module.css";
@@ -51,6 +52,7 @@ export function VoiceList({
   previewing = null,
 }: Props) {
   const [showAll, setShowAll] = useState(false);
+  const offline = useOfflineVoice();
 
   const groups = useMemo(
     () => groupVoices(voices, preferredLang, showAll),
@@ -72,7 +74,8 @@ export function VoiceList({
   }, {});
   /** Warnings always show; quality tiers only when they set a voice apart. */
   const ALWAYS: VoiceTier[] = ["siri", "novelty"];
-  const distinguishes = (tier: VoiceTier) => {
+  const distinguishes = (tier: VoiceTier, voice?: EngineVoice) => {
+    if (voice?.offline) return false;
     if (!TIER_LABEL[tier]) return false;
     if (ALWAYS.includes(tier)) return true;
     return (tierCounts[tier] ?? 0) <= visible.length / 2;
@@ -81,6 +84,8 @@ export function VoiceList({
   // "Recommended" earns its place only while it still singles voices out.
   const recommendedCount = visible.filter((voice) => traitLabel(voice)).length;
   const showTrait = recommendedCount > 0 && recommendedCount <= visible.length / 2;
+
+  const hasOffline = visible.some((voice) => voice.offline);
 
   const best = groups[0]?.voices[0];
   const noGoodVoices = ready && voices.length > 0 && (!best || best.quality < 0.5);
@@ -109,6 +114,28 @@ export function VoiceList({
         </p>
       )}
 
+      {hasOffline && (
+        <div className={styles.offlineNote}>
+          <p className={styles.hint}>
+            Voices marked <strong>Offline</strong> are read by a model that runs on this device, so
+            they keep working with no connection.{" "}
+            {offline.status === "ready" || offline.downloaded
+              ? "It's on this device and ready."
+              : offline.status === "failed"
+                ? "It couldn't be loaded here just now."
+                : `The first one you pick downloads about ${formatMegabytes(offline.downloadBytes)}, once.`}
+          </p>
+          {offline.status === "loading" && (
+            <div className={styles.progress} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(offline.progress * 100)} aria-label="Downloading the offline voice">
+              <span className={styles.progressBar} style={{ width: `${Math.max(2, Math.round(offline.progress * 100))}%` }} />
+              <span className={styles.progressLabel}>
+                {offline.progress < 1 ? `Downloading, ${Math.round(offline.progress * 100)}%` : "Getting ready"}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className={styles.voiceList}>
         {groups.map((group) => (
           <div key={group.lang} className={styles.voiceGroup}>
@@ -134,7 +161,12 @@ export function VoiceList({
                         {traitLabel(voice)}
                       </span>
                     )}
-                    {distinguishes(voice.tier) && (
+                    {voice.offline && (
+                      <span className={styles.badge} data-tier="premium">
+                        Offline
+                      </span>
+                    )}
+                    {distinguishes(voice.tier, voice) && (
                       <span className={styles.badge} data-tier={voice.tier}>
                         {TIER_LABEL[voice.tier]}
                       </span>

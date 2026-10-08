@@ -1,10 +1,32 @@
+import { readFileSync } from "node:fs";
+
+/** The offline voice's runtime files live under this version in public/ort
+ *  (scripts/ort-assets.mjs), and the client has to know the path. The
+ *  package hides its package.json behind an exports map, so it is read by
+ *  path. */
+const transformersVersion = JSON.parse(
+  readFileSync(new URL("./node_modules/@huggingface/transformers/package.json", import.meta.url), "utf8"),
+).version;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  env: { NEXT_PUBLIC_TRANSFORMERS_VERSION: transformersVersion },
+  // transformers.js is written for Node as well as the browser and imports
+  // the Node halves unconditionally; webpack must be told they do not exist
+  // here or it bundles sharp and onnxruntime-node for the browser and fails.
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      sharp$: false,
+      "onnxruntime-node$": false,
+    };
+    return config;
+  },
   // `ws` picks between a native buffer-masking addon and a pure-JS fallback
   // at require time; bundling it breaks that check ("bufferUtil.mask is not
   // a function"). Left external, it's just required by Node as normal.
-  serverExternalPackages: ["ws"],
+  serverExternalPackages: ["ws", "@huggingface/transformers", "kokoro-js"],
   async headers() {
     return [
       {

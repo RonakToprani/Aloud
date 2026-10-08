@@ -37,10 +37,9 @@ const PHANTOM_END_MS = 250;
 const PHANTOM_END_FRACTION = 0.15;
 const MAX_RECOVERIES = 3;
 /** If the engine has not started speaking by now, it never will. A device
- *  voice answers within a few hundred ms or not at all; a cloud voice is
- *  synthesising a passage over the network and deserves longer. */
+ *  voice answers within a few hundred ms or not at all; an engine that
+ *  synthesises first says how long it needs through `startBudgetMs`. */
 const START_TIMEOUT_MS = 2500;
-const CLOUD_START_TIMEOUT_MS = 9000;
 
 /**
  * Owns playback: one sentence per utterance, chained on end.
@@ -350,7 +349,7 @@ export class Player {
         if (this.destroyed || this.sync !== sync || this.state.status !== "playing") return;
         this.recover("silent");
       },
-      this.voiceId?.startsWith("edge:") ? CLOUD_START_TIMEOUT_MS : START_TIMEOUT_MS,
+      this.options.engine.startBudgetMs?.(this.voiceId) ?? START_TIMEOUT_MS,
     );
   }
 
@@ -513,7 +512,8 @@ export class Player {
       chapterIndex,
       sentenceIndex,
     };
-    while (cursor && texts.length < Player.PASSAGE_LOOKAHEAD) {
+    const lookahead = this.options.engine.lookahead ?? Player.PASSAGE_LOOKAHEAD;
+    while (cursor && texts.length < lookahead) {
       const chapter = this.chapter(cursor.chapterIndex);
       const sentence = chapter?.sentences[cursor.sentenceIndex];
       if (!sentence) break;

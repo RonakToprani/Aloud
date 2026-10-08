@@ -13,6 +13,10 @@ import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { peekAutoplay, takeAutoplay } from "@/lib/library/autoplay";
 import { keepPagesOffline, readerPath } from "@/lib/offline/shell";
+import { formatMegabytes, useOfflineVoice } from "@/lib/hooks/useOfflineVoice";
+import { useOnline } from "@/lib/hooks/useOnline";
+import { getOfflineVoice } from "@/lib/speech/kokoro/source";
+import { isKokoroVoice } from "@/lib/speech/kokoro/voices";
 import { bookFraction } from "@/lib/library/progress";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
 import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
@@ -132,6 +136,15 @@ function fitPosition(position: Position, meta: BookMeta): Position | null {
 export function ReaderView({ bookId }: { bookId: string }) {
   const { settings, update } = useSettings();
   const { engine, ready: voicesReady, supported, voices, preferredLang } = useSpeechEngine();
+  const offlineVoice = useOfflineVoice();
+  const online = useOnline();
+  // Voices a default may land on unasked. An offline voice that still has to
+  // be downloaded is offered but never chosen for the reader, and with no
+  // connection it could not be fetched anyway.
+  const defaultPool = useMemo(
+    () => voices.filter((voice) => !voice.offline || offlineVoice.downloaded),
+    [voices, offlineVoice.downloaded],
+  );
   const { status: authStatus, userId, epoch: authEpoch, ensureAccount } = useAuth();
 
   const [book, setBook] = useState<LoadedBook | null>(null);
@@ -396,23 +409,49 @@ export function ReaderView({ bookId }: { bookId: string }) {
     const stored = settings.voiceId ? voices.find((v) => v.id === settings.voiceId) : undefined;
     const usable = stored && stored.tier !== "siri";
     if (settings.voiceId && usable) return;
+    const pool = defaultPool.length ? defaultPool : voices;
 
     // Never chosen a voice before: this is the first thing they will hear,
     // so lead with one built for reading books. A stored voice this device
     // cannot speak is a repair, and takes the ordinary default.
     const preferred = settings.voiceId
-      ? pickDefaultVoice(voices, preferredLang)
-      : pickShowcaseVoice(voices, preferredLang);
+      ? pickDefaultVoice(pool, preferredLang)
+      : pickShowcaseVoice(pool, preferredLang);
     if (!preferred || preferred.id === settings.voiceId) return;
     update({ voiceId: preferred.id });
     if (settings.voiceId) {
+      // A cloud voice is not on the list while there is no connection: that
+      // is the connection's doing, not the device's, and the reader should
+      // hear it put that way.
+      const wasCloud = settings.voiceId.startsWith("edge:");
       showToast(
         stored
           ? `${stored.name} can't be used by websites on this device, so ${preferred.name} is reading instead.`
-          : `That voice isn't on this device, so ${preferred.name} is reading instead.`,
+          : wasCloud && !online
+            ? `You're offline, so ${preferred.name} is reading instead.`
+            : `That voice isn't on this device, so ${preferred.name} is reading instead.`,
       );
     }
-  }, [voicesReady, voices, settings.voiceId, preferredLang, update, showToast]);
+  }, [voicesReady, voices, defaultPool, online, settings.voiceId, preferredLang, update, showToast]);
+
+  // Choosing an offline voice starts its download then and there, so the
+  // wait is spent before play is pressed rather than after.
+  useEffect(() => {
+    if (isKokoroVoice(settings.voiceId)) getOfflineVoice().download();
+  }, [settings.voiceId]);
+
+  // Going offline mid-book with a cloud voice: switch to something that can
+  // speak here, rather than let the next passage fail and the player retry
+  // into an error. The offline voice first, if it is on the device.
+  useEffect(() => {
+    if (online || !voicesReady || !settings.voiceId?.startsWith("edge:")) return;
+    const pool = defaultPool.filter((voice) => !voice.id.startsWith("edge:"));
+    const offlineBest = [...pool].filter((voice) => voice.offline).sort((a, b) => b.quality - a.quality)[0];
+    const preferred = offlineBest ?? pickDefaultVoice(pool, preferredLang);
+    if (!preferred) return;
+    update({ voiceId: preferred.id });
+    showToast(`You're offline, so ${preferred.name} is reading instead.`);
+  }, [online, voicesReady, defaultPool, settings.voiceId, preferredLang, update, showToast]);
 
   // Save the exact word when the reader leaves, locks the phone, or pauses —
   // here, and on the account with a request that survives the page closing.
@@ -885,6 +924,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
           previewing={previewing}
           onPreview={onPreview}
           onStart={onStartWithVoice}
+          defaultPool={defaultPool}
         />
       )}
 
@@ -921,6 +961,30 @@ export function ReaderView({ bookId }: { bookId: string }) {
             {playerState.error.message}
           </div>
         )}
+        {isKokoroVoice(settings.voiceId) && offlineVoice.status === "loading" && (
+          <div className={styles.banner} role="status">
+            <strong>Getting the offline voice ready.</strong>
+            {offlineVoice.progress < 1
+              ? `Downloading about ${formatMegabytes(offlineVoice.downloadBytes)}, once: ${Math.round(offlineVoice.progress * 100)}% so far. `
+              : "Loading the model. "}
+            Reading starts the moment it&rsquo;s done.
+          </div>
+        )}
+        {isKokoroVoice(settings.voiceId) && offlineVoice.status === "failed" && (
+          <div className={styles.banner} role="alert">
+            <strong>The offline voice couldn&rsquo;t be loaded here.</strong>
+            {offlineVoice.error ?? "This device may not have the memory for it."} Pick another voice in Voice &amp; speed.
+          </div>
+        )}
+        {isKokoroVoice(settings.voiceId) &&
+          offlineVoice.status === "ready" &&
+          offlineVoice.pending > 0 &&
+          playerState.status === "playing" &&
+          playerState.syncMode === "pending" && (
+            <div className={styles.banner} role="status">
+              Preparing the next sentences&hellip;
+            </div>
+          )}
 
         <ReaderSurface
           chapter={chapter}

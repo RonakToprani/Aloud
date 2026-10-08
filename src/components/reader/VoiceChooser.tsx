@@ -18,6 +18,10 @@ interface Props {
   onPreview: (voiceId: string) => void;
   /** Commit the choice and start reading. */
   onStart: () => void;
+  /** Voices the default may be chosen from, when that is not all of them:
+   *  a voice that would have to be downloaded first is offered but never
+   *  landed on unasked. */
+  defaultPool?: EngineVoice[];
 }
 
 /**
@@ -36,15 +40,16 @@ export function VoiceChooser({
   previewing,
   onPreview,
   onStart,
+  defaultPool,
 }: Props) {
   const chosen = useMemo(() => voices.find((voice) => voice.id === voiceId) ?? null, [voices, voiceId]);
 
   // Land on a sensible default so the big button is always one tap away.
   useEffect(() => {
     if (!ready || voiceId || !voices.length) return;
-    const fallback = pickDefaultVoice(voices, preferredLang);
+    const fallback = pickDefaultVoice(defaultPool ?? voices, preferredLang);
     if (fallback) onVoice(fallback.id);
-  }, [ready, voiceId, voices, preferredLang, onVoice]);
+  }, [ready, voiceId, voices, defaultPool, preferredLang, onVoice]);
 
   return (
     <div className={styles.page} role="dialog" aria-modal="true" aria-labelledby="voice-chooser-title">

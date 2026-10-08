@@ -21,3 +21,4 @@ emails/suppressed.txt
 .claude/worktrees/
 emails/*offices*
 brag-output*/
+/public/ort/
