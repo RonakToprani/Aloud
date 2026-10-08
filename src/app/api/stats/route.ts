@@ -3,9 +3,17 @@ import { NextResponse } from "next/server";
 /**
  * Public reading figures, for the README badges and anyone else curious.
  * Reads the pre-aggregated row through the same function the home page
- * uses; never a scan of sessions. Cached at the edge for a minute.
+ * uses; never a scan of sessions.
+ *
+ * Deliberately dynamic. With `revalidate` this was a prerendered ISR route,
+ * and Vercel regenerates those per region: a region that rarely sees traffic
+ * kept serving the build-time copy for weeks, so callers saw figures jump
+ * between the current number and a stale one depending on which edge
+ * answered. Now every miss runs the handler (one RPC, one row) and the CDN
+ * caches the response for a minute, serving stale for at most five more
+ * while it refreshes — the same bound everywhere.
  */
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 interface Stats {
   total_seconds: number;
@@ -26,7 +34,7 @@ export async function GET(): Promise<Response> {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: "{}",
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const row = (await response.json()) as Stats;
