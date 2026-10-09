@@ -33,6 +33,33 @@
   transition: color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
 }
 
+.download {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  height: 40px;
+  margin-left: auto;
+  margin-right: -6px;
+  padding: 0 6px;
+  border-radius: 12px;
+  color: var(--ui-muted);
+  transition: color var(--dur-ui) var(--ease-soft), background-color var(--dur-ui) var(--ease-soft);
+}
+
+.download:hover {
+  color: var(--ui);
+}
+
+.download[data-state="done"] {
+  color: var(--accent-strong);
+}
+
+.downloadProgress {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+}
+
 .back:hover {
   color: var(--ui);
   background: var(--inset);

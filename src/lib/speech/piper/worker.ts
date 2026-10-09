@@ -16,6 +16,7 @@
 import * as ort from "onnxruntime-web/wasm";
 import { alignClip, splitLongSentence, tokenize, type AlignedWord } from "../offline/align";
 import { clipKey, SAMPLE_RATE, type ClipRequest, type FromWorker, type ModelChoice, type ToWorker } from "../offline/protocol";
+import { encodeAdpcm } from "../offline/adpcm";
 import { ClipStore } from "../offline/store";
 import { PIPER_PREFIX, piperModelUrls } from "./voices";
 
@@ -302,8 +303,8 @@ async function serve(request: ClipRequest): Promise<void> {
       note(request, true, stored.durationMs, tookMs);
       if (request.storeOnly) post({ type: "clip", id: request.id, durationMs: stored.durationMs, words: stored.words, cached: true, tookMs });
       else {
-        const pcm = stored.pcm.slice(0);
-        post({ type: "clip", id: request.id, pcm, durationMs: stored.durationMs, words: stored.words, cached: true, tookMs }, [pcm]);
+        const adpcm = stored.adpcm.slice(0);
+        post({ type: "clip", id: request.id, adpcm, samples: stored.samples, durationMs: stored.durationMs, words: stored.words, cached: true, tookMs }, [adpcm]);
       }
       return;
     }
@@ -311,13 +312,15 @@ async function serve(request: ClipRequest): Promise<void> {
     const model = await loadVoice(voiceId(request.voice));
     post({ type: "working", id: request.id, text: request.text.slice(0, 48) });
     const { pcm, durationMs, words } = await render(model, request);
+    const samples = pcm.byteLength / 2;
+    const adpcm = encodeAdpcm(new Int16Array(pcm)).buffer as ArrayBuffer;
     const tookMs = Date.now() - began;
     note(request, false, durationMs, tookMs);
-    void store.put({ key, pcm, durationMs, words, bytes: pcm.byteLength, at: Date.now() });
+    void store.put({ key, adpcm, samples, durationMs, words, bytes: adpcm.byteLength, at: Date.now() });
     if (request.storeOnly) post({ type: "clip", id: request.id, durationMs, words, cached: false, tookMs });
     else {
-      const copy = pcm.slice(0);
-      post({ type: "clip", id: request.id, pcm: copy, durationMs, words, cached: false, tookMs }, [copy]);
+      const copy = adpcm.slice(0);
+      post({ type: "clip", id: request.id, adpcm: copy, samples, durationMs, words, cached: false, tookMs }, [copy]);
     }
   } catch (error) {
     post({ type: "clip-failed", id: request.id, message: error instanceof Error ? error.message : String(error) });

@@ -10,7 +10,7 @@
 import type { EngineVoice } from "../engine";
 import type { ModelChoice } from "../offline/protocol";
 import type { OfflineModelAdapter } from "../offline/source";
-import { PIPER_MODEL_BYTES, PIPER_PREFIX, PIPER_VOICES, piperEngineVoices, piperModelUrls } from "./voices";
+import { PIPER_PREFIX, PIPER_VOICES, piperEngineVoices, piperModelUrls, piperVoiceBytes } from "./voices";
 
 /** The runtime and the phonemiser are copied into public/ under the
  *  versions they came with (scripts/ort-assets.mjs). */
@@ -48,8 +48,8 @@ export class PiperAdapter implements OfflineModelAdapter {
     }
   }
 
-  downloadBytes(): number {
-    return PIPER_MODEL_BYTES;
+  downloadBytes(choice: ModelChoice): number {
+    return piperVoiceBytes(choice.voice ?? PIPER_VOICES[0].id);
   }
 
   createWorker(): Worker {

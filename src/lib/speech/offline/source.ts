@@ -20,6 +20,7 @@ import type { EngineVoice } from "../engine";
 import type { PassageInput, PassageSentence } from "../edge/passage";
 import { DEFAULT_TIGHTEN } from "../edge/tighten";
 import type { PassageRequest, SynthesisSource, SynthesisedAudio, TimedWord } from "../passageEngine";
+import { decodeAdpcmToFloat } from "./adpcm";
 import type { AlignedWord } from "./align";
 import { clipKey, SAMPLE_RATE, type Backend, type ClipResult, type FromWorker, type ModelChoice, type ToWorker } from "./protocol";
 
@@ -38,9 +39,10 @@ export interface OfflineVoiceState {
    *  voice can be relied on with no connection. */
   downloaded: boolean;
   error: string | null;
-  /** A chapter being rendered in full at the reader's request, or the one
-   *  just finished. Null when nothing was asked for. */
-  preparing: { done: number; total: number; active: boolean } | null;
+  /** Chapters being rendered in full at the reader's request, or the run
+   *  just finished: which chapter of how many, and how far through it.
+   *  Null when nothing was asked for. */
+  preparing: { chapter: number; chapters: number; done: number; total: number; active: boolean } | null;
   /** The last few things the worker did, newest last, in plain words: what
    *  it is rendering, how long each sentence took against the speech it
    *  made. Shown in the voice sheet so a reader on a device we cannot see
@@ -98,8 +100,14 @@ interface Waiting {
   priority: "now" | "ahead";
 }
 
-/** A whole chapter asked for ahead of time; see `prepareAll`. */
+/** Chapters asked for ahead of time, rendered one after another; see
+ *  `prepareBook`. */
 interface PrepareJob {
+  chapters: string[][];
+  voice: string;
+  rate: number;
+  /** Index into `chapters` of the one being rendered. */
+  chapter: number;
   keys: Set<string>;
   done: Set<string>;
 }
@@ -343,9 +351,59 @@ export class OfflineModelSource implements SynthesisSource {
     const job = this.job;
     if (!job || !job.keys.has(key) || job.done.has(key)) return;
     job.done.add(key);
+    this.reportJob();
+    if (job.done.size >= job.keys.size) this.nextChapter(job);
+  }
+
+  private reportJob(): void {
+    const job = this.job;
+    if (!job) return;
     const done = job.done.size;
     const total = job.keys.size;
-    this.update({ preparing: { done, total, active: done < total } });
+    const last = job.chapter >= job.chapters.length - 1;
+    this.update({
+      preparing: { chapter: job.chapter + 1, chapters: job.chapters.length, done, total, active: !(last && done >= total) },
+    });
+  }
+
+  /** The chapter just finished; start the next, or stop at the end. */
+  private nextChapter(job: PrepareJob): void {
+    if (job.chapter >= job.chapters.length - 1) {
+      this.reportJob();
+      return;
+    }
+    job.chapter += 1;
+    void this.startChapter(job);
+  }
+
+  private async startChapter(job: PrepareJob): Promise<void> {
+    const wanted = new Map<string, string>();
+    for (const raw of job.chapters[job.chapter]) {
+      const text = raw.trim();
+      if (text) wanted.set(clipKey(job.voice, job.rate, text), text);
+    }
+    job.keys = new Set(wanted.keys());
+    job.done = new Set();
+    if (!wanted.size) {
+      this.reportJob();
+      this.nextChapter(job);
+      return;
+    }
+    const present = await this.whichStored([...wanted.keys()]);
+    if (this.job !== job) return;
+    for (const key of present) {
+      this.stored.add(key);
+      job.done.add(key);
+    }
+    this.reportJob();
+    if (job.done.size >= job.keys.size) {
+      this.nextChapter(job);
+      return;
+    }
+    for (const [key, text] of wanted) {
+      if (present.has(key) || this.aheadInFlight.has(key)) continue;
+      void this.requestClip(text, job.voice, job.rate, "ahead", true).catch(() => {});
+    }
   }
 
   private whichStored(keys: string[]): Promise<Set<string>> {
@@ -357,36 +415,26 @@ export class OfflineModelSource implements SynthesisSource {
   }
 
   /**
-   * Render a whole chapter now, at the reader's request, so it can be read
-   * with no connection and with no pause for thought. Everything already in
-   * the store counts straight away; the rest is queued behind anything the
-   * reader is waiting on, and `preparing` says how far along it is.
+   * Render chapters now, in order, at the reader's request, so the book can
+   * be read with no connection and with no pause for thought. Everything
+   * already in the store counts straight away; the rest is queued behind
+   * anything the reader is waiting on, one chapter at a time so the chapter
+   * about to be read is whole before the next is begun, and `preparing`
+   * says how far along it is. What is rendered stays if the reader stops.
    */
-  prepareAll(texts: string[], voice: string, rate: number): void {
-    if (!this.supported()) return;
+  prepareBook(chapters: string[][], voice: string, rate: number): void {
+    if (!this.supported() || !chapters.length) return;
     void this.ensureLoaded(voice).catch(() => {});
     this.stopPreparing();
-    const wanted = new Map<string, string>();
-    for (const raw of texts) {
-      const text = raw.trim();
-      if (text) wanted.set(clipKey(voice, rate, text), text);
-    }
-    if (!wanted.size) return;
-    const job: PrepareJob = { keys: new Set(wanted.keys()), done: new Set() };
+    const job: PrepareJob = { chapters, voice, rate, chapter: 0, keys: new Set(), done: new Set() };
     this.job = job;
-    this.update({ preparing: { done: 0, total: job.keys.size, active: true } });
-    void this.whichStored([...wanted.keys()]).then((present) => {
-      if (this.job !== job) return;
-      for (const key of present) {
-        this.stored.add(key);
-        job.done.add(key);
-      }
-      this.update({ preparing: { done: job.done.size, total: job.keys.size, active: job.done.size < job.keys.size } });
-      for (const [key, text] of wanted) {
-        if (present.has(key) || this.aheadInFlight.has(key)) continue;
-        void this.requestClip(text, voice, rate, "ahead", true).catch(() => {});
-      }
-    });
+    this.update({ preparing: { chapter: 1, chapters: chapters.length, done: 0, total: 0, active: true } });
+    void this.startChapter(job);
+  }
+
+  /** One chapter; see `prepareBook`. */
+  prepareAll(texts: string[], voice: string, rate: number): void {
+    this.prepareBook([texts], voice, rate);
   }
 
   /** Call off a chapter being prepared; what is already rendered stays. */
@@ -527,7 +575,7 @@ function gapAfter(sentence: PassageSentence): number {
 export function assemble(ctx: BaseAudioContext, sentences: PassageSentence[], clips: ClipResult[]): SynthesisedAudio {
   let frames = 0;
   clips.forEach((clip, i) => {
-    frames += clip.pcm ? clip.pcm.byteLength / 2 : 0;
+    frames += clip.adpcm ? (clip.samples ?? 0) : 0;
     if (i < clips.length - 1) frames += Math.round((SAMPLE_RATE * gapAfter(sentences[i])) / 1000);
   });
   const buffer = ctx.createBuffer(1, Math.max(1, frames), SAMPLE_RATE);
@@ -537,10 +585,9 @@ export function assemble(ctx: BaseAudioContext, sentences: PassageSentence[], cl
   clips.forEach((clip, i) => {
     const sentence = sentences[i];
     const offsetMs = (cursor / SAMPLE_RATE) * 1000;
-    if (clip.pcm) {
-      const pcm = new Int16Array(clip.pcm);
-      for (let j = 0; j < pcm.length; j++) channel[cursor + j] = pcm[j] / 0x8000;
-      cursor += pcm.length;
+    if (clip.adpcm && clip.samples) {
+      decodeAdpcmToFloat(new Uint8Array(clip.adpcm), clip.samples, channel, cursor);
+      cursor += clip.samples;
     }
     for (const word of clip.words as AlignedWord[]) {
       words.push({

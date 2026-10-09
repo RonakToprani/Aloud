@@ -5,28 +5,34 @@
  * synthesised at the moment it is needed if that can be helped: it is
  * rendered ahead and kept, and playback reads from here. Kept in its own
  * database rather than alongside the books, so a mistake with audio can
- * never touch the text, and in 16-bit mono at 24 kHz, 48 KB a second.
+ * never touch the text, and as 4-bit ADPCM at 24 kHz, 12 KB a second.
  *
  * The budget is what keeps a long book from filling the device: when the
- * store passes it, the clips heard longest ago go first. A clip read back is
+ * store passes it, the clips heard longest ago go first. The database name
+ * carries a version because the first clips were stored as 16-bit samples
+ * and are simply abandoned. A clip read back is
  * marked as recently used, but only now and then, so a chapter being read
  * does not cost a write per sentence.
  */
 
 import type { AlignedWord } from "./align";
 
-const DB_NAME = "aloud-audio";
+const DB_NAME = "aloud-audio-v2";
 const DB_VERSION = 1;
 const CLIPS = "clips";
 
-/** How much rendered audio to keep: about an hour and three quarters. */
-export const CLIP_BUDGET_BYTES = 300 * 1024 * 1024;
+/** How much rendered audio to keep: at 12 KB a second, about fourteen
+ *  hours, which is a long book downloaded whole with room to spare. */
+export const CLIP_BUDGET_BYTES = 600 * 1024 * 1024;
 /** A hit younger than this is not re-stamped. */
 const TOUCH_INTERVAL_MS = 10 * 60 * 1000;
 
 export interface StoredClip {
   key: string;
-  pcm: ArrayBuffer;
+  /** IMA ADPCM, 4 bits a sample (offline/adpcm.ts): a quarter the size of
+   *  the 16-bit samples the first clips were kept as. */
+  adpcm: ArrayBuffer;
+  samples: number;
   durationMs: number;
   words: AlignedWord[];
   bytes: number;

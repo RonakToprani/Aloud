@@ -60,8 +60,10 @@ export type ToWorker =
 export interface ClipResult {
   type: "clip";
   id: number;
-  /** Mono 16-bit samples at SAMPLE_RATE, or absent when `storeOnly`. */
-  pcm?: ArrayBuffer;
+  /** Mono samples at SAMPLE_RATE as IMA ADPCM (see offline/adpcm.ts), with
+   *  how many samples they decode to; absent when `storeOnly`. */
+  adpcm?: ArrayBuffer;
+  samples?: number;
   durationMs: number;
   words: AlignedWord[];
   /** Came from the store rather than being synthesised now. */

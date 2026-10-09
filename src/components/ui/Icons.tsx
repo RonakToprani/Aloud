@@ -108,6 +108,14 @@ export const TrashIcon = ({ size = 18, className }: IconProps) => (
   </svg>
 );
 
+export const DownloadIcon = ({ size = 20, className }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M12 4v11" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M5 19h14" />
+  </svg>
+);
+
 export const CheckIcon = ({ size = 18, className }: IconProps) => (
   <svg {...base(size)} className={className} strokeWidth={2}>
     <path d="M5 12.5 9.5 17 19 7.5" />

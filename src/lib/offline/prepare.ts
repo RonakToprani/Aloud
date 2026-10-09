@@ -18,14 +18,27 @@ export function offlineVoiceFor(voiceId: string | null): string | null {
   return isOfflineVoice(voiceId) && voiceId ? voiceId : defaultOfflineVoiceId();
 }
 
+/** The exact strings the player will hand to speak(): a clip is found by
+ *  its text, so anything else would be rendered and never used. */
+function spokenTexts(chapter: SegmentedChapter): string[] {
+  return chapter.sentences.map((sentence) => sentence.speakable).filter((text) => text.trim());
+}
+
 export function prepareChapterOffline(chapter: SegmentedChapter, voiceId: string | null, rate: number): void {
   const voice = offlineVoiceFor(voiceId);
   const source = offlineSourceFor(voice);
   if (!voice || !source) return;
-  // The exact strings the player will hand to speak(): a clip is found by
-  // its text, so anything else would be rendered and never used.
-  const texts = chapter.sentences.map((sentence) => sentence.speakable).filter((text) => text.trim());
-  source.prepareAll(texts, bareVoice(voice), rate);
+  source.prepareAll(spokenTexts(chapter), bareVoice(voice), rate);
+}
+
+/** The book from the chapter being read to the end, in order, so the
+ *  chapter about to be read is whole first. Earlier chapters are left out:
+ *  a reader downloading for a journey wants what lies ahead. */
+export function prepareBookOffline(chapters: SegmentedChapter[], voiceId: string | null, rate: number): void {
+  const voice = offlineVoiceFor(voiceId);
+  const source = offlineSourceFor(voice);
+  if (!voice || !source) return;
+  source.prepareBook(chapters.map(spokenTexts), bareVoice(voice), rate);
 }
 
 export function stopPreparingOffline(voiceId: string | null): void {

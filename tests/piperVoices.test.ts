@@ -11,11 +11,19 @@ test("model urls follow the hub's layout", () => {
 
 test("voices are prefixed, ordered and ranked", () => {
   const voices = piperEngineVoices();
-  assert.deepEqual(voices.map((v) => v.name), ["Amy", "Ryan", "Lessac", "Alan", "Cori"]);
+  assert.deepEqual(voices.slice(0, 5).map((v) => v.name), ["Amy", "Ryan", "Lessac", "Alan", "Cori"]);
   assert.ok(voices.every((v) => v.id.startsWith(PIPER_PREFIX) && v.offline && v.local));
   assert.equal(voices[0].quality, 0.89);
   assert.equal(voices[4].quality, 0.85);
-  for (let i = 1; i < voices.length; i++) assert.ok(voices[i].quality! < voices[i - 1].quality!);
+  // Medium voices step down; the premium voices after them rank above
+  // every medium one, so the picker lists them first, and still step down.
+  const medium = voices.slice(0, 5);
+  const premium = voices.slice(5);
+  for (let i = 1; i < medium.length; i++) assert.ok(medium[i].quality < medium[i - 1].quality);
+  for (let i = 1; i < premium.length; i++) assert.ok(premium[i].quality < premium[i - 1].quality);
+  assert.ok(premium.length >= 3);
+  assert.ok(premium.every((voice) => voice.quality > medium[0].quality));
+  assert.ok(premium.every((voice) => /Premium$/.test(voice.name)));
 });
 
 test("piper voices are recognised by prefix", () => {

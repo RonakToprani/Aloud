@@ -10,6 +10,7 @@ import {
   voicedBounds,
 } from "@/lib/speech/offline/align";
 import { clipKey } from "@/lib/speech/offline/protocol";
+import { encodeAdpcm } from "@/lib/speech/offline/adpcm";
 import { assemble } from "@/lib/speech/offline/source";
 
 const RATE = 24000;
@@ -131,10 +132,8 @@ test("a passage is assembled with the agreed gaps and re-based words", () => {
       return { length, getChannelData: () => data };
     },
   } as unknown as BaseAudioContext;
-  const pcm = (ms: number) => {
-    const arr = new Int16Array(Math.round((ms / 1000) * RATE)).fill(1000);
-    return arr.buffer;
-  };
+  const samples = (ms: number) => Math.round((ms / 1000) * RATE);
+  const pcm = (ms: number) => encodeAdpcm(new Int16Array(samples(ms)).fill(1000)).buffer as ArrayBuffer;
   const sentences = [
     { text: "One two.", start: 0, end: 8, endsParagraph: true, isHeading: false },
     { text: "Three.", start: 10, end: 16, endsParagraph: false, isHeading: false },
@@ -143,7 +142,8 @@ test("a passage is assembled with the agreed gaps and re-based words", () => {
     {
       type: "clip" as const,
       id: 1,
-      pcm: pcm(1000),
+      adpcm: pcm(1000),
+      samples: samples(1000),
       durationMs: 1000,
       cached: true,
       tookMs: 1,
@@ -155,7 +155,8 @@ test("a passage is assembled with the agreed gaps and re-based words", () => {
     {
       type: "clip" as const,
       id: 2,
-      pcm: pcm(500),
+      adpcm: pcm(500),
+      samples: samples(500),
       durationMs: 500,
       cached: true,
       tookMs: 1,

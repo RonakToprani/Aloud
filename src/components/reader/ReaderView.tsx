@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useSettings } from "@/components/SettingsProvider";
-import { BackIcon } from "@/components/ui/Icons";
+import { BackIcon, CheckIcon, DownloadIcon } from "@/components/ui/Icons";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
 import { pickDefaultVoice, pickShowcaseVoice, useSpeechEngine } from "@/lib/hooks/useSpeechEngine";
 import { useMediaSession } from "@/lib/hooks/useMediaSession";
@@ -12,7 +12,7 @@ import { offlineVoiceIntro, useVoicePreview, voiceIntro } from "@/lib/hooks/useV
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { Player, type PlayerState } from "@/lib/player/player";
 import { peekAutoplay, takeAutoplay } from "@/lib/library/autoplay";
-import { offlineVoiceFor, prepareChapterOffline, stopPreparingOffline } from "@/lib/offline/prepare";
+import { offlineVoiceFor, prepareBookOffline, stopPreparingOffline } from "@/lib/offline/prepare";
 import { keepPagesOffline, readerPath } from "@/lib/offline/shell";
 import { formatMegabytes, useOfflineVoice } from "@/lib/hooks/useOfflineVoice";
 import { useOnline } from "@/lib/hooks/useOnline";
@@ -137,6 +137,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const { settings, update } = useSettings();
   const { engine, ready: voicesReady, supported, voices, preferredLang } = useSpeechEngine();
   const offlineVoice = useOfflineVoice(settings.voiceId);
+  const downloading = !!offlineVoice.preparing?.active;
+  const downloadedAll = !!offlineVoice.preparing && !offlineVoice.preparing.active;
   const online = useOnline();
   // Voices a default may land on unasked. An offline voice that still has to
   // be downloaded is offered but never chosen for the reader, and with no
@@ -571,7 +573,9 @@ export function ReaderView({ bookId }: { bookId: string }) {
   }, [book?.meta.cover]);
 
   const playing = playerState.status === "playing";
-  useWakeLock(playing);
+  // The screen stays on while a book downloads too: the model stops with
+  // the page, and a phone that went to sleep would leave the job half done.
+  useWakeLock(playing || downloading);
   useEffect(() => {
     if (playing) void ensureAccount();
   }, [playing, ensureAccount]);
@@ -601,10 +605,18 @@ export function ReaderView({ bookId }: { bookId: string }) {
     const id = offlineVoiceFor(settings.voiceId);
     return id ? voices.find((voice) => voice.id === id)?.name : undefined;
   }, [voices, settings.voiceId]);
+  // From the chapter being read to the end of the book, so the one about to
+  // be heard is whole first and a reader on a journey has what lies ahead.
   const onPrepareOffline = useCallback(() => {
-    const chapter = getChapter(stateRef.current.chapterIndex);
-    if (chapter) prepareChapterOffline(chapter, settings.voiceId, settings.rate);
-  }, [getChapter, settings.voiceId, settings.rate]);
+    if (!book) return;
+    const chapters: SegmentedChapter[] = [];
+    for (let i = stateRef.current.chapterIndex; i < book.chapters.length; i++) {
+      const chapter = getChapter(i);
+      if (chapter) chapters.push(chapter);
+    }
+    if (chapters.length) prepareBookOffline(chapters, settings.voiceId, settings.rate);
+  }, [book, getChapter, settings.voiceId, settings.rate]);
+
 
   const onStartWithVoice = useCallback(() => {
     stopPreview();
@@ -1014,6 +1026,35 @@ export function ReaderView({ bookId }: { bookId: string }) {
               <span className={styles.crumbChapter}>{chapterTitle}</span>
             )}
           </div>
+          {/* One tap to have the rest of the book read on this device, and
+              the same button carries its progress: the sheet has the detail. */}
+          {offlineSupported && (
+            <button
+              type="button"
+              className={styles.download}
+              data-state={downloading ? "busy" : downloadedAll ? "done" : undefined}
+              aria-label={
+                downloading
+                  ? `Downloading for offline, chapter ${offlineVoice.preparing?.chapter} of ${offlineVoice.preparing?.chapters}`
+                  : downloadedAll
+                    ? "Downloaded for offline"
+                    : "Download for offline"
+              }
+              onClick={() => (downloading || downloadedAll ? setSheet("playback") : onPrepareOffline())}
+            >
+              {downloading ? (
+                <span className={styles.downloadProgress}>
+                  {offlineVoice.preparing && offlineVoice.preparing.total > 0
+                    ? `${Math.round((offlineVoice.preparing.done / offlineVoice.preparing.total) * 100)}%`
+                    : "…"}
+                </span>
+              ) : downloadedAll ? (
+                <CheckIcon size={18} />
+              ) : (
+                <DownloadIcon size={20} />
+              )}
+            </button>
+          )}
         </div>
       </header>
 

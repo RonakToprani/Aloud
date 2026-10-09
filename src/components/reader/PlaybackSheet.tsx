@@ -132,7 +132,7 @@ export function PlaybackSheet({
       {/* Only once the model is here: before that the download is the step
           that matters, and the voice list is already asking for it. */}
       {onPrepareOffline && offline.downloaded && (
-        <Field label="Read offline">
+        <Field label="Offline">
           {preparing ? (
             <div className={styles.offlineNote}>
               <div
@@ -149,25 +149,29 @@ export function PlaybackSheet({
                 />
                 <span className={styles.progressLabel}>
                   {preparing.active
-                    ? `Preparing this chapter: ${preparing.done} of ${preparing.total} sentences`
-                    : "This chapter is ready to read offline."}
+                    ? preparing.chapters > 1
+                      ? `Downloading chapter ${preparing.chapter} of ${preparing.chapters}: ${preparing.done} of ${preparing.total} sentences`
+                      : `Downloading this chapter: ${preparing.done} of ${preparing.total} sentences`
+                    : preparing.chapters > 1
+                      ? "The rest of the book is ready to read offline."
+                      : "This chapter is ready to read offline."}
                 </span>
               </div>
               {preparing.active && onStopPreparing && (
                 <button type="button" className={styles.moreVoices} onClick={onStopPreparing}>
-                  Stop preparing
+                  Stop downloading
                 </button>
               )}
             </div>
           ) : (
             <div className={styles.offlineNote}>
               <button type="button" className={styles.prepare} onClick={onPrepareOffline}>
-                Prepare this chapter for offline
+                Download for offline
               </button>
               <p className={styles.hint}>
-                Reads every sentence of this chapter with {offlineVoiceName ?? "the offline voice"} on this
-                device now, so it plays straight through with no connection. A few minutes on a phone;
-                best done plugged in.
+                Reads this chapter and the rest of the book with {offlineVoiceName ?? "the offline voice"} on this
+                device now, chapter by chapter, so it plays straight through with no connection. Keep the app
+                open while it works; what is done stays if you stop.
               </p>
             </div>
           )}

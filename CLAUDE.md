@@ -140,13 +140,23 @@ still rendering all go through the reader's floating toast, which dismisses
 itself; a banner in the reading column was the wrong shape for a passing
 state.
 
-**Preparing a chapter is explicit.** "Prepare this chapter for offline" in
-the Voice & speed sheet (`offline/prepare.ts`, `KokoroSource.prepareAll`)
-renders every sentence of the open chapter into the store, behind anything
-the reader is waiting on, with progress. It is a button and not automatic
-because on the CPU path it is minutes of full CPU, and a phone's battery
-is not ours to spend unasked; the fifteen-minute render-ahead that runs
-while listening is the automatic part. A clip is found by its exact text,
+**Downloading a book is one tap and explicit.** The download button in
+the reader's header, and "Download for offline" in the Voice & speed sheet
+(`offline/prepare.ts`, `OfflineModelSource.prepareBook`), render the book
+from the chapter being read to the end, one chapter at a time so the
+chapter about to be heard is whole first, behind anything the reader is
+waiting on, with progress on the button and in the sheet; the screen is
+kept awake meanwhile. It is a button and not automatic because on a phone
+it is minutes to hours of full CPU, and a phone's battery is not ours to
+spend unasked; the fifteen-minute render-ahead that runs while listening
+is the automatic part. Clips are stored as 4-bit IMA ADPCM
+(`offline/adpcm.ts`, 12 KB a second, measured 34 dB signal to noise), so a
+long book fits: the store budget is 600 MB, about fourteen hours. The
+database is `aloud-audio-v2`; the first version held 16-bit samples and is
+abandoned rather than migrated. Piper's "high" voices are offered as
+Premium (about 115 MB each, three quarters of real time in Safari on a Mac
+where the medium ones manage six times) and never chosen unasked: the
+default pool excludes any offline voice not yet downloaded. A clip is found by its exact text,
 so a chapter is prepared from `sentence.speakable`, the string the player
 hands to `speak()`. Reopening a book part way through a sentence asks for
 the tail of that sentence, which is a different string and is rendered
