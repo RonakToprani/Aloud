@@ -18,7 +18,7 @@ import type { EngineVoice } from "../engine";
 import type { PassageInput, PassageSentence } from "../edge/passage";
 import { DEFAULT_TIGHTEN } from "../edge/tighten";
 import type { PassageRequest, SynthesisSource, SynthesisedAudio, TimedWord } from "../passageEngine";
-import type { AlignedWord } from "./align";
+import type { AlignedWord } from "../offline/align";
 import {
   clipKey,
   MODEL_BYTES,
@@ -30,7 +30,7 @@ import {
   type FromWorker,
   type ModelChoice,
   type ToWorker,
-} from "./protocol";
+} from "../offline/protocol";
 import { kokoroEngineVoices, KOKORO_PREFIX } from "./voices";
 
 export type OfflineVoiceStatus = "idle" | "loading" | "ready" | "failed";

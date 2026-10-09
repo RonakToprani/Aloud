@@ -13,9 +13,9 @@
 
 import { KokoroTTS, env as kokoroEnv } from "kokoro-js";
 import { phonemize } from "phonemizer";
-import { alignClip, splitLongSentence, tokenize, type AlignedWord, type PhonemeCount } from "./align";
-import { clipKey, MODEL_ID, SAMPLE_RATE, type ClipRequest, type FromWorker, type ModelChoice, type ToWorker } from "./protocol";
-import { ClipStore } from "./store";
+import { alignClip, splitLongSentence, tokenize, type AlignedWord, type PhonemeCount } from "../offline/align";
+import { clipKey, MODEL_ID, SAMPLE_RATE, type ClipRequest, type FromWorker, type ModelChoice, type ToWorker } from "../offline/protocol";
+import { ClipStore } from "../offline/store";
 
 declare const self: DedicatedWorkerGlobalScope;
 

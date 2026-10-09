@@ -10,7 +10,7 @@
 import type { AlignedWord } from "./align";
 
 export type Backend = "webgpu" | "wasm";
-export type Dtype = "fp16" | "q8";
+export type Dtype = "fp16" | "q8" | "fp32";
 
 /** Where the model's own files are kept: the Hugging Face hub, cached by the
  *  browser after the first download. */
@@ -22,12 +22,16 @@ export interface ModelChoice {
   dtype: Dtype;
   /** Same-origin directory holding the onnxruntime WebAssembly files. */
   wasmPaths: string;
+  /** For a model with one file per voice (Piper): the voice to load now.
+   *  Others are loaded as clips ask for them. */
+  voice?: string;
 }
 
 /** Approximate download sizes, for the reader's benefit. */
 export const MODEL_BYTES: Record<Dtype, number> = {
   fp16: 163_000_000,
   q8: 92_000_000,
+  fp32: 63_000_000,
 };
 
 export type ClipPriority = "now" | "ahead";
