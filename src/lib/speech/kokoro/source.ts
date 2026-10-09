@@ -114,11 +114,17 @@ async function isDownloaded(dtype: Dtype): Promise<boolean> {
   }
 }
 
-/** Every browser on iPhone and iPad is WebKit, and so is Safari on a Mac.
- *  WebKit offers WebGPU with 16-bit floats, and the runtime's WebGPU
- *  backend loads the model there and then never answers a request: the
- *  reader saw "preparing the next sentences" for good. Until that is
- *  measured working, WebKit gets the CPU model. */
+/**
+ * Every browser on iPhone and iPad is WebKit, and so is Safari on a Mac,
+ * and on WebKit this model does not run. Measured in Safari 18.3 on a Mac,
+ * which is what the iPhone showed too: the model loads, the first sentence
+ * begins, and it never returns — on the GPU path, on the CPU path, pinned
+ * to one thread, with the plain runtime, with the unquantised model, in a
+ * worker and on the page. The content process either climbs past 2 GB and
+ * is killed, or sits idle at 1.5 GB for good. Until a runtime is found that
+ * completes an inference on WebKit, the voice is not offered there at all;
+ * the device's own voices read offline on an iPhone.
+ */
 function isWebKit(): boolean {
   const ua = navigator.userAgent;
   // Any browser on an iPhone or iPad, including an iPad calling itself a
@@ -230,7 +236,8 @@ export class KokoroSource implements SynthesisSource {
       typeof window !== "undefined" &&
       typeof Worker !== "undefined" &&
       typeof WebAssembly !== "undefined" &&
-      typeof indexedDB !== "undefined"
+      typeof indexedDB !== "undefined" &&
+      !isWebKit()
     );
   }
 

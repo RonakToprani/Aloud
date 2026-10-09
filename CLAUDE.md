@@ -87,12 +87,26 @@ priority than anything the reader is waiting on. A passage is assembled
 from clips already there. Passage budgets are small (`[140, 320, 600]`
 chars) because a passage is ready only when its last sentence is. On
 WebGPU the same arrangement simply runs far ahead. WebGPU fp16 is tried
-when the adapter offers `shader-f16`, except on WebKit: on an iPhone the
-runtime's WebGPU backend loaded the model and then never answered a
-request, and the reader sat on "preparing the next sentences" for good, so
-every browser on iPhone and iPad, and Safari anywhere, gets the CPU model
-until the GPU path is measured working there. A failure on the GPU path is
+when the adapter offers `shader-f16`; a failure on the GPU path is
 remembered (`aloud.offlineVoice.v1`) and the CPU model used from then on.
+
+**The offline voice is not offered on WebKit.** Every browser on iPhone and
+iPad is WebKit, as is Safari on a Mac, and there the model never completes
+an inference. Reproduced in Safari 18.3 on the Mac with a bench page that
+reports each stage to a local server (`open -a Safari` needs no WebDriver
+permission; the page posts to `/report`): the model loads, "generating"
+begins, and the content process either climbs past 2 GB and is killed, after
+which the page silently reloads, or sits idle at 1.5 GB. Tried and ruled
+out, each one the same: the CPU model, one runtime thread (WebKit's worker
+has no SharedArrayBuffer, so it was on one thread already; the 400% CPU seen
+was WebKit's own WebAssembly compiler tiers), the plain 11 MB runtime
+instead of the 21 MB jsep build, the unquantised fp32 model, and running on
+the page instead of a worker. `KokoroSource.supported()` returns false on
+WebKit, so the picker shows no Offline voices there and the device's own
+voices read offline. Candidates for a WebKit voice, untried: a newer
+onnxruntime-web than the 1.22 dev build transformers.js 3.8 pins, or a
+lighter model with a WebKit-proven runtime (Piper). Test on the Mac's Safari
+first; it is the same engine and a run takes a minute.
 
 **Silence from the worker is a failure.** A worker the browser has killed
 for memory, or a backend that has wedged, raises no error and returns no
