@@ -16,8 +16,7 @@ import { offlineVoiceFor, prepareChapterOffline, stopPreparingOffline } from "@/
 import { keepPagesOffline, readerPath } from "@/lib/offline/shell";
 import { formatMegabytes, useOfflineVoice } from "@/lib/hooks/useOfflineVoice";
 import { useOnline } from "@/lib/hooks/useOnline";
-import { getOfflineVoice } from "@/lib/speech/kokoro/source";
-import { isKokoroVoice } from "@/lib/speech/kokoro/voices";
+import { bareVoice, isOfflineVoice, offlineSourceFor } from "@/lib/speech/offline/registry";
 import { bookFraction } from "@/lib/library/progress";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
 import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
@@ -137,7 +136,7 @@ function fitPosition(position: Position, meta: BookMeta): Position | null {
 export function ReaderView({ bookId }: { bookId: string }) {
   const { settings, update } = useSettings();
   const { engine, ready: voicesReady, supported, voices, preferredLang } = useSpeechEngine();
-  const offlineVoice = useOfflineVoice();
+  const offlineVoice = useOfflineVoice(settings.voiceId);
   const online = useOnline();
   // Voices a default may land on unasked. An offline voice that still has to
   // be downloaded is offered but never chosen for the reader, and with no
@@ -438,7 +437,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
   // Choosing an offline voice starts its download then and there, so the
   // wait is spent before play is pressed rather than after.
   useEffect(() => {
-    if (isKokoroVoice(settings.voiceId)) getOfflineVoice().download();
+    const source = offlineSourceFor(settings.voiceId);
+    if (source && settings.voiceId) source.download(bareVoice(settings.voiceId));
   }, [settings.voiceId]);
 
   // What the offline voice is up to, as passing notices over the page and
@@ -463,7 +463,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
   }, [offlineVoice.status, offlineVoice.downloaded, offlineVoice.downloadBytes, offlineVoice.error, showToast]);
 
   const stalled =
-    isKokoroVoice(settings.voiceId) &&
+    isOfflineVoice(settings.voiceId) &&
     offlineVoice.status === "ready" &&
     offlineVoice.pending > 0 &&
     playerState.status === "playing" &&
@@ -599,7 +599,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const offlineSupported = useMemo(() => voices.some((voice) => voice.offline), [voices]);
   const offlineVoiceName = useMemo(() => {
     const id = offlineVoiceFor(settings.voiceId);
-    return voices.find((voice) => voice.id === id)?.name;
+    return id ? voices.find((voice) => voice.id === id)?.name : undefined;
   }, [voices, settings.voiceId]);
   const onPrepareOffline = useCallback(() => {
     const chapter = getChapter(stateRef.current.chapterIndex);
@@ -1119,7 +1119,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
         sleepRemaining={sleepRemaining}
         onSleep={setSleepMinutes}
         onPrepareOffline={offlineSupported ? onPrepareOffline : undefined}
-        onStopPreparing={stopPreparingOffline}
+        onStopPreparing={() => stopPreparingOffline(settings.voiceId)}
         offlineVoiceName={offlineVoiceName}
       />
       <ContentsSheet

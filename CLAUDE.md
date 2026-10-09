@@ -90,8 +90,25 @@ WebGPU the same arrangement simply runs far ahead. WebGPU fp16 is tried
 when the adapter offers `shader-f16`; a failure on the GPU path is
 remembered (`aloud.offlineVoice.v1`) and the CPU model used from then on.
 
-**The offline voice is not offered on WebKit.** Every browser on iPhone and
-iPad is WebKit, as is Safari on a Mac, and there the model never completes
+**Two offline models behind one source.** `offline/source.ts` is the
+model-agnostic half (queue, clip store, watchdog, chapter preparation, what
+the picker is told) and takes an `OfflineModelAdapter`; `kokoro/adapter.ts`
+and `piper/adapter.ts` are the models, each with its own worker speaking
+`offline/protocol.ts`. `offline/registry.ts` creates one source per model
+and answers "whose voice is this" by prefix (`kokoro:`, `piper:`). Piper
+(VITS, one 63 MB file per voice from `rhasspy/piper-voices`, cached in the
+browser's `aloud-models` cache) is the light model and runs everywhere,
+WebKit included, on onnxruntime-web 1.30's PLAIN WebAssembly build
+(`ort.wasm`, under `public/ort/1.30.0/`), one thread, no proxy; its
+phonemiser is piper_phonemize, a classic Emscripten script evaluated inside
+the worker because a module worker cannot importScripts. Measured in
+Safari 18.3 on the Mac through the real built worker: 4.5 s of speech in
+0.8 to 4.9 s. Webpack turns both workers into classic scripts that load
+their runtime through importScripts, so a check page must create them
+without `type: "module"`.
+
+**Kokoro is not offered on WebKit.** Every browser on iPhone and
+iPad is WebKit, as is Safari on a Mac, and there that model never completes
 an inference. Reproduced in Safari 18.3 on the Mac with a bench page that
 reports each stage to a local server (`open -a Safari` needs no WebDriver
 permission; the page posts to `/report`): the model loads, "generating"
@@ -101,12 +118,12 @@ out, each one the same: the CPU model, one runtime thread (WebKit's worker
 has no SharedArrayBuffer, so it was on one thread already; the 400% CPU seen
 was WebKit's own WebAssembly compiler tiers), the plain 11 MB runtime
 instead of the 21 MB jsep build, the unquantised fp32 model, and running on
-the page instead of a worker. `KokoroSource.supported()` returns false on
-WebKit, so the picker shows no Offline voices there and the device's own
-voices read offline. Candidates for a WebKit voice, untried: a newer
-onnxruntime-web than the 1.22 dev build transformers.js 3.8 pins, or a
-lighter model with a WebKit-proven runtime (Piper). Test on the Mac's Safari
-first; it is the same engine and a run takes a minute.
+the page instead of a worker. The cause, per onnxruntime issue 26827 and WebKit bug
+304810, is the ASYNCIFY in onnxruntime's WebGPU-capable (jsep) builds,
+which transformers.js uses for every backend; WebKit's compiler tiers run
+away on it. `KokoroAdapter.supported()` returns false on WebKit, so the
+picker shows Piper's voices there. Test on the Mac's Safari first; it is
+the same engine and a run takes a minute: `scripts/check-worker.html`.
 
 **Silence from the worker is a failure.** A worker the browser has killed
 for memory, or a backend that has wedged, raises no error and returns no

@@ -10,6 +10,7 @@
  *
  *   NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= npm run build
  *   node scripts/check-offline-voice.mjs
+ *   VOICE=piper:en_US-amy-medium node scripts/check-offline-voice.mjs   # the light model
  */
 import puppeteer from "puppeteer-core";
 import { spawn } from "node:child_process";
@@ -19,7 +20,7 @@ const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Conte
 const PORT = Number(process.env.PORT || 3100);
 const BASE = `http://localhost:${PORT}`;
 const OUT = process.argv[2] || "screenshots/offline-voice";
-const PROFILE = process.env.PROFILE_DIR || `${OUT}/profile${process.env.BACKEND ? `-${process.env.BACKEND}` : ""}`;
+const PROFILE = process.env.PROFILE_DIR || `${OUT}/profile${process.env.BACKEND ? `-${process.env.BACKEND}` : ""}${process.env.VOICE ? `-${process.env.VOICE.replace(/[^a-z0-9]/gi, "_")}` : ""}`;
 const MODEL_TIMEOUT_MS = Number(process.env.MODEL_TIMEOUT_MS || 10 * 60 * 1000);
 
 await mkdir(OUT, { recursive: true });
@@ -71,7 +72,7 @@ page.on("console", (m) => {
   if (text.startsWith("[sched]")) scheduled.push(JSON.parse(text.slice(7)));
   // The worker's own log arrives here too: which clips came from the store
   // and which were rendered, with timings. Printed when VERBOSE is set.
-  else if (text.startsWith("[kokoro]")) {
+  else if (text.startsWith("[kokoro]") || text.startsWith("[piper]")) {
     if (process.env.VERBOSE) console.log(`     ${text}`);
   } else if (m.type() === "error") console.log(`     console: ${text.slice(0, 200)}`);
 });
@@ -134,17 +135,17 @@ await page.waitForSelector('a[href^="/read/"]', { timeout: 20000 });
 const readerHref = await page.$eval('a[href^="/read/"]', (a) => a.getAttribute("href"));
 const bookId = readerHref.split("/").pop();
 
-await page.evaluate((id, backend) => {
+await page.evaluate((id, backend, voiceId) => {
   // BACKEND=wasm runs the CPU model even where a GPU is on offer.
   if (backend === "wasm") localStorage.setItem("aloud.offlineVoice.v1", JSON.stringify({ avoid: "webgpu" }));
   const settings = JSON.parse(localStorage.getItem("aloud.settings.v1") || "{}");
-  settings.voiceId = "kokoro:af_heart";
+  settings.voiceId = voiceId;
   settings.rate = 1;
   settings.updatedAt = Date.now();
   localStorage.setItem("aloud.settings.v1", JSON.stringify(settings));
   localStorage.setItem("aloud.voiceChosen.v1", JSON.stringify([id]));
   localStorage.setItem("aloud.coach.v1", JSON.stringify("done"));
-}, bookId, process.env.BACKEND || "");
+}, bookId, process.env.BACKEND || "", process.env.VOICE || "kokoro:af_heart");
 
 await page.goto(`${BASE}${readerHref}`, { waitUntil: "networkidle0" });
 await page.waitForSelector('button[aria-label="Play"]', { timeout: 20000 });

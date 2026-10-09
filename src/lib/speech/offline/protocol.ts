@@ -25,6 +25,8 @@ export interface ModelChoice {
   /** For a model with one file per voice (Piper): the voice to load now.
    *  Others are loaded as clips ask for them. */
   voice?: string;
+  /** Same-origin directory holding the Piper phonemiser's files. */
+  piperPaths?: string;
 }
 
 /** Approximate download sizes, for the reader's benefit. */

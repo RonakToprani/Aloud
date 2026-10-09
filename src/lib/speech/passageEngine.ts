@@ -1080,6 +1080,11 @@ export class PassageSpeechEngine implements SpeechEngine {
     this.lookahead = source.lookahead;
   }
 
+  /** The prefix of the voice ids this engine answers to. */
+  get prefix(): string {
+    return this.source.prefix;
+  }
+
   readonly lookahead: number | undefined;
 
   startBudgetMs(voiceId: string | null): number | undefined {

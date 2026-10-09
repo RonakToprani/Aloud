@@ -52,7 +52,7 @@ export function VoiceList({
   previewing = null,
 }: Props) {
   const [showAll, setShowAll] = useState(false);
-  const offline = useOfflineVoice();
+  const offline = useOfflineVoice(voiceId);
 
   const groups = useMemo(
     () => groupVoices(voices, preferredLang, showAll),

@@ -1,37 +1,27 @@
 /**
- * The offline voice, as a source for the passage engine.
+ * An offline voice, as a source for the passage engine.
  *
- * Kokoro is an 82-million-parameter model that runs in the browser. Even
- * quantised it is slower than speech on a phone's CPU, so this source never
- * leans on synthesising a sentence at the moment it is needed: every
- * sentence the player says it is heading for is rendered ahead, in the
- * worker, into the clip store, and a passage is assembled from clips that
- * are already there. Where the device has a GPU the model runs several
- * times faster than speech and the same arrangement simply runs well ahead.
+ * A model that runs in the browser is slower than speech on a phone's CPU,
+ * so this source never leans on synthesising a sentence at the moment it is
+ * needed: every sentence the player says it is heading for is rendered
+ * ahead, in a worker, into the clip store, and a passage is assembled from
+ * clips that are already there. Where the model runs faster than speech the
+ * same arrangement simply runs well ahead.
  *
- * The model is downloaded on first use, not on page load, and only once:
- * the browser keeps its files in the Cache API, where the service worker
- * cannot see them but does not need to.
+ * Which model is the adapter's business: Kokoro (`kokoro/`) where it runs,
+ * Piper (`piper/`) everywhere, WebKit included. Everything here — the
+ * queue, the store, the watchdog, the chapter being prepared, what the
+ * picker is told — is the same for both. The model is downloaded on first
+ * use, not on page load, and only once: the browser keeps its files in the
+ * Cache API, where the service worker cannot see them but does not need to.
  */
 
 import type { EngineVoice } from "../engine";
 import type { PassageInput, PassageSentence } from "../edge/passage";
 import { DEFAULT_TIGHTEN } from "../edge/tighten";
 import type { PassageRequest, SynthesisSource, SynthesisedAudio, TimedWord } from "../passageEngine";
-import type { AlignedWord } from "../offline/align";
-import {
-  clipKey,
-  MODEL_BYTES,
-  MODEL_ID,
-  SAMPLE_RATE,
-  type Backend,
-  type ClipResult,
-  type Dtype,
-  type FromWorker,
-  type ModelChoice,
-  type ToWorker,
-} from "../offline/protocol";
-import { kokoroEngineVoices, KOKORO_PREFIX } from "./voices";
+import type { AlignedWord } from "./align";
+import { clipKey, SAMPLE_RATE, type Backend, type ClipResult, type FromWorker, type ModelChoice, type ToWorker } from "./protocol";
 
 export type OfflineVoiceStatus = "idle" | "loading" | "ready" | "failed";
 
@@ -69,85 +59,36 @@ const AHEAD_CHARS = 14_000;
  *  sentence or so, so the first sound comes as soon as it can. */
 const PASSAGE_BUDGETS = [140, 320, 600];
 
-const REMEMBERED_KEY = "aloud.offlineVoice.v1";
-
-/** The onnxruntime files are copied under the transformers.js version they
- *  came with (scripts/ort-assets.mjs), so a new version is a new path and
- *  the service worker can keep them for good. */
-const WASM_PATHS = `/ort/${process.env.NEXT_PUBLIC_TRANSFORMERS_VERSION ?? "unknown"}/`;
-
-interface Remembered {
-  /** A backend that failed here; not tried again. */
-  avoid?: Backend;
-}
-
-function readRemembered(): Remembered {
-  try {
-    return (JSON.parse(localStorage.getItem(REMEMBERED_KEY) ?? "{}") as Remembered) ?? {};
-  } catch {
-    return {};
-  }
-}
-
-function remember(update: Remembered): void {
-  try {
-    localStorage.setItem(REMEMBERED_KEY, JSON.stringify({ ...readRemembered(), ...update }));
-  } catch {
-    /* private mode */
-  }
-}
-
-function modelFile(dtype: Dtype): string {
-  return `https://huggingface.co/${MODEL_ID}/resolve/main/onnx/model_${dtype === "q8" ? "quantized" : dtype}.onnx`;
-}
-
-/** Whether a model's weights are already in the browser's cache, where
- *  transformers.js keeps them. Looked up directly so the question can be
- *  answered without waking the worker. */
-async function isDownloaded(dtype: Dtype): Promise<boolean> {
-  try {
-    if (typeof caches === "undefined") return false;
-    const cache = await caches.open("transformers-cache");
-    return !!(await cache.match(modelFile(dtype)));
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Every browser on iPhone and iPad is WebKit, and so is Safari on a Mac,
- * and on WebKit this model does not run. Measured in Safari 18.3 on a Mac,
- * which is what the iPhone showed too: the model loads, the first sentence
- * begins, and it never returns — on the GPU path, on the CPU path, pinned
- * to one thread, with the plain runtime, with the unquantised model, in a
- * worker and on the page. The content process either climbs past 2 GB and
- * is killed, or sits idle at 1.5 GB for good. Until a runtime is found that
- * completes an inference on WebKit, the voice is not offered there at all;
- * the device's own voices read offline on an iPhone.
+ * What differs between one model and another: its voices, whether this
+ * browser can run it, how its backend is chosen, where its files are and
+ * whether they are already here. The worker it creates speaks the protocol
+ * in `protocol.ts`.
  */
-function isWebKit(): boolean {
-  const ua = navigator.userAgent;
-  // Any browser on an iPhone or iPad, including an iPad calling itself a
-  // Mac; and Safari itself anywhere.
-  if (/iPhone|iPad|iPod/.test(ua)) return true;
-  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return true;
-  return /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg|OPR|Firefox/.test(ua);
-}
-
-/** The GPU path needs WebGPU with 16-bit floats; everything else runs the
- *  8-bit model on the CPU. */
-async function chooseBackend(): Promise<ModelChoice> {
-  const avoid = readRemembered().avoid;
-  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<{ features: Set<string> } | null> } }).gpu;
-  if (avoid !== "webgpu" && gpu && !isWebKit()) {
-    try {
-      const adapter = await gpu.requestAdapter();
-      if (adapter?.features.has("shader-f16")) return { backend: "webgpu", dtype: "fp16", wasmPaths: WASM_PATHS };
-    } catch {
-      /* no usable adapter */
-    }
-  }
-  return { backend: "wasm", dtype: "q8", wasmPaths: WASM_PATHS };
+export interface OfflineModelAdapter {
+  /** The engine id reported upwards, and the prefix of its voice ids. */
+  readonly id: string;
+  readonly prefix: string;
+  readonly failureMessage: string;
+  voices(): EngineVoice[];
+  /** Whether this model runs in this browser at all. The source adds the
+   *  general requirements (a worker, WebAssembly, IndexedDB). */
+  supported(): boolean;
+  /** Backend, model file and paths for this device, for `voice` where the
+   *  model keeps one file per voice. */
+  chooseBackend(voice: string | null): Promise<ModelChoice>;
+  /** Whether the files `choice` needs are already in the browser's cache. */
+  isDownloaded(choice: ModelChoice): Promise<boolean>;
+  /** How large a download `choice` means, for the reader's benefit. */
+  downloadBytes(choice: ModelChoice): number;
+  /** One file per voice: a change of voice is another download. */
+  readonly perVoice: boolean;
+  createWorker(): Worker;
+  /** Optional. Another choice to try when `choice` failed to load, or null
+   *  to give up. The adapter remembers what it must. */
+  fallback?(choice: ModelChoice): ModelChoice | null;
+  /** Optional. `choice` wedged after loading; remember so it is not tried again. */
+  noteStall?(choice: ModelChoice): void;
 }
 
 interface Waiting {
@@ -163,14 +104,14 @@ interface PrepareJob {
   done: Set<string>;
 }
 
-export class KokoroSource implements SynthesisSource {
-  readonly id = "kokoro";
-  readonly prefix = KOKORO_PREFIX;
+export class OfflineModelSource implements SynthesisSource {
+  readonly id: string;
+  readonly prefix: string;
   readonly budgets = PASSAGE_BUDGETS;
   readonly tighten = false;
   /** Enough sentences to fill the render-ahead horizon on a wordy page. */
   readonly lookahead = 400;
-  readonly failureMessage = "The offline voice couldn't read that. Press play to try again.";
+  readonly failureMessage: string;
 
   private worker: Worker | null = null;
   private choice: ModelChoice | null = null;
@@ -189,7 +130,7 @@ export class KokoroSource implements SynthesisSource {
   private state: OfflineVoiceState = {
     status: "idle",
     progress: 0,
-    downloadBytes: MODEL_BYTES.q8,
+    downloadBytes: 0,
     backend: null,
     pending: 0,
     downloaded: false,
@@ -198,11 +139,14 @@ export class KokoroSource implements SynthesisSource {
     events: [],
   };
 
-  constructor() {
-    if (typeof window !== "undefined") {
-      void chooseBackend().then(async (choice) => {
-        const downloaded = await isDownloaded(choice.dtype);
-        this.update({ downloaded, downloadBytes: MODEL_BYTES[choice.dtype] });
+  constructor(private readonly adapter: OfflineModelAdapter) {
+    this.id = adapter.id;
+    this.prefix = adapter.prefix;
+    this.failureMessage = adapter.failureMessage;
+    if (typeof window !== "undefined" && this.supported()) {
+      void adapter.chooseBackend(null).then(async (choice) => {
+        const downloaded = await adapter.isDownloaded(choice);
+        this.update({ downloaded, downloadBytes: adapter.downloadBytes(choice) });
       });
     }
   }
@@ -227,7 +171,7 @@ export class KokoroSource implements SynthesisSource {
 
   private event(line: string): void {
     const stamp = new Date().toLocaleTimeString(undefined, { hour12: false });
-    const events = [...this.state.events, `${stamp}  ${line}`].slice(-KokoroSource.EVENTS_KEPT);
+    const events = [...this.state.events, `${stamp}  ${line}`].slice(-OfflineModelSource.EVENTS_KEPT);
     this.update({ events });
   }
 
@@ -237,26 +181,44 @@ export class KokoroSource implements SynthesisSource {
       typeof Worker !== "undefined" &&
       typeof WebAssembly !== "undefined" &&
       typeof indexedDB !== "undefined" &&
-      !isWebKit()
+      this.adapter.supported()
     );
   }
 
   async loadVoices(): Promise<EngineVoice[]> {
-    return this.supported() ? kokoroEngineVoices() : [];
+    return this.listVoicesSync();
+  }
+
+  listVoicesSync(): EngineVoice[] {
+    return this.supported() ? this.adapter.voices() : [];
   }
 
   /** Begin downloading and loading the model, if that has not happened. The
    *  picker calls this the moment an offline voice is chosen, so the wait is
-   *  spent before play is pressed rather than after. */
-  download(): void {
-    void this.ensureLoaded();
+   *  spent before play is pressed rather than after. `voice` is the bare
+   *  voice id, prefix removed, for a model with one file per voice. */
+  download(voice: string | null = null): void {
+    void this.ensureLoaded(voice).catch(() => {});
   }
 
-  private ensureLoaded(): Promise<void> {
-    if (this.worker) return Promise.resolve();
+  private ensureLoaded(voice: string | null): Promise<void> {
+    if (this.worker) {
+      // The worker is up; a model with one file per voice may still have
+      // this voice to fetch, and the picker should see that happen.
+      if (this.adapter.perVoice && voice && this.choice && voice !== this.choice.voice) {
+        return this.adapter.chooseBackend(voice).then(async (choice) => {
+          this.choice = choice;
+          const downloaded = await this.adapter.isDownloaded(choice);
+          this.update({ status: "loading", progress: downloaded ? 1 : 0, downloaded, downloadBytes: this.adapter.downloadBytes(choice) });
+          this.event(downloaded ? `Loading the ${voice} voice` : `Downloading the ${voice} voice`);
+          this.send({ type: "load", choice });
+        });
+      }
+      return Promise.resolve();
+    }
     if (!this.supported()) return Promise.reject(new Error("This browser can't run the offline voice."));
     this.update({ status: "loading", progress: 0, error: null });
-    const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    const worker = this.adapter.createWorker();
     this.worker = worker;
     this.lastHeard = Date.now();
     worker.onmessage = (event: MessageEvent<FromWorker>) => {
@@ -267,12 +229,13 @@ export class KokoroSource implements SynthesisSource {
       this.failed(event.message || "The offline voice stopped unexpectedly.");
     };
     this.startWatchdog();
-    return chooseBackend().then((choice) => {
+    return this.adapter.chooseBackend(voice).then(async (choice) => {
       if (this.worker !== worker) return;
       this.choice = choice;
-      this.update({ backend: choice.backend, downloadBytes: MODEL_BYTES[choice.dtype] });
+      const downloaded = await this.adapter.isDownloaded(choice);
+      this.update({ backend: choice.backend, downloaded, downloadBytes: this.adapter.downloadBytes(choice) });
       this.event(
-        `Loading the ${choice.dtype} model on ${choice.backend === "webgpu" ? "the GPU (WebGPU)" : "the CPU (WebAssembly)"}`,
+        `Loading the ${choice.dtype} model${choice.voice ? ` (${choice.voice})` : ""} on ${choice.backend === "webgpu" ? "the GPU (WebGPU)" : "the CPU (WebAssembly)"}`,
       );
       this.send({ type: "load", choice });
     });
@@ -298,10 +261,8 @@ export class KokoroSource implements SynthesisSource {
         this.lastHeard = Date.now();
         return;
       }
-      if (Date.now() - this.lastHeard < KokoroSource.STALL_MS) return;
-      // The GPU path is the one that wedges; remember, so the next attempt
-      // goes straight to the CPU model.
-      if (this.choice?.backend === "webgpu") remember({ avoid: "webgpu" });
+      if (Date.now() - this.lastHeard < OfflineModelSource.STALL_MS) return;
+      if (this.choice) this.adapter.noteStall?.(this.choice);
       this.failed(
         this.state.status === "loading"
           ? "The offline voice stopped downloading. Check the connection and pick it again to retry."
@@ -316,28 +277,31 @@ export class KokoroSource implements SynthesisSource {
         this.event(`Rendering: ${message.text}…`);
         return;
       case "progress":
-        if (this.state.status === "loading" && message.total > 0) {
-          this.update({ progress: Math.min(1, message.loaded / message.total), downloadBytes: message.total });
+        // A model with one file per voice downloads again after it was
+        // ready, when the reader picks another of its voices.
+        if (message.total > 0) {
+          this.update({ status: "loading", progress: Math.min(1, message.loaded / message.total), downloadBytes: message.total });
         }
         return;
       case "ready":
         this.update({ status: "ready", progress: 1, downloaded: true, error: null });
         this.event("Model ready");
         return;
-      case "failed":
-        // The GPU path is the one that can fail on a device that claims to
-        // offer it. Remember, and read with the CPU model from here on.
-        if (message.choice.backend === "webgpu") {
-          remember({ avoid: "webgpu" });
-          const choice: ModelChoice = { backend: "wasm", dtype: "q8", wasmPaths: WASM_PATHS };
-          this.choice = choice;
-          this.update({ backend: "wasm", progress: 0, downloadBytes: MODEL_BYTES.q8 });
-          void isDownloaded("q8").then((downloaded) => this.update({ downloaded }));
-          this.send({ type: "load", choice });
+      case "failed": {
+        // A backend can fail on a device that claims to offer it; the
+        // adapter may have another to try, and remembers which to avoid.
+        const fallback = this.adapter.fallback?.(message.choice) ?? null;
+        if (fallback) {
+          this.choice = fallback;
+          this.update({ backend: fallback.backend, progress: 0, downloadBytes: this.adapter.downloadBytes(fallback) });
+          void this.adapter.isDownloaded(fallback).then((downloaded) => this.update({ downloaded }));
+          this.event(`Trying again on ${fallback.backend === "webgpu" ? "the GPU" : "the CPU"}`);
+          this.send({ type: "load", choice: fallback });
           return;
         }
         this.failed(message.message);
         return;
+      }
       case "clip": {
         const waiting = this.waiting.get(message.id);
         this.waiting.delete(message.id);
@@ -400,7 +364,7 @@ export class KokoroSource implements SynthesisSource {
    */
   prepareAll(texts: string[], voice: string, rate: number): void {
     if (!this.supported()) return;
-    void this.ensureLoaded();
+    void this.ensureLoaded(voice).catch(() => {});
     this.stopPreparing();
     const wanted = new Map<string, string>();
     for (const raw of texts) {
@@ -465,7 +429,7 @@ export class KokoroSource implements SynthesisSource {
    *  then blamed the voice for making no sound. */
   startBudgetMs(): number {
     if (this.state.status !== "ready") return 10 * 60 * 1000;
-    return KokoroSource.STALL_MS + 30_000;
+    return OfflineModelSource.STALL_MS + 30_000;
   }
 
   /* -------------------------------------------------------------- clips */
@@ -482,7 +446,7 @@ export class KokoroSource implements SynthesisSource {
   }
 
   async synthesize(request: PassageRequest, ctx: BaseAudioContext, signal: AbortSignal): Promise<SynthesisedAudio> {
-    await this.ensureLoaded();
+    await this.ensureLoaded(request.voice);
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     // A passage the reader is waiting on goes to the front of the worker's
     // queue, ahead of any rendering for later.
@@ -501,7 +465,7 @@ export class KokoroSource implements SynthesisSource {
    */
   offer(sentences: PassageInput[], voice: string, rate: number): void {
     if (!this.supported()) return;
-    void this.ensureLoaded();
+    void this.ensureLoaded(voice).catch(() => {});
     const wanted = new Map<string, string>();
     let chars = 0;
     for (const sentence of sentences) {
@@ -589,12 +553,4 @@ export function assemble(ctx: BaseAudioContext, sentences: PassageSentence[], cl
     if (i < clips.length - 1) cursor += Math.round((SAMPLE_RATE * gapAfter(sentence)) / 1000);
   });
   return { buffer, words };
-}
-
-let singleton: KokoroSource | null = null;
-
-/** One model per page: it is far too large to load twice. */
-export function getOfflineVoice(): KokoroSource {
-  if (!singleton) singleton = new KokoroSource();
-  return singleton;
 }

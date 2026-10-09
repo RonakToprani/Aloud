@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><title>offline worker check</title>
+<!--
+  Drives a built offline-voice worker directly, from the same origin as the
+  app, and reports each stage. For WebKit, which puppeteer cannot drive:
+  after `npm run build`, copy this file into public/ort/ (gitignored), fix
+  the two chunk paths below to the current build's (ls .next/static/chunks/
+  for the small bootstrap chunks that load the piper and kokoro workers;
+  the page's read route names them), start `npx next start -p 3100`, and
+  `open -a Safari "http://localhost:3100/ort/check-worker.html?model=piper"`.
+  Lines also go to a local log server at :8765 if one is running
+  (scripts/check-offline-voice.mjs shows the shape); otherwise read the page.
+-->
+<body style="font:16px system-ui;padding:20px"><h3>Offline worker check</h3><pre id="log"></pre>
+<script type="module">
+const log = (m) => { document.getElementById("log").textContent += m + "\n"; fetch("http://localhost:8765/report?" + encodeURIComponent(m)).catch(() => {}); };
+const params = new URLSearchParams(location.search);
+const model = params.get("model") || "piper";
+const voice = params.get("voice") || (model === "piper" ? "en_US-amy-medium" : "af_heart");
+const url = model === "piper" ? "/_next/static/chunks/657.efa2264536068cde.js" : "/_next/static/chunks/114.19497110a317b2ca.js";
+const choice = model === "piper"
+  ? { backend: "wasm", dtype: "fp32", wasmPaths: "/ort/1.30.0/", piperPaths: "/piper/1.0.0/", voice }
+  : { backend: "wasm", dtype: "q8", wasmPaths: "/ort/3.8.1/" };
+log("check start " + navigator.userAgent + " model=" + model + " voice=" + voice);
+const worker = new Worker(url);
+const t0 = performance.now();
+let id = 1;
+const texts = ["Hello there.", "It was a bright cold day in April, and the clocks were striking thirteen."];
+worker.onerror = (e) => log("worker error: " + e.message);
+worker.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === "progress") { if (m.total && Math.round(m.loaded / m.total * 100) % 25 === 0) log("progress " + Math.round(m.loaded / m.total * 100) + "%"); return; }
+  if (m.type === "ready") { log("ready in " + Math.round(performance.now() - t0) + "ms"); next(); return; }
+  if (m.type === "failed") { log("error: failed " + m.message); return; }
+  if (m.type === "working") { log("working: " + m.text); return; }
+  if (m.type === "clip") { log("clip " + (m.durationMs / 1000).toFixed(2) + "s audio, " + m.words.length + " words, in " + m.tookMs + "ms, cached=" + m.cached); next(); return; }
+  if (m.type === "clip-failed") { log("error: clip failed " + m.message); return; }
+};
+function next() { const text = texts.shift(); if (!text) { log("done"); return; } worker.postMessage({ type: "clip", id: id++, text, voice, rate: 1, priority: "now" }); }
+worker.postMessage({ type: "load", choice });
+</script>

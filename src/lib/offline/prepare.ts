@@ -10,23 +10,24 @@
  */
 
 import type { SegmentedChapter } from "@/lib/text/segment";
-import { getOfflineVoice } from "@/lib/speech/kokoro/source";
-import { isKokoroVoice, KOKORO_PREFIX, KOKORO_VOICES } from "@/lib/speech/kokoro/voices";
+import { bareVoice, defaultOfflineVoiceId, isOfflineVoice, offlineSourceFor } from "@/lib/speech/offline/registry";
 
 /** Which offline voice a chapter is prepared in: the one chosen, if it is
- *  one, else the best of them. */
-export function offlineVoiceFor(voiceId: string | null): string {
-  return isKokoroVoice(voiceId) && voiceId ? voiceId : `${KOKORO_PREFIX}${KOKORO_VOICES[0].id}`;
+ *  one, else the best this browser can run. */
+export function offlineVoiceFor(voiceId: string | null): string | null {
+  return isOfflineVoice(voiceId) && voiceId ? voiceId : defaultOfflineVoiceId();
 }
 
 export function prepareChapterOffline(chapter: SegmentedChapter, voiceId: string | null, rate: number): void {
-  const voice = offlineVoiceFor(voiceId).slice(KOKORO_PREFIX.length);
+  const voice = offlineVoiceFor(voiceId);
+  const source = offlineSourceFor(voice);
+  if (!voice || !source) return;
   // The exact strings the player will hand to speak(): a clip is found by
   // its text, so anything else would be rendered and never used.
   const texts = chapter.sentences.map((sentence) => sentence.speakable).filter((text) => text.trim());
-  getOfflineVoice().prepareAll(texts, voice, rate);
+  source.prepareAll(texts, bareVoice(voice), rate);
 }
 
-export function stopPreparingOffline(): void {
-  getOfflineVoice().stopPreparing();
+export function stopPreparingOffline(voiceId: string | null): void {
+  offlineSourceFor(offlineVoiceFor(voiceId))?.stopPreparing();
 }

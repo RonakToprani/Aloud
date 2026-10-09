@@ -8,9 +8,9 @@ import {
   splitLongSentence,
   tokenize,
   voicedBounds,
-} from "@/lib/speech/kokoro/align";
-import { clipKey } from "@/lib/speech/kokoro/protocol";
-import { assemble } from "@/lib/speech/kokoro/source";
+} from "@/lib/speech/offline/align";
+import { clipKey } from "@/lib/speech/offline/protocol";
+import { assemble } from "@/lib/speech/offline/source";
 
 const RATE = 24000;
 

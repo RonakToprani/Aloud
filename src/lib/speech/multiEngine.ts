@@ -1,8 +1,7 @@
 import { EdgeSpeechEngine } from "./edge/engine";
 import type {
   PreparedSentence, EngineVoice, SpeakCallbacks, SpeakOptions, SpeechEngine, UtteranceHandle } from "./engine";
-import { getOfflineVoice } from "./kokoro/source";
-import { KOKORO_PREFIX } from "./kokoro/voices";
+import { getOfflineSources } from "./offline/registry";
 import { PassageSpeechEngine } from "./passageEngine";
 import { WebSpeechEngine } from "./webSpeechEngine";
 
@@ -13,7 +12,7 @@ const EDGE_PREFIX = "edge:";
  * offline model behind one `SpeechEngine`, so everything above this file —
  * the player, the synchronizer, the voice picker — keeps working unmodified.
  * A voice's id says which engine owns it (`edge:` for a cloud voice,
- * `kokoro:` for the offline model); everything else
+ * `kokoro:` or `piper:` for an offline model); everything else
  * (pause/resume/cancel/isSpeaking/isPaused) is delegated to all of them,
  * since an idle engine's version of each is already a safe no-op.
  */
@@ -27,18 +26,19 @@ export class MultiSpeechEngine implements SpeechEngine {
   constructor(
     private readonly webEngine: WebSpeechEngine,
     private readonly edgeEngine: EdgeSpeechEngine,
-    private readonly offlineEngine: PassageSpeechEngine,
+    /** One per offline model, each answering to its own voice prefix. */
+    private readonly offlineEngines: PassageSpeechEngine[],
   ) {}
 
   private get all(): SpeechEngine[] {
-    return [this.webEngine, this.edgeEngine, this.offlineEngine];
+    return [this.webEngine, this.edgeEngine, ...this.offlineEngines];
   }
 
   /** The engine that synthesises passages for this voice, if any. */
   private passageEngineFor(voiceId: string | null | undefined): PassageSpeechEngine | null {
-    if (voiceId?.startsWith(EDGE_PREFIX)) return this.edgeEngine;
-    if (voiceId?.startsWith(KOKORO_PREFIX)) return this.offlineEngine;
-    return null;
+    if (!voiceId) return null;
+    if (voiceId.startsWith(EDGE_PREFIX)) return this.edgeEngine;
+    return this.offlineEngines.find((engine) => voiceId.startsWith(engine.prefix)) ?? null;
   }
 
   get supported(): boolean {
@@ -125,7 +125,7 @@ export function getSpeechEngine(): MultiSpeechEngine {
     singleton = new MultiSpeechEngine(
       new WebSpeechEngine(),
       new EdgeSpeechEngine({ localePrefix }),
-      new PassageSpeechEngine(getOfflineVoice()),
+      getOfflineSources().map((source) => new PassageSpeechEngine(source)),
     );
   }
   return singleton;

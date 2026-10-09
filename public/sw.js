@@ -149,12 +149,12 @@ async function pruneAssets() {
   }
 }
 
-/* /pdfjs/ and /ort/ carry their version in the path, so a new version never
+/* /pdfjs/, /ort/ and /piper/ carry their version in the path, so a new version never
    overwrites the old one and the old one would otherwise sit in the cache
    for good. Fetching one is the moment we learn which version is current. */
 async function dropOldVersions(cache, pathname) {
   const [, root, version] = pathname.split("/");
-  if ((root !== "pdfjs" && root !== "ort") || !version) return;
+  if ((root !== "pdfjs" && root !== "ort" && root !== "piper") || !version) return;
   for (const request of await cache.keys()) {
     const path = new URL(request.url).pathname;
     if (path.startsWith(`/${root}/`) && path.split("/")[2] !== version) await cache.delete(request);
@@ -167,6 +167,7 @@ function isImmutableAsset(pathname) {
     pathname.startsWith("/icons/") ||
     pathname.startsWith("/pdfjs/") ||
     pathname.startsWith("/ort/") ||
+    pathname.startsWith("/piper/") ||
     pathname === "/manifest.webmanifest"
   );
 }

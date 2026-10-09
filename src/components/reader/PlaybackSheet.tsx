@@ -69,7 +69,7 @@ export function PlaybackSheet({
   offlineVoiceName,
 }: Props) {
   const rateIndex = nearestRateIndex(rate);
-  const offline = useOfflineVoice();
+  const offline = useOfflineVoice(voiceId);
   const preparing = offline.preparing;
 
   return (
