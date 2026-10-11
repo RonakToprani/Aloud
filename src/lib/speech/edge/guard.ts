@@ -4,8 +4,25 @@
  * being invisible to anyone actually reading a book.
  */
 
-/** Requests must come from a page served by this same deployment. */
-export function isSameOrigin(request: Request): boolean {
+/**
+ * The browser extension is the one other caller. Its requests come from its
+ * service worker with an `Origin` of `chrome-extension://<id>`, and the id is
+ * fixed per build: one for the Web Store listing, one per unpacked path. The
+ * allowed ids are an environment variable rather than code so a new build
+ * can be admitted, or a leaked one shut out, without a deploy.
+ */
+export function allowedExtensionIds(env: string | undefined = process.env.ALOUD_EXTENSION_IDS): Set<string> {
+  return new Set(
+    (env ?? "")
+      .split(",")
+      .map((id) => id.trim().toLowerCase())
+      .filter((id) => /^[a-p]{32}$/.test(id)),
+  );
+}
+
+/** Requests must come from a page served by this same deployment, or from
+ *  an admitted build of the extension. */
+export function isSameOrigin(request: Request, extensionIds: Set<string> = allowedExtensionIds()): boolean {
   const host = request.headers.get("host");
   if (!host) return false;
 
@@ -16,7 +33,9 @@ export function isSameOrigin(request: Request): boolean {
     return false;
   }
   try {
-    return new URL(stated).host === host;
+    const url = new URL(stated);
+    if (url.protocol === "chrome-extension:") return extensionIds.has(url.host.toLowerCase());
+    return url.host === host;
   } catch {
     return false;
   }
