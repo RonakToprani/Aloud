@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
-import { edgeHeaders, synthesisUrl } from "./protocol";
+import { type EdgeEndpoint, edgeEndpoints, edgeHeaders, synthesisUrl } from "./protocol";
 import { buildSsml } from "./ssml";
 
 /** One spoken word, timed against the returned audio. */
@@ -97,9 +97,27 @@ function releaseConnection(socket: WebSocket): void {
   );
 }
 
-function openConnection(): Promise<WebSocket> {
+/**
+ * Which endpoint answered last. The first handshake on a fresh instance may
+ * cost one refused round trip if the first host has gone; every connection
+ * after it goes straight to the one that worked. When every host refuses,
+ * the order starts over on the next call rather than sticking on the last.
+ */
+let preferredEndpoint = 0;
+
+/** A no-op listener that stays attached for the life of the socket. The ws
+ *  library emits `error` on a socket whose handshake was refused (the server
+ *  resets the connection after its 403) and on an idle pooled socket the far
+ *  end drops, and an `error` with no listener is an uncaught exception that
+ *  takes the server down. Every real listener is added on top of this. */
+function swallowErrors(): void {
+  /* intentionally empty */
+}
+
+function openOne(endpoint: EdgeEndpoint): Promise<WebSocket> {
   return new Promise<WebSocket>((resolve, reject) => {
-    const socket = new WebSocket(synthesisUrl(), { headers: edgeHeaders() });
+    const socket = new WebSocket(synthesisUrl(endpoint), { headers: edgeHeaders() });
+    socket.on("error", swallowErrors);
     const onOpen = () => {
       detach();
       resolve(socket);
@@ -126,6 +144,26 @@ function openConnection(): Promise<WebSocket> {
     socket.on("error", onError);
     socket.on("unexpected-response", onUnexpected);
   });
+}
+
+/** A refused handshake or an unreachable host moves on to the next endpoint;
+ *  an open socket makes its endpoint the preferred one. */
+async function openConnection(): Promise<WebSocket> {
+  const endpoints = edgeEndpoints();
+  const start = Math.min(preferredEndpoint, endpoints.length - 1);
+  let lastError: EdgeSynthesisError | null = null;
+  for (let i = 0; i < endpoints.length; i++) {
+    const index = (start + i) % endpoints.length;
+    try {
+      const socket = await openOne(endpoints[index]);
+      preferredEndpoint = index;
+      return socket;
+    } catch (error) {
+      lastError = error instanceof EdgeSynthesisError ? error : new EdgeSynthesisError(String(error));
+    }
+  }
+  preferredEndpoint = 0;
+  throw lastError ?? new EdgeSynthesisError("The voice service is unreachable.");
 }
 
 function acquireConnection(): Promise<WebSocket> {

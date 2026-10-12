@@ -68,6 +68,21 @@ to 380ms between sentences and 620ms between paragraphs, shifting the word
 timings to match. The next passage is decoded early and scheduled on the audio
 clock so seams cost nothing. Do not go back to one clip per sentence.
 
+**The cloud voice lives on two hosts, tried in order.** On 10 October 2026
+`speech.platform.bing.com` began refusing every synthesis handshake with an
+empty 403, still answering its voice list, because Edge 155 had moved to
+`api.msedgeservices.com/tts/cognitiveservices` (rany2/edge-tts#490). The new
+host takes the same signed token as long as it is also sent as
+`Ocp-Apim-Subscription-Key`, so one query serves both. `protocol.ts` lists
+the hosts; `synthesize.ts` and `voices.ts` fall through to the next on a
+refused handshake and remember the one that answered. The next move is met
+with `EDGE_TTS_ENDPOINT` (a base URL, tried first) or
+`EDGE_TTS_CHROMIUM_VERSION` on Vercel, no deploy needed. The route always
+answers 502 for an upstream failure: passing Microsoft's 403 through made a
+retired host look like this route's own origin check. To diagnose, open the
+WebSocket from Node with `ws` and read the handshake status; a 403 with an
+empty body and `accept-ch` headers is the host, not the token.
+
 **The endpoint rejects SSML `<break>`.** Identical text returns 200 without it
 and 502 with it. Pauses come from punctuation and from where passages end,
 which is why passages end at paragraph breaks.

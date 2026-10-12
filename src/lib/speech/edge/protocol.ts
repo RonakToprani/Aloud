@@ -14,10 +14,34 @@ export const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
  *  Override with EDGE_TTS_CHROMIUM_VERSION if this starts returning 403. */
 export const CHROMIUM_VERSION = process.env.EDGE_TTS_CHROMIUM_VERSION ?? "140.0.3485.14";
 
-const SYNTHESIS_HOST =
-  "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
-const VOICES_HOST =
-  "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list";
+/**
+ * Where the service lives, in the order they are tried.
+ *
+ * On 10 October 2026 the host Edge had used for years began refusing every
+ * synthesis handshake with an empty 403 while still answering its voice list,
+ * because Edge 155 had moved to `api.msedgeservices.com` and the old host was
+ * being retired region by region (rany2/edge-tts#490). The new host accepts
+ * the same token, signed the same way, as long as it is also passed as
+ * `Ocp-Apim-Subscription-Key`. Both are kept: a handshake refused on one is
+ * retried on the next, so the next move costs a round trip rather than the
+ * voice. `EDGE_TTS_ENDPOINT` puts a further base URL in front of these, so a
+ * host change can be met from Vercel's environment without a deploy.
+ */
+export interface EdgeEndpoint {
+  /** Base URL without a trailing slash; `/websocket/v1` and `/voices/list` are
+   *  appended, so it must be the path below which both live. */
+  base: string;
+}
+
+const KNOWN_ENDPOINTS: EdgeEndpoint[] = [
+  { base: "https://api.msedgeservices.com/tts/cognitiveservices" },
+  { base: "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud" },
+];
+
+export function edgeEndpoints(): EdgeEndpoint[] {
+  const extra = process.env.EDGE_TTS_ENDPOINT?.trim().replace(/\/+$/, "");
+  return extra ? [{ base: extra }, ...KNOWN_ENDPOINTS] : KNOWN_ENDPOINTS;
+}
 
 const WINDOWS_EPOCH_OFFSET = 11644473600n;
 /** The token is only regenerated every five minutes. */
@@ -44,23 +68,26 @@ export function edgeHeaders(): Record<string, string> {
   };
 }
 
-export function synthesisUrl(): string {
-  const params = new URLSearchParams({
+/** The old host reads `TrustedClientToken` and the new one
+ *  `Ocp-Apim-Subscription-Key`; each ignores the other, so one query serves
+ *  both. The signed token is required by both. */
+function signedParams(): URLSearchParams {
+  return new URLSearchParams({
     TrustedClientToken: TRUSTED_CLIENT_TOKEN,
+    "Ocp-Apim-Subscription-Key": TRUSTED_CLIENT_TOKEN,
     "Sec-MS-GEC": secMsGec(),
     "Sec-MS-GEC-Version": `1-${CHROMIUM_VERSION}`,
-    ConnectionId: randomUUID().replace(/-/g, ""),
   });
-  return `${SYNTHESIS_HOST}?${params}`;
 }
 
-export function voicesUrl(): string {
-  const params = new URLSearchParams({
-    trustedclienttoken: TRUSTED_CLIENT_TOKEN,
-    "Sec-MS-GEC": secMsGec(),
-    "Sec-MS-GEC-Version": `1-${CHROMIUM_VERSION}`,
-  });
-  return `${VOICES_HOST}?${params}`;
+export function synthesisUrl(endpoint: EdgeEndpoint): string {
+  const params = signedParams();
+  params.set("ConnectionId", randomUUID().replace(/-/g, ""));
+  return `${endpoint.base.replace(/^http/, "ws")}/websocket/v1?${params}`;
+}
+
+export function voicesUrl(endpoint: EdgeEndpoint): string {
+  return `${endpoint.base}/voices/list?${signedParams()}`;
 }
 
 export function escapeSsml(text: string): string {
