@@ -227,6 +227,12 @@ answers 502 for an upstream failure: passing Microsoft's 403 through made a
 retired host look like this route's own origin check. To diagnose, open the
 WebSocket from Node with `ws` and read the handshake status; a 403 with an
 empty body and `accept-ch` headers is the host, not the token.
+The two hosts also describe a voice differently: the old one tagged uses as
+`ContentCategories` ("Novel") with a long `FriendlyName`, the new one as
+`TailoredScenarios` ("Narration", "Audiobook") with a bare `DisplayName`.
+`voices.ts` normalises both into the old shape, because the picker's
+"Recommended" and the engine's ranking read the categories; the label
+disappeared from every voice for a day when the host moved.
 
 **The endpoint rejects SSML `<break>`.** Identical text returns 200 without it
 and 502 with it. Pauses come from punctuation and from where passages end,

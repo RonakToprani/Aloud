@@ -5,6 +5,9 @@ export interface EdgeVoiceTag {
   VoicePersonalities?: string[];
 }
 
+/** The shape the rest of the app reads: the retired host's. The new host is
+ *  normalised into it by `normalizeEdgeVoice`, so a consumer never needs to
+ *  know which host answered. */
 export interface EdgeVoice {
   Name: string;
   ShortName: string;
@@ -13,6 +16,48 @@ export interface EdgeVoice {
   FriendlyName: string;
   Status: string;
   VoiceTag?: EdgeVoiceTag;
+}
+
+/**
+ * What either host actually returns. The old host tagged a voice's uses as
+ * `ContentCategories` ("News", "Novel") and named it in full
+ * (`FriendlyName`, "Microsoft Aria Online (Natural) - English (United
+ * States)"). The new host at api.msedgeservices.com tags uses as
+ * `TailoredScenarios` ("Narration", "Audiobook", "Chat") and gives only a
+ * `DisplayName` ("Aria") beside the `LocaleName`. The categories are what the
+ * picker's "Recommended" and the engine's ranking read, so when the host
+ * moved the label vanished from every voice until this mapping existed.
+ */
+export interface RawEdgeVoice {
+  Name: string;
+  ShortName: string;
+  Gender: "Female" | "Male";
+  Locale: string;
+  LocaleName?: string;
+  FriendlyName?: string;
+  DisplayName?: string;
+  Status: string;
+  VoiceTag?: EdgeVoiceTag & { TailoredScenarios?: string[] };
+}
+
+export function normalizeEdgeVoice(raw: RawEdgeVoice): EdgeVoice {
+  const tag = raw.VoiceTag;
+  const categories = tag?.ContentCategories ?? tag?.TailoredScenarios;
+  const friendly =
+    raw.FriendlyName ??
+    (raw.DisplayName ? `${raw.DisplayName}${raw.LocaleName ? ` - ${raw.LocaleName}` : ""}` : raw.ShortName);
+  return {
+    Name: raw.Name,
+    ShortName: raw.ShortName,
+    Gender: raw.Gender,
+    Locale: raw.Locale,
+    FriendlyName: friendly,
+    Status: raw.Status,
+    VoiceTag:
+      categories || tag?.VoicePersonalities
+        ? { ContentCategories: categories ?? [], VoicePersonalities: tag?.VoicePersonalities ?? [] }
+        : undefined,
+  };
 }
 
 /** The full list changes rarely; refetching it on every reader session would
@@ -39,7 +84,7 @@ async function fetchVoiceList(): Promise<EdgeVoice[]> {
       lastStatus = `HTTP ${response.status}`;
       continue;
     }
-    const voices = (await response.json()) as EdgeVoice[];
+    const voices = ((await response.json()) as RawEdgeVoice[]).map(normalizeEdgeVoice);
     cache = { voices, fetchedAt: Date.now() };
     return voices;
   }
