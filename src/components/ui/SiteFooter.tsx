@@ -1,19 +1,20 @@
-import { Logo } from "./Logo";
+import { LogoMark } from "./Logo";
 import styles from "./SiteFooter.module.css";
 
 /** Forwarded to a person; see "Inbound mail" in CLAUDE.md. */
 const CONTACT_EMAIL = "hello@aloudreader.org";
 
 /**
- * The foot of the library and browse pages: the wordmark, the copyright
- * line with the address to write to, and a quiet credit. The reader has no
- * footer; nothing sits below a book.
+ * The foot of the library and browse pages, one line: the copyright and the
+ * address to write to on the left, the credit on the right. It wraps to two
+ * lines on a narrow phone. The reader has no footer; nothing sits below a
+ * book.
  */
 export function SiteFooter() {
   return (
     <footer className={styles.footer}>
-      <Logo size={18} />
       <p className={styles.line}>
+        <LogoMark size={14} className={styles.mark} />
         &copy; {new Date().getFullYear()} Aloud
         <span className={styles.dot} aria-hidden="true">
           &middot;
