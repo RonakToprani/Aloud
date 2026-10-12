@@ -287,11 +287,6 @@ app must work anyway.
 first two the app runs local-only: no accounts, no counters, no sync. That
 fallback is deliberate and worth preserving.
 
-`NEXT_PUBLIC_CONTACT_EMAIL` puts a mailto in the footer of the library and
-browse pages. Leave it unset until an inbox exists to answer it: the domain
-has no MX records, so a reply to any address on it bounces, and a bouncing
-contact address is worse than none.
-
 **Vercel preview variables are scoped per branch.** A new branch gets none,
 so its preview silently runs local-only and the counters vanish. Add them when
 you create the branch:
@@ -421,8 +416,9 @@ DNS. The alias and where it forwards live in the ImprovMX account, not in
 DNS, so the personal inbox behind it is never public. The send subdomain is
 untouched: it still has Resend's DKIM and its own MX for bounces. Replies to
 hello@ arrive in Gmail; a reply sent from there goes out as Gmail unless a
-"send mail as" is set up, which is fine for now. `NEXT_PUBLIC_CONTACT_EMAIL`
-puts the address in the footer once the alias is live.
+"send mail as" is set up, which is fine for now. The address is in the
+footer of the library and browse pages (`SiteFooter.tsx`), so the alias
+must stay live: until it is, mail to it bounces.
 
 **Never send from a noreply address.** The mail asks people to reply with
 ideas, and to reply with "stop" to unsubscribe; both are a lie from an address
