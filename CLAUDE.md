@@ -414,6 +414,16 @@ to anyone.
 **Both parts, always.** A bulk HTML mail with no plain text alternative is a
 spam signal, and some readers see the text one.
 
+**Inbound mail is hello@aloudreader.org, forwarded.** The bare domain's MX
+records point at ImprovMX (free plan: one domain, 25 aliases, 500 forwards a
+day), with `v=spf1 include:spf.improvmx.com ~all` beside them, all in Vercel
+DNS. The alias and where it forwards live in the ImprovMX account, not in
+DNS, so the personal inbox behind it is never public. The send subdomain is
+untouched: it still has Resend's DKIM and its own MX for bounces. Replies to
+hello@ arrive in Gmail; a reply sent from there goes out as Gmail unless a
+"send mail as" is set up, which is fine for now. `NEXT_PUBLIC_CONTACT_EMAIL`
+puts the address in the footer once the alias is live.
+
 **Never send from a noreply address.** The mail asks people to reply with
 ideas, and to reply with "stop" to unsubscribe; both are a lie from an address
 that discards mail. It sends as a person, with `Reply-To` pointing at a real
