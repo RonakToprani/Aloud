@@ -22,6 +22,7 @@ import { describeImportError, type ImportProgress } from "@/lib/library/import";
 import { listBooks } from "@/lib/storage/db";
 import { pushBooks } from "@/lib/sync/remote";
 import type { BookMeta } from "@/lib/types";
+import { SiteFooter } from "@/components/ui/SiteFooter";
 import styles from "./Browse.module.css";
 
 /** What the page is showing: the front, one genre, or a search. */
@@ -539,6 +540,8 @@ export function BrowseView() {
           </div>
         )}
       </Sheet>
+
+      <SiteFooter />
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </main>

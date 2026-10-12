@@ -287,6 +287,11 @@ app must work anyway.
 first two the app runs local-only: no accounts, no counters, no sync. That
 fallback is deliberate and worth preserving.
 
+`NEXT_PUBLIC_CONTACT_EMAIL` puts a mailto in the footer of the library and
+browse pages. Leave it unset until an inbox exists to answer it: the domain
+has no MX records, so a reply to any address on it bounces, and a bouncing
+contact address is worse than none.
+
 **Vercel preview variables are scoped per branch.** A new branch gets none,
 so its preview silently runs local-only and the counters vanish. Add them when
 you create the branch:

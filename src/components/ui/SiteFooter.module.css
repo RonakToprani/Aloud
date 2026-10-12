@@ -1,0 +1,39 @@
+/* Sits at the foot of a page that is a flex column, so a short shelf still
+   puts it at the bottom of the screen rather than under the last book. */
+.footer {
+  margin-top: auto;
+  padding-top: 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.line {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ui-faint);
+}
+
+.line a {
+  color: var(--ui-muted);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--ui-muted) 55%, transparent);
+  text-underline-offset: 3px;
+  transition: color 160ms var(--ease-soft), text-decoration-color 160ms var(--ease-soft);
+}
+
+.line a:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
+
+.line a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.dot {
+  margin: 0 7px;
+}
