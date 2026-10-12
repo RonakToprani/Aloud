@@ -21,7 +21,7 @@ interface Props {
 /** Provider metadata worth surfacing. A voice Microsoft built for narrating
  *  novels is the one to pick in a reading app, so it says so; everything else
  *  says nothing rather than inventing a label. */
-const NARRATION_TRAITS = new Set(["novel", "audiobook", "narration"]);
+const NARRATION_TRAITS = new Set(["novel", "audiobook", "audiobooks", "narration"]);
 
 function traitLabel(voice: EngineVoice): string | null {
   const traits = voice.traits ?? [];

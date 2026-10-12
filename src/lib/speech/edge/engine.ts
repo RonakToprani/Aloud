@@ -56,7 +56,7 @@ function displayName(voice: EdgeVoice): string {
 /** Voices Microsoft tags for long-form narration. In a reading app these are
  *  the ones actually worth reaching for, so they also rank above the
  *  conversational voices rather than merely being labelled. */
-const NARRATION_TRAITS = new Set(["novel", "audiobook", "narration"]);
+const NARRATION_TRAITS = new Set(["novel", "audiobook", "audiobooks", "narration"]);
 
 function isNarrationVoice(traits: string[]): boolean {
   return traits.some((trait) => NARRATION_TRAITS.has(trait.toLowerCase()));
