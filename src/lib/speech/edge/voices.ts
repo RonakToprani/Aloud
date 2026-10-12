@@ -1,4 +1,4 @@
-import { edgeHeaders, voicesUrl } from "./protocol";
+import { edgeEndpoints, edgeHeaders, voicesUrl } from "./protocol";
 
 export interface EdgeVoiceTag {
   ContentCategories?: string[];
@@ -24,13 +24,26 @@ let cache: { voices: EdgeVoice[]; fetchedAt: number } | null = null;
 async function fetchVoiceList(): Promise<EdgeVoice[]> {
   if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache.voices;
 
-  const response = await fetch(voicesUrl(), { headers: edgeHeaders() });
-  if (!response.ok) {
-    throw new Error(`Edge voice list request failed (HTTP ${response.status})`);
+  // Tried in the same order synthesis uses, so a host that has stopped
+  // answering costs one failed request an hour rather than the voice list.
+  let lastStatus: string = "unreachable";
+  for (const endpoint of edgeEndpoints()) {
+    let response: Response;
+    try {
+      response = await fetch(voicesUrl(endpoint), { headers: edgeHeaders() });
+    } catch (error) {
+      lastStatus = error instanceof Error ? error.message : String(error);
+      continue;
+    }
+    if (!response.ok) {
+      lastStatus = `HTTP ${response.status}`;
+      continue;
+    }
+    const voices = (await response.json()) as EdgeVoice[];
+    cache = { voices, fetchedAt: Date.now() };
+    return voices;
   }
-  const voices = (await response.json()) as EdgeVoice[];
-  cache = { voices, fetchedAt: Date.now() };
-  return voices;
+  throw new Error(`Edge voice list request failed (${lastStatus})`);
 }
 
 /**

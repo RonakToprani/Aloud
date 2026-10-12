@@ -9,6 +9,7 @@ import { StatsHero, StatsStrip } from "@/components/home/Stats";
 import { Sheet } from "@/components/ui/Sheet";
 import { AddSquareIcon, CloudIcon, ContentsIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/ui/Icons";
 import { Logo } from "@/components/ui/Logo";
+import { SiteFooter } from "@/components/ui/SiteFooter";
 import { Toast, type ToastMessage } from "@/components/ui/Toast";
 import {
   describeImportError,
@@ -887,6 +888,8 @@ export function LibraryView() {
           </>
         )}
       </Sheet>
+
+      <SiteFooter />
 
       <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} />
 

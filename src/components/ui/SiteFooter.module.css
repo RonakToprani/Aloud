@@ -1,0 +1,70 @@
+/* Sits at the foot of a page that is a flex column, so a short shelf still
+   puts it at the bottom of the screen rather than under the last book. */
+.footer {
+  margin-top: auto;
+  padding-top: 28px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+.line {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ui-faint);
+}
+
+/* The mark at text height, inked like the text it sits beside; the pill
+   keeps the accent so it still reads as the lit word. */
+.mark {
+  color: var(--ui-muted);
+  margin-right: 8px;
+  flex: none;
+}
+
+.line a {
+  color: var(--ui-muted);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--ui-muted) 55%, transparent);
+  text-underline-offset: 3px;
+  transition: color 160ms var(--ease-soft), text-decoration-color 160ms var(--ease-soft);
+}
+
+/* The credit is a step quieter than the line beside it: smaller, fainter,
+   and its link only reveals itself as one on hover. */
+.credit {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: color-mix(in oklch, var(--ui-faint) 70%, var(--canvas));
+}
+
+.credit a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 160ms var(--ease-soft);
+}
+
+.line a:hover,
+.credit a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+.line a:focus-visible,
+.credit a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.dot {
+  margin: 0 7px;
+}

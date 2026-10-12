@@ -213,6 +213,21 @@ to 380ms between sentences and 620ms between paragraphs, shifting the word
 timings to match. The next passage is decoded early and scheduled on the audio
 clock so seams cost nothing. Do not go back to one clip per sentence.
 
+**The cloud voice lives on two hosts, tried in order.** On 10 October 2026
+`speech.platform.bing.com` began refusing every synthesis handshake with an
+empty 403, still answering its voice list, because Edge 155 had moved to
+`api.msedgeservices.com/tts/cognitiveservices` (rany2/edge-tts#490). The new
+host takes the same signed token as long as it is also sent as
+`Ocp-Apim-Subscription-Key`, so one query serves both. `protocol.ts` lists
+the hosts; `synthesize.ts` and `voices.ts` fall through to the next on a
+refused handshake and remember the one that answered. The next move is met
+with `EDGE_TTS_ENDPOINT` (a base URL, tried first) or
+`EDGE_TTS_CHROMIUM_VERSION` on Vercel, no deploy needed. The route always
+answers 502 for an upstream failure: passing Microsoft's 403 through made a
+retired host look like this route's own origin check. To diagnose, open the
+WebSocket from Node with `ws` and read the handshake status; a 403 with an
+empty body and `accept-ch` headers is the host, not the token.
+
 **The endpoint rejects SSML `<break>`.** Identical text returns 200 without it
 and 502 with it. Pauses come from punctuation and from where passages end,
 which is why passages end at paragraph breaks.
@@ -545,6 +560,17 @@ to anyone.
 
 **Both parts, always.** A bulk HTML mail with no plain text alternative is a
 spam signal, and some readers see the text one.
+
+**Inbound mail is hello@aloudreader.org, forwarded.** The bare domain's MX
+records point at ImprovMX (free plan: one domain, 25 aliases, 500 forwards a
+day), with `v=spf1 include:spf.improvmx.com ~all` beside them, all in Vercel
+DNS. The alias and where it forwards live in the ImprovMX account, not in
+DNS, so the personal inbox behind it is never public. The send subdomain is
+untouched: it still has Resend's DKIM and its own MX for bounces. Replies to
+hello@ arrive in Gmail; a reply sent from there goes out as Gmail unless a
+"send mail as" is set up, which is fine for now. The address is in the
+footer of the library and browse pages (`SiteFooter.tsx`), so the alias
+must stay live: until it is, mail to it bounces.
 
 **Never send from a noreply address.** The mail asks people to reply with
 ideas, and to reply with "stop" to unsubscribe; both are a lie from an address
