@@ -68,20 +68,29 @@ to 380ms between sentences and 620ms between paragraphs, shifting the word
 timings to match. The next passage is decoded early and scheduled on the audio
 clock so seams cost nothing. Do not go back to one clip per sentence.
 
-**The cloud voice lives on two hosts, tried in order.** On 10 October 2026
-`speech.platform.bing.com` began refusing every synthesis handshake with an
-empty 403, still answering its voice list, because Edge 155 had moved to
-`api.msedgeservices.com/tts/cognitiveservices` (rany2/edge-tts#490). The new
-host takes the same signed token as long as it is also sent as
-`Ocp-Apim-Subscription-Key`, so one query serves both. `protocol.ts` lists
-the hosts; `synthesize.ts` and `voices.ts` fall through to the next on a
-refused handshake and remember the one that answered. The next move is met
-with `EDGE_TTS_ENDPOINT` (a base URL, tried first) or
+**The cloud voice lives on two hosts, tried in order, with a v2 token.** On
+10 October 2026 `speech.platform.bing.com` began refusing synthesis with an
+empty 403 and `api.msedgeservices.com/tts/cognitiveservices` took the old v1
+token, so it went first (rany2/edge-tts#490). By 23 October the new host
+answered everything, handshake and voice list, with an empty 200, and the old
+host was synthesising again for the **v2** `Sec-MS-GEC`: `<CS64>-<SHA-256>`
+over a Microsoft copyright string, the five minute file time and the client
+token, sent with `Sec-MS-GEC-Version: 2-<version>` (the server reads only the
+`2-`). The 403 had been the token, not a retirement. `protocol.ts` holds the
+token, its version and the hosts; its test pins a token Edge itself produced,
+so a broken port fails CI rather than the voice. Each host has its own socket
+path, old `/edge/v1` and new `/websocket/v1`, and the wrong one is not a 404:
+the old host answers `/websocket/v1` with a 400 "services aren't available"
+page that looks like an outage. `synthesize.ts` and `voices.ts` fall through
+to the next host on a refused handshake or an empty voice list and remember
+the one that answered. The next move is met with `EDGE_TTS_ENDPOINT` (a base
+URL, tried first; `EDGE_TTS_SOCKET_PATH` if not `/websocket/v1`) or
 `EDGE_TTS_CHROMIUM_VERSION` on Vercel, no deploy needed. The route always
 answers 502 for an upstream failure: passing Microsoft's 403 through made a
 retired host look like this route's own origin check. To diagnose, open the
-WebSocket from Node with `ws` and read the handshake status; a 403 with an
-empty body and `accept-ch` headers is the host, not the token.
+WebSocket from Node with `ws` from a Vercel Sandbox in the project (the
+route's own network) and try each host, path and token version; a 403 with
+an empty body is the token, an empty 200 is a host that has stopped serving.
 The two hosts also describe a voice differently: the old one tagged uses as
 `ContentCategories` ("Novel") with a long `FriendlyName`, the new one as
 `TailoredScenarios` ("Narration", "Audiobook") with a bare `DisplayName`.

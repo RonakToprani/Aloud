@@ -50,6 +50,11 @@ const IDLE_TIMEOUT_MS = 45_000;
 
 const idlePool: WebSocket[] = [];
 const idleTimers = new Map<WebSocket, ReturnType<typeof setTimeout>>();
+/** The close listener added each time a socket is pooled. It has to come off
+ *  again when the socket leaves the pool: `once` only removes itself if the
+ *  socket closes, so a socket reused a dozen times carried a dozen of them
+ *  and Node logged MaxListenersExceededWarning. */
+const idleCloseListeners = new Map<WebSocket, () => void>();
 
 function dropFromPool(socket: WebSocket): void {
   const index = idlePool.indexOf(socket);
@@ -58,6 +63,11 @@ function dropFromPool(socket: WebSocket): void {
   if (timer) {
     clearTimeout(timer);
     idleTimers.delete(socket);
+  }
+  const onClose = idleCloseListeners.get(socket);
+  if (onClose) {
+    socket.off("close", onClose);
+    idleCloseListeners.delete(socket);
   }
 }
 
@@ -83,7 +93,9 @@ function releaseConnection(socket: WebSocket): void {
     return;
   }
   idlePool.push(socket);
-  socket.once("close", () => dropFromPool(socket));
+  const onClose = () => dropFromPool(socket);
+  idleCloseListeners.set(socket, onClose);
+  socket.once("close", onClose);
   idleTimers.set(
     socket,
     setTimeout(() => {

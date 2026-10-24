@@ -84,7 +84,21 @@ async function fetchVoiceList(): Promise<EdgeVoice[]> {
       lastStatus = `HTTP ${response.status}`;
       continue;
     }
-    const voices = ((await response.json()) as RawEdgeVoice[]).map(normalizeEdgeVoice);
+    // A host that has stopped serving answers 200 with an empty body rather
+    // than an error, as api.msedgeservices.com did in October 2026. Parsing
+    // that threw out of the loop and lost the list though the next host had it.
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await response.text());
+    } catch {
+      lastStatus = `HTTP ${response.status} with no voice list`;
+      continue;
+    }
+    if (!Array.isArray(raw) || raw.length === 0) {
+      lastStatus = `HTTP ${response.status} with no voices`;
+      continue;
+    }
+    const voices = (raw as RawEdgeVoice[]).map(normalizeEdgeVoice);
     cache = { voices, fetchedAt: Date.now() };
     return voices;
   }
