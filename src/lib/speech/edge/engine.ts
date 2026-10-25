@@ -591,8 +591,11 @@ class EdgeUtterance implements UtteranceHandle {
   pause(): void {
     if (this.cancelled || this.finished || this.pausedAt !== null) return;
     // A buffer source cannot be paused, so remember the offset and stop it;
-    // resume starts a fresh source from there.
-    const at = this.elapsed();
+    // resume starts a fresh source from there. With nothing playing yet — the
+    // audio is still on its way — the offset is the beginning: `elapsed()`
+    // would measure the context's whole lifetime against an origin of zero,
+    // and resume would then start the clip past its own end, silently.
+    const at = this.source ? this.elapsed() : 0;
     this.stopSource();
     this.pausedAt = at;
     // The session holder deliberately keeps running here.
@@ -697,6 +700,9 @@ class PassagePlayback {
   private source: AudioBufferSourceNode | null = null;
   private gain: GainNode | null = null;
   private originTime = 0;
+  /** Context time the source was told to begin at, which for a passage
+   *  scheduled on the seam is in the future. */
+  private startWhen = 0;
   private pausedAtMs: number | null = null;
 
   constructor(
@@ -709,31 +715,49 @@ class PassagePlayback {
     return !!this.source && this.pausedAtMs === null;
   }
 
+  /** A passage scheduled to begin on the seam has a source but has not made a
+   *  sound yet. Saying so is what keeps a passage promoted ahead of its time
+   *  from looking like playback: one scheduled a whole passage into the future
+   *  used to report itself running and audible, so the player's own check saw
+   *  a reader being read to and the reading sat in silence with no way out. */
+  private get pending(): boolean {
+    const ctx = this.output.context;
+    return !!this.source && !!ctx && ctx.currentTime < this.startWhen;
+  }
+
   /**
    * Whether a sound is actually coming out, as opposed to whether we think we
    * started one. A source attached to a suspended context is not playing,
-   * however much it looks like it is, and reporting otherwise hides the
-   * failure from the player's recovery — which is how a restart after the
-   * phone was locked used to leave a reader watching the words move in
-   * silence with no way out but a pause and a press of play.
+   * however much it looks like it is, and nor is one whose start time has not
+   * arrived; reporting otherwise hides the failure from the player's recovery
+   * — which is how a restart after the phone was locked used to leave a reader
+   * watching the words move in silence with no way out but a pause and a press
+   * of play.
    *
    * Kept apart from `running`, which the passage queue is built on: gating
    * that on the context state would void a queued passage and put the gap
    * back into every seam.
    */
   get audible(): boolean {
-    return this.running && this.output.context?.state === "running";
+    return this.running && !this.pending && this.output.context?.state === "running";
   }
 
   get paused(): boolean {
     return this.pausedAtMs !== null;
   }
 
+  /**
+   * Where the playhead is, in ms into the passage. Negative before a passage
+   * scheduled on the seam begins, and deliberately so: clamping it at zero
+   * made "this has not started yet" indistinguishable from "this is at the
+   * very beginning", and `covers` then left a passage due seconds from now
+   * exactly where it was instead of starting it.
+   */
   elapsedMs(): number {
     if (this.pausedAtMs !== null) return this.pausedAtMs;
     const ctx = this.output.context;
     if (!ctx || !this.source) return 0;
-    return Math.max(0, (ctx.currentTime - this.originTime) * 1000);
+    return (ctx.currentTime - this.originTime) * 1000;
   }
 
   /** Context time at which this passage's last sentence, pause included, ends. */
@@ -785,6 +809,7 @@ class PassagePlayback {
     source.start(when, offset);
     this.source = source;
     this.gain = gain;
+    this.startWhen = when;
     this.originTime = when - offset;
     this.pausedAtMs = null;
     this.hooks.onStarted(this);
@@ -792,7 +817,10 @@ class PassagePlayback {
 
   pause(): void {
     if (this.pausedAtMs !== null || !this.source) return;
-    const at = this.elapsedMs();
+    // Never negative: a passage paused before its scheduled start has not been
+    // heard at all, and resume then belongs at the sentence being read, which
+    // PassageUtterance.resume puts it at.
+    const at = Math.max(0, this.elapsedMs());
     this.stop();
     this.pausedAtMs = at;
   }
@@ -893,6 +921,11 @@ class PassageUtterance implements UtteranceHandle {
         this.stopWatching();
         return;
       }
+      // A paused passage's playhead is frozen, and a pause landing in the last
+      // tick of a sentence froze it past the sentence's end — which was read
+      // as the sentence finishing, so the player advanced and started reading
+      // again about forty milliseconds after the reader pressed pause.
+      if (this.playback.paused) return;
       const now = this.playback.elapsedMs();
       while (
         this.nextWordIndex < this.words.length &&
@@ -924,11 +957,23 @@ class PassageUtterance implements UtteranceHandle {
   pause(): void {
     if (this.done) return;
     this.playback.pause();
+    this.stopWatching();
   }
 
   resume(): void {
     if (this.done) return;
+    const { startMs } = this.playback.passage;
     this.playback.resume();
+    // Only when the audio came back behind the sentence being read, which is
+    // what a passage paused before its scheduled start has to come back to:
+    // it has no playhead of its own, and resuming at the top of the passage
+    // would read one sentence while the page lit another. A playhead past the
+    // end of the span is this sentence finishing, and the watcher below
+    // reports that as the ordinary advance it is.
+    if (this.playback.running && this.playback.elapsedMs() < startMs[this.index] - 120) {
+      this.playback.startAt(startMs[this.index]);
+    }
+    this.watch();
   }
 
   cancel(): void {
@@ -1066,6 +1111,11 @@ export class EdgeSpeechEngine implements SpeechEngine {
   private inFlight: PassageInFlight | null = null;
   private passagesPlanned = 0;
   private deferredStop: ReturnType<typeof setTimeout> | null = null;
+  /** Which voice, at which speed, everything currently fetched, decoded or
+   *  scheduled was made for. A passage is matched to a sentence by its text,
+   *  which says nothing about who is reading it. */
+  private passageVoice: string | null = null;
+  private passageRate = 1;
 
   /** Every passage shares these; which one is speaking decides what they do. */
   private readonly hooks: PlaybackHooks = {
@@ -1119,6 +1169,42 @@ export class EdgeSpeechEngine implements SpeechEngine {
     this.output.activate();
   }
 
+  /**
+   * Note which voice and speed the reading is now in, and throw away anything
+   * belonging to another one.
+   *
+   * A passage answers a sentence by matching its text, and text alone cannot
+   * tell one voice from another. So a passage fetched and scheduled under the
+   * old voice went on answering sentences after the reader had changed voice:
+   * the new voice spoke the part-sentence it was asked for and the old one
+   * picked the book up again at the next full sentence and carried on. The
+   * lookahead, the fetch on its way and the audio already on the clock all
+   * belong to the voice that asked for them.
+   */
+  private useVoice(voice: string, rate: number): void {
+    if (this.passageVoice === voice && this.passageRate === rate) return;
+    const first = this.passageVoice === null;
+    this.passageVoice = voice;
+    this.passageRate = rate;
+    if (!first) this.dropPassages();
+  }
+
+  /** Stop and forget every passage: playing, scheduled, decoded and in flight. */
+  private dropPassages(): void {
+    if (this.deferredStop) clearTimeout(this.deferredStop);
+    this.deferredStop = null;
+    const playing = this.playback;
+    this.playback = null;
+    playing?.stop();
+    this.dropQueued();
+    this.nextPassage = null;
+    this.inFlight = null;
+    // The budget starts over: the next thing played deserves the small,
+    // quick first passage rather than a minute of someone else's voice.
+    this.passagesPlanned = 0;
+    this.clearPending();
+  }
+
   /** Decoded audio is a few hundred KB a sentence, so only a short tail of
    *  already-heard sentences is worth keeping. */
   private rememberDecoded(key: string, sentence: DecodedSentence): void {
@@ -1149,6 +1235,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
   prepare(sentences: PassageInput[], options: Omit<SpeakOptions, "text">): void {
     const shortName = edgeShortName(options.voiceId);
     if (!this.supported || !shortName || !sentences.length) return;
+    this.useVoice(shortName, options.rate);
 
     // One passage ahead is enough. This is called at every sentence with a
     // window that slides forward, so without this the plan would change
@@ -1256,6 +1343,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
   prefetch(options: SpeakOptions): void {
     const shortName = edgeShortName(options.voiceId);
     if (!this.supported || !shortName || !options.text.trim()) return;
+    this.useVoice(shortName, options.rate);
 
     // A sentence a passage already covers must not also be synthesised on its
     // own: the two requests compete for the same connection, and the
@@ -1314,6 +1402,9 @@ export class EdgeSpeechEngine implements SpeechEngine {
       clearTimeout(this.deferredStop);
       this.deferredStop = null;
     }
+    // Before anything is matched: a passage belonging to another voice or speed
+    // must not be allowed to answer this sentence.
+    this.useVoice(shortName, options.rate);
 
     // Preferred path: this sentence is part of a passage that was synthesised
     // as one continuous reading, so playback simply carries on into it.
@@ -1363,10 +1454,20 @@ export class EdgeSpeechEngine implements SpeechEngine {
 
   pause(): void {
     this.current?.pause();
+    // A pause must leave nothing sounding, and the utterance cannot always
+    // manage that on its own: one still waiting for its own passage to arrive
+    // has no hold over the passage already on the clock, which went on reading
+    // aloud with the reader having asked for quiet.
+    if (!this.playback?.paused) this.playback?.pause();
   }
 
   resume(): void {
+    const before = this.playback;
     this.current?.resume();
+    // Only the passage the utterance left paused, and only if nothing else has
+    // taken its place meanwhile: a passage the promotion above has moved on
+    // from must stay stopped.
+    if (before && before === this.playback && before.paused) before.resume();
   }
 
   /**
