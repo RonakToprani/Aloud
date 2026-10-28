@@ -188,6 +188,13 @@ function cacheKey(voice: string, text: string, rate: number): string {
   return `${voice} ${rate} ${text}`;
 }
 
+/** Passages are matched to sentences by text, so each also carries what it
+ *  was read with: after a change of voice or speed the passages already made
+ *  matched every sentence and kept the old one going for two minutes. */
+function settingsTag(voice: string, rate: number): string {
+  return `${voice} ${rate}`;
+}
+
 /** Silence long enough to loop, used only to hold the audio session open. */
 function silentWavUrl(seconds = 2): string {
   const rate = 8000;
@@ -630,6 +637,8 @@ class EdgeUtterance implements UtteranceHandle {
 /** A synthesised passage, with each sentence located in time. */
 interface DecodedPassage {
   key: string;
+  /** The voice and rate it was synthesised with; see `settingsTag`. */
+  tag: string;
   plan: PassagePlan;
   buffer: AudioBuffer;
   words: RawTimedWord[];
@@ -1037,6 +1046,7 @@ interface PendingPrefetch {
 
 interface PassageInFlight {
   key: string;
+  tag: string;
   plan: PassagePlan;
   promise: Promise<DecodedPassage>;
 }
@@ -1164,6 +1174,27 @@ export class EdgeSpeechEngine implements SpeechEngine {
     const shortName = edgeShortName(options.voiceId);
     if (!this.supported || !shortName || !sentences.length) return;
 
+    // The player offers from the sentence about to be read. When no passage
+    // held here contains it, the reader has moved (a tapped word, a chapter
+    // from Contents, a bookmark), and what is held belongs to the place left
+    // behind. Kept, it matched nothing again and the guard below refused
+    // every new passage, so each sentence after a seek waited for its own
+    // request: seconds of silence between every sentence until a reload.
+    const tag = settingsTag(shortName, options.rate);
+    const first = sentences[0].text.trim();
+    const holds = (plan: PassagePlan | undefined) => plan?.sentences.some((s) => s.text === first) ?? false;
+    const held = [this.playback?.passage, this.nextPassage, this.inFlight].filter((p) => p != null);
+    // A chapter's heading is fetched alone while the chapter before ends; it
+    // is read from that copy, and the passage planned from the sentence after.
+    const alone = (text: string) => {
+      const key = cacheKey(shortName, text, options.rate);
+      return this.decoded.has(key) || this.pending?.key === key;
+    };
+    const firstAlone = alone(sentences[0].text);
+    if (held.length && (held.some((p) => p.tag !== tag) || (!held.some((p) => holds(p.plan)) && !firstAlone))) {
+      this.abandonPassages();
+    }
+
     // One passage ahead is enough. This is called at every sentence with a
     // window that slides forward, so without this the plan would change
     // slightly each time and the passage be synthesised again from scratch.
@@ -1171,6 +1202,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
 
     // Anything the passage in progress already covers is not ours to plan.
     const covered = new Set(this.playback?.passage.plan.sentences.map((s) => s.text) ?? []);
+    if (firstAlone && sentences.length > 1) covered.add(first);
     const remaining = sentences.filter((entry) => !covered.has(entry.text.trim()));
     if (!remaining.length) return;
 
@@ -1200,10 +1232,10 @@ export class EdgeSpeechEngine implements SpeechEngine {
         }
         const pause = pauseAfter(plan);
         const { startMs, endMs } = locateSentences(plan, tightened.words, tightened.buffer.duration * 1000, pause);
-        return { key, plan, buffer: tightened.buffer, words: tightened.words, startMs, endMs, pauseAfterMs: pause };
+        return { key, tag, plan, buffer: tightened.buffer, words: tightened.words, startMs, endMs, pauseAfterMs: pause };
       },
     );
-    this.inFlight = { key, plan, promise };
+    this.inFlight = { key, tag, plan, promise };
 
     promise
       .then((passage) => {
@@ -1215,6 +1247,19 @@ export class EdgeSpeechEngine implements SpeechEngine {
       .catch(() => {
         if (this.inFlight?.key === key) this.inFlight = null;
       });
+  }
+
+  /** Forget every passage planned for a place the reader has left, and
+   *  start again from the small opening budget so the new place starts fast. */
+  private abandonPassages(): void {
+    this.playback?.stop();
+    this.playback = null;
+    this.dropQueued();
+    this.nextPassage = null;
+    this.inFlight = null;
+    this.ahead = null;
+    this.passagesPlanned = 0;
+    this.lastPlannedChars = 0;
   }
 
   /**
@@ -1367,6 +1412,13 @@ export class EdgeSpeechEngine implements SpeechEngine {
       this.deferredStop = null;
     }
 
+    // A voice preview, or a change of voice or speed, never reuses what was
+    // made with the old one.
+    const tag = settingsTag(shortName, options.rate);
+    if ([this.playback?.passage, this.nextPassage, this.inFlight].some((p) => p != null && p.tag !== tag)) {
+      this.abandonPassages();
+    }
+
     // Preferred path: this sentence is part of a passage that was synthesised
     // as one continuous reading, so playback simply carries on into it.
     const inPassage = this.passageFor(options.text);
@@ -1379,14 +1431,17 @@ export class EdgeSpeechEngine implements SpeechEngine {
 
     // Its passage is on its way: wait for that rather than fetch the sentence
     // alone, which would arrive no sooner and read as a clip of its own.
+    const key = cacheKey(shortName, options.text, options.rate);
+    // Already decoded on its own (a chapter's heading, fetched while the last
+    // passage of the chapter played) beats waiting for a passage that starts
+    // with it: that wait was a full synthesis of silence at every chapter.
     const trimmed = options.text.trim();
-    if (this.inFlight?.plan.sentences.some((sentence) => sentence.text === trimmed)) {
+    const alone = this.decoded.has(key) || this.pending?.key === key;
+    if (!alone && this.inFlight?.plan.sentences.some((sentence) => sentence.text === trimmed)) {
       const utterance = new AwaitedUtterance(callbacks, this.inFlight.promise, () => this.passageFor(options.text));
       this.current = utterance;
       return utterance;
     }
-
-    const key = cacheKey(shortName, options.text, options.rate);
 
     const acquire = async (signal: AbortSignal): Promise<DecodedSentence> => {
       // The fast path: decoded while the previous sentence was still playing,
