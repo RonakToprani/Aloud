@@ -38,9 +38,13 @@ const PHANTOM_END_FRACTION = 0.15;
 const MAX_RECOVERIES = 3;
 /** If the engine has not started speaking by now, it never will. A device
  *  voice answers within a few hundred ms or not at all; a cloud voice is
- *  synthesising a passage over the network and deserves longer. */
+ *  synthesising a passage over the network and deserves longer. Its opening
+ *  passage takes about four seconds and up to ten on a slow minute; at nine
+ *  the watchdog fired on those, cancelled the request and asked again, and
+ *  after three tries told the reader the voice made no sound. A request that
+ *  fails reports it at once, so this only has to catch one that hangs. */
 const START_TIMEOUT_MS = 2500;
-const CLOUD_START_TIMEOUT_MS = 9000;
+const CLOUD_START_TIMEOUT_MS = 20_000;
 
 /**
  * Owns playback: one sentence per utterance, chained on end.
@@ -470,8 +474,10 @@ export class Player {
   }
 
   /** How many sentences ahead to offer for joint synthesis. The engine takes
-   *  as many as fit whatever length it wants to synthesise at once. */
-  private static readonly PASSAGE_LOOKAHEAD = 12;
+   *  as many as fit whatever length it wants to synthesise at once, and the
+   *  cloud voice plans the passage after next from the same offer, so it has
+   *  to reach past two of them. */
+  private static readonly PASSAGE_LOOKAHEAD = 40;
 
   /** Hand the engine the sentences about to be read, so one that can
    *  synthesise a paragraph together does so rather than reading each sentence

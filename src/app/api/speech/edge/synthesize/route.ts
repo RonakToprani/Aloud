@@ -47,6 +47,9 @@ export async function POST(request: Request): Promise<Response> {
     const { audio, words } = await synthesize(text, voice, numericRate);
     return Response.json({ audio: audio.toString("base64"), words });
   } catch (error) {
+    // The reader only sees that the voice failed; this is the one place that
+    // says why, in the function logs.
+    console.warn(`Synthesis failed for ${text.length} characters:`, error instanceof Error ? error.message : error);
     // Always a 502, whatever Microsoft answered: passing its 403 through made
     // a retired host indistinguishable from this route's own origin check.
     if (error instanceof EdgeSynthesisError) {

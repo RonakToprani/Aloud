@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
+import { shouldMerge } from "@/lib/text/segment";
 import { type EdgeEndpoint, edgeEndpoints, edgeHeaders, synthesisUrl } from "./protocol";
 import { buildSsml } from "./ssml";
 
@@ -28,11 +29,36 @@ export class EdgeSynthesisError extends Error {
   }
 }
 
-/** A passage is minutes of audio, not one sentence, and synthesis time scales
- *  with the text. The next passage is requested a whole passage ahead, so a
- *  slow one costs margin rather than silence. */
+/** Everything a passage may take, retries included, inside the route's sixty
+ *  second budget. */
 const TIMEOUT_MS = 55_000;
 const OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
+/** Edge's MP3 is bare constant-rate frames, no ID3 or Xing header, so a
+ *  turn's byte length is its exact duration and turns join end to end. */
+const OUTPUT_BYTES_PER_MS = 48_000 / 8 / 1000;
+
+/**
+ * How a passage is split across connections.
+ *
+ * Since the October 2026 host change one connection streams audio at about
+ * twice real time where it used to be near instant: measured from Node, 370
+ * characters took 12 to 16 s and every 1500 character passage hit the
+ * timeout. Connections run side by side at the same rate each (four of 375
+ * characters took 20 s together, twelve of 200 took 21 s), so a passage is
+ * cut at sentence ends into pieces synthesised at once. The pieces are as
+ * small as the parallelism allows, never under one sentence, so the opening
+ * passage goes out a sentence per connection and starts in about four seconds,
+ * which is what one sentence alone takes now.
+ * The join falls in a sentence gap, which `tighten.ts` trims like any other.
+ */
+const MAX_PARALLEL_TURNS = 6;
+
+/** Edge answers inside a couple of seconds and then streams without pause;
+ *  this long with nothing is a socket that died, often a pooled one the far
+ *  end dropped without a close, and the piece is retried on a fresh one. */
+const STALL_MS = 12_000;
+/** A handshake normally takes under a second. */
+const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 /**
  * Connection pooling: the reader prefetches the next sentence while the
@@ -43,7 +69,7 @@ const OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
  * only one turn can run on a connection at a time; anything beyond what's
  * idle just opens fresh, exactly like before pooling existed.
  */
-const MAX_POOL_SIZE = 3;
+const MAX_POOL_SIZE = MAX_PARALLEL_TURNS;
 /** Long enough to outlast a slow sentence, short enough not to sit on a
  *  connection the far end has quietly dropped. */
 const IDLE_TIMEOUT_MS = 45_000;
@@ -130,6 +156,13 @@ function openOne(endpoint: EdgeEndpoint): Promise<WebSocket> {
   return new Promise<WebSocket>((resolve, reject) => {
     const socket = new WebSocket(synthesisUrl(endpoint), { headers: edgeHeaders() });
     socket.on("error", swallowErrors);
+    // A host that accepts the connection and never upgrades it would
+    // otherwise hold the passage for the whole timeout instead of moving on.
+    const timer = setTimeout(() => {
+      detach();
+      socket.terminate();
+      reject(new EdgeSynthesisError("The voice service did not complete the handshake."));
+    }, HANDSHAKE_TIMEOUT_MS);
     const onOpen = () => {
       detach();
       resolve(socket);
@@ -148,6 +181,7 @@ function openOne(endpoint: EdgeEndpoint): Promise<WebSocket> {
       );
     };
     function detach(): void {
+      clearTimeout(timer);
       socket.off("open", onOpen);
       socket.off("error", onError);
       socket.off("unexpected-response", onUnexpected);
@@ -178,8 +212,8 @@ async function openConnection(): Promise<WebSocket> {
   throw lastError ?? new EdgeSynthesisError("The voice service is unreachable.");
 }
 
-function acquireConnection(): Promise<WebSocket> {
-  const idle = takeIdleConnection();
+function acquireConnection(fresh: boolean): Promise<WebSocket> {
+  const idle = fresh ? null : takeIdleConnection();
   return idle ? Promise.resolve(idle) : openConnection();
 }
 
@@ -262,17 +296,33 @@ function sendTurn(socket: WebSocket, text: string, voice: string, rate: number):
   );
 }
 
-export function synthesize(text: string, voice: string, rate: number): Promise<Synthesis> {
+/** One request and its answer on one connection. */
+function synthesizeTurn(
+  text: string,
+  voice: string,
+  rate: number,
+  timeoutMs: number,
+  fresh: boolean,
+): Promise<Synthesis> {
   return new Promise<Synthesis>((resolve, reject) => {
     let socket: WebSocket | undefined;
     let settled = false;
     const chunks: Buffer[] = [];
     const boundaries: RawBoundary[] = [];
+    let stall: ReturnType<typeof setTimeout> | undefined;
+    const armStall = () => {
+      clearTimeout(stall);
+      stall = setTimeout(
+        () => finish(new EdgeSynthesisError("The voice service stopped answering.")),
+        STALL_MS,
+      );
+    };
 
     const finish = (error: Error | null, result?: Synthesis) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(stall);
       if (socket) {
         socket.off("error", onError);
         socket.off("close", onClose);
@@ -293,13 +343,14 @@ export function synthesize(text: string, voice: string, rate: number): Promise<S
 
     const timer = setTimeout(
       () => finish(new EdgeSynthesisError("The voice service did not answer in time.")),
-      TIMEOUT_MS,
+      timeoutMs,
     );
 
     const onError = (error: Error) => finish(new EdgeSynthesisError(error.message));
     const onClose = () => finish(new EdgeSynthesisError("The voice service closed the connection early."));
 
     const onMessage = (data: Buffer, isBinary: boolean) => {
+      armStall();
       if (isBinary) {
         // Two-byte big-endian header length, then the header, then audio.
         if (data.length < 2) return;
@@ -332,7 +383,7 @@ export function synthesize(text: string, voice: string, rate: number): Promise<S
       }
     };
 
-    acquireConnection()
+    acquireConnection(fresh)
       .then((connection) => {
         if (settled) {
           // The timeout already fired while a fresh connection was still
@@ -344,10 +395,83 @@ export function synthesize(text: string, voice: string, rate: number): Promise<S
         socket.on("error", onError);
         socket.on("close", onClose);
         socket.on("message", onMessage);
+        armStall();
         sendTurn(socket, text, voice, rate);
       })
       .catch((error: unknown) => {
         finish(error instanceof EdgeSynthesisError ? error : new EdgeSynthesisError(String(error)));
       });
   });
+}
+
+/** A character range of the passage, synthesised on a connection of its own. */
+export interface PieceRange {
+  start: number;
+  end: number;
+}
+
+/** Where a sentence may end: terminal punctuation, any closing quotes or
+ *  brackets, then whitespace. */
+const SENTENCE_END = /[.!?…]["'”’)\]]*\s+/g;
+
+/**
+ * Cuts a passage into pieces at sentence ends, each about `length / maxPieces`
+ * long, so a short passage goes out a sentence per piece and a long one in
+ * about `maxPieces`. A
+ * sentence is never split, however long: a piece that ends mid-sentence
+ * would be read with a full stop's fall in the middle of it.
+ */
+export function splitPassage(text: string, maxPieces = MAX_PARALLEL_TURNS): PieceRange[] {
+  const target = Math.ceil(text.length / maxPieces);
+  const pieces: PieceRange[] = [];
+  let start = 0;
+  for (const match of text.matchAll(SENTENCE_END)) {
+    const end = match.index + match[0].trimEnd().length;
+    const next = match.index + match[0].length;
+    if (end - start >= target && next < text.length && !shouldMerge(text.slice(start, end), text.slice(next))) {
+      pieces.push({ start, end });
+      start = next;
+    }
+  }
+  if (start < text.length) pieces.push({ start, end: text.trimEnd().length });
+  return pieces.filter((piece) => piece.end > piece.start);
+}
+
+/** Puts the pieces' audio end to end and moves each word onto the passage:
+ *  its character index by where the piece began, its time by the audio
+ *  before it. */
+export function joinPieces(pieces: { range: PieceRange; synthesis: Synthesis }[]): Synthesis {
+  const words: TimedWord[] = [];
+  let elapsedMs = 0;
+  for (const { range, synthesis } of pieces) {
+    for (const word of synthesis.words) {
+      words.push({
+        ...word,
+        charIndex: word.charIndex + range.start,
+        offsetMs: Math.round(word.offsetMs + elapsedMs),
+      });
+    }
+    elapsedMs += synthesis.audio.length / OUTPUT_BYTES_PER_MS;
+  }
+  return { audio: Buffer.concat(pieces.map((piece) => piece.synthesis.audio)), words };
+}
+
+/** A piece that fails is tried once more on a new connection, since the
+ *  usual cause is a pooled socket the far end had dropped. */
+async function synthesizePiece(text: string, voice: string, rate: number, deadline: number): Promise<Synthesis> {
+  try {
+    return await synthesizeTurn(text, voice, rate, deadline - Date.now(), false);
+  } catch (error) {
+    if (deadline - Date.now() < STALL_MS) throw error;
+    return synthesizeTurn(text, voice, rate, deadline - Date.now(), true);
+  }
+}
+
+export async function synthesize(text: string, voice: string, rate: number): Promise<Synthesis> {
+  const deadline = Date.now() + TIMEOUT_MS;
+  const ranges = splitPassage(text);
+  const results = await Promise.all(
+    ranges.map((range) => synthesizePiece(text.slice(range.start, range.end), voice, rate, deadline)),
+  );
+  return joinPieces(ranges.map((range, i) => ({ range, synthesis: results[i] })));
 }

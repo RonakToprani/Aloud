@@ -113,9 +113,12 @@ interface DecodedSentence {
 const DECODED_CACHE_LIMIT = 8;
 
 /** How much text each successive passage asks for. The first is small so
- *  pressing play feels immediate; the second is synthesised while the first
- *  plays and so can be larger; from then on there is a passage of margin. */
-const PASSAGE_BUDGETS = [220, 700, 1500];
+ *  pressing play feels immediate, and each after it is synthesised while the
+ *  one before plays. Since October 2026 synthesis runs at about real time per
+ *  connection, so a passage arrives in well under half the time the previous
+ *  one plays only if it grows by no more than about double: 700 after 220
+ *  took 16 s against 15 s of audio and left a gap at the first seam. */
+const PASSAGE_BUDGETS = [220, 450, 900, 1500];
 
 /** Sentence and paragraph watchers poll the audio clock this often. A timer
  *  rather than requestAnimationFrame, which stops entirely while the tab is
@@ -1064,7 +1067,18 @@ export class EdgeSpeechEngine implements SpeechEngine {
   /** The next passage, decoded but not yet scheduled. */
   private nextPassage: DecodedPassage | null = null;
   private inFlight: PassageInFlight | null = null;
+  /**
+   * The passage after the one in flight, already being synthesised. Since
+   * October 2026 Microsoft renders at about real time per connection, so a
+   * passage asked for only once the one before it starts cannot arrive in time
+   * when that one is short and it holds a long sentence: measured, 9 to 20 s
+   * of silence at three seams of one chapter. Asking one passage further ahead
+   * gives it the length of two passages instead of one.
+   */
+  private ahead: { key: string; promise: Promise<SynthesisResult> } | null = null;
   private passagesPlanned = 0;
+  /** Length of the passage planned last, which caps the next: see `budget`. */
+  private lastPlannedChars = 0;
   private deferredStop: ReturnType<typeof setTimeout> | null = null;
 
   /** Every passage shares these; which one is speaking decides what they do. */
@@ -1160,13 +1174,19 @@ export class EdgeSpeechEngine implements SpeechEngine {
     const remaining = sentences.filter((entry) => !covered.has(entry.text.trim()));
     if (!remaining.length) return;
 
-    const budget = PASSAGE_BUDGETS[Math.min(this.passagesPlanned, PASSAGE_BUDGETS.length - 1)];
-    const plan = planPassage(remaining, budget);
+    const plan = planPassage(remaining, this.budget(this.lastPlannedChars));
     if (!plan) return;
     this.passagesPlanned += 1;
+    this.lastPlannedChars = plan.text.length;
 
     const key = cacheKey(shortName, plan.text, options.rate);
-    const promise = requestSynthesis(plan.text, shortName, options.rate, new AbortController().signal).then(
+    const synthesis =
+      this.ahead?.key === key
+        ? this.ahead.promise
+        : requestSynthesis(plan.text, shortName, options.rate, new AbortController().signal);
+    this.ahead = null;
+    this.synthesiseAhead(remaining, plan, shortName, options.rate);
+    const promise = synthesis.then(
       async (result): Promise<DecodedPassage> => {
         const raw = await this.output.decode(result.bytes);
         const ctx = this.output.context;
@@ -1195,6 +1215,38 @@ export class EdgeSpeechEngine implements SpeechEngine {
       .catch(() => {
         if (this.inFlight?.key === key) this.inFlight = null;
       });
+  }
+
+  /**
+   * How much the next passage may hold: the ladder's step, but never more
+   * than twice the passage before it. The ladder alone went by position, so a
+   * short paragraph in second place was followed by a 900 character passage
+   * that took 19.6 s to synthesise against 17.5 s of audio ahead of it.
+   * Doubling at most keeps every passage's synthesis well inside the time
+   * the ones before it take to play. A pure function of the passage before,
+   * so the plan synthesised ahead and the real one agree.
+   */
+  private budget(previousChars: number): number {
+    const step = PASSAGE_BUDGETS[Math.min(this.passagesPlanned, PASSAGE_BUDGETS.length - 1)];
+    return previousChars ? Math.min(step, Math.max(PASSAGE_BUDGETS[0], previousChars * 2)) : step;
+  }
+
+  /**
+   * Starts the passage that will follow `plan`, planned exactly as prepare()
+   * will plan it once `plan` is playing: the same sentences after it, the
+   * next budget. Only when the plan stopped on its own, at a budget or a
+   * paragraph, rather than by running out of offered sentences; a plan made
+   * from a window cut short would not match the real one and be wasted.
+   */
+  private synthesiseAhead(remaining: PassageInput[], plan: PassagePlan, voice: string, rate: number): void {
+    const planned = new Set(plan.sentences.map((sentence) => sentence.text));
+    const rest = remaining.filter((entry) => !planned.has(entry.text.trim()));
+    const following = planPassage(rest, this.budget(plan.text.length));
+    if (!following || following.sentences.length >= rest.filter((entry) => entry.text.trim()).length) return;
+    const promise = requestSynthesis(following.text, voice, rate, new AbortController().signal);
+    // Unheard if the reader moves away first; that is not an error.
+    promise.catch(() => {});
+    this.ahead = { key: cacheKey(voice, following.text, rate), promise };
   }
 
   /** Schedule the decoded next passage to begin the instant the current one
@@ -1401,7 +1453,9 @@ export class EdgeSpeechEngine implements SpeechEngine {
       // too: the next press of play deserves the small first passage.
       this.nextPassage = null;
       this.inFlight = null;
+      this.ahead = null;
       this.passagesPlanned = 0;
+      this.lastPlannedChars = 0;
     }, 0);
   }
 
@@ -1422,6 +1476,7 @@ export class EdgeSpeechEngine implements SpeechEngine {
     this.dropQueued();
     this.nextPassage = null;
     this.inFlight = null;
+    this.ahead = null;
     this.clearPending();
     this.decoded.clear();
     this.listeners.clear();

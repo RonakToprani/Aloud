@@ -98,6 +98,29 @@ The two hosts also describe a voice differently: the old one tagged uses as
 "Recommended" and the engine's ranking read the categories; the label
 disappeared from every voice for a day when the host moved.
 
+**Since the October 2026 host change, synthesis runs at real time.** One
+connection streams about a second of audio per second where it used to be
+near instant: one sentence takes 3 to 6 s, and every 1500 character passage
+hit the route's 55 s timeout and came back a 502. Connections run side by
+side at that rate each, so `synthesize.ts` cuts a passage at sentence ends
+(using the segmenter's own `shouldMerge`, so "Mr." is never a cut) into up to
+six pieces, synthesises them at once, and joins the MP3s end to end; the
+format is bare 48 kbit/s frames, so a piece's byte length is its duration
+and the word timings shift exactly. A passage still cannot arrive faster
+than its longest sentence takes to say, so the engine also starts the
+passage after next as soon as it plans the next one (`ahead` in
+`edge/engine.ts`), the player offers 40 sentences so there is room to plan
+two, and the budgets grow gently (`[220, 450, 900, 1500]`, and never past
+twice the passage before, so a short paragraph is not followed by a long
+passage that cannot arrive in time). Measured in
+Chrome on a chapter of *Pride and Prejudice*: before, 9 to 25 s of silence
+at four of five seams; after, every seam the planned pause. The cloud start
+watchdog is 20 s, since at 9 it fired on a slow opening passage, retried
+three times and blamed the voice. A turn with no message for 12 s is
+abandoned and the piece retried on a fresh socket. Measure with a laptop
+that cannot sleep (`caffeinate -i`): timers stop in sleep and a request
+appears to take a quarter of an hour.
+
 **The endpoint rejects SSML `<break>`.** Identical text returns 200 without it
 and 502 with it. Pauses come from punctuation and from where passages end,
 which is why passages end at paragraph breaks.

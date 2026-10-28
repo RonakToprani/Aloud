@@ -117,7 +117,9 @@ function mergeFalseBreaks(parts: string[]): string[] {
   return out;
 }
 
-function shouldMerge(previous: string, next: string): boolean {
+/** Also used by the cloud voice to split a passage without cutting inside a
+ *  sentence, so the two agree on where one ends. */
+export function shouldMerge(previous: string, next: string): boolean {
   const left = previous.trimEnd();
   const right = next.trimStart();
   if (!left || !right) return false;
