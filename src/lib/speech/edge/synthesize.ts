@@ -173,6 +173,9 @@ function openOne(endpoint: EdgeEndpoint): Promise<WebSocket> {
     };
     const onUnexpected = (_request: unknown, response: { statusCode?: number }) => {
       detach();
+      // ws leaves aborting the handshake to whoever listens for this event;
+      // without it every refused handshake held its connection open.
+      socket.terminate();
       reject(
         new EdgeSynthesisError(
           `The voice service refused the request (HTTP ${response.statusCode}).`,
@@ -231,12 +234,20 @@ interface RawBoundary {
  * the cursor where it is, so the highlight holds rather than jumping somewhere
  * wrong, and catches up on the next word that does match.
  */
+function unescapeXml(text: string): string {
+  return text.replace(/&(amp|lt|gt|quot|apos);/g, (_, name: string) =>
+    ({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" })[name] ?? "",
+  );
+}
+
 function mapToCharIndices(text: string, boundaries: RawBoundary[]): TimedWord[] {
   const words: TimedWord[] = [];
   let cursor = 0;
 
   for (const boundary of boundaries) {
-    const spoken = boundary.text?.Text ?? "";
+    // Edge reports the word as it appeared in the SSML, still escaped, so
+    // "AT&T" arrives as "AT&amp;T" and would never be found in the text.
+    const spoken = unescapeXml(boundary.text?.Text ?? "");
     let charIndex = cursor;
     let charLength = spoken.length;
 
@@ -303,8 +314,15 @@ function synthesizeTurn(
   rate: number,
   timeoutMs: number,
   fresh: boolean,
+  signal: AbortSignal,
 ): Promise<Synthesis> {
   return new Promise<Synthesis>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new EdgeSynthesisError("Another part of the passage failed."));
+      return;
+    }
+    const onAbort = () => finish(new EdgeSynthesisError("Another part of the passage failed."));
+    signal.addEventListener("abort", onAbort, { once: true });
     let socket: WebSocket | undefined;
     let settled = false;
     const chunks: Buffer[] = [];
@@ -323,6 +341,7 @@ function synthesizeTurn(
       settled = true;
       clearTimeout(timer);
       clearTimeout(stall);
+      signal.removeEventListener("abort", onAbort);
       if (socket) {
         socket.off("error", onError);
         socket.off("close", onClose);
@@ -411,30 +430,53 @@ export interface PieceRange {
 }
 
 /** Where a sentence may end: terminal punctuation, any closing quotes or
- *  brackets, then whitespace. */
-const SENTENCE_END = /[.!?…]["'”’)\]]*\s+/g;
+ *  brackets, then whitespace; or a paragraph break, which is how the reader
+ *  joins paragraphs whatever they end in. */
+const SENTENCE_END = /[.!?\u2026]["'\u201d\u2019)\]]*\s+|\n\s*\n\s*/g;
+/** Where a run with no sentence end may be cut instead: verse, lists and
+ *  PDF lines often end in a comma or nothing at all. */
+const CLAUSE_END = /[,;:]\s+/g;
+/** About twenty seconds of speech, which one connection renders well inside
+ *  the deadline; only a run longer than this is worth a clause cut. */
+const CLAUSE_CUT_CHARS = 300;
+
+/** Greedy cuts at `pattern`, each piece at least `target` long. */
+function cutAt(text: string, start: number, end: number, pattern: RegExp, target: number, guard: boolean): PieceRange[] {
+  const pieces: PieceRange[] = [];
+  const span = text.slice(0, end);
+  pattern.lastIndex = start;
+  let from = start;
+  for (let match = pattern.exec(span); match; match = pattern.exec(span)) {
+    const cut = match.index + match[0].trimEnd().length;
+    const next = match.index + match[0].length;
+    if (cut - from < target || next >= end) continue;
+    if (guard && !match[0].includes("\n") && shouldMerge(text.slice(from, cut), text.slice(next))) continue;
+    pieces.push({ start: from, end: cut });
+    from = next;
+  }
+  pieces.push({ start: from, end });
+  return pieces;
+}
 
 /**
  * Cuts a passage into pieces at sentence ends, each about `length / maxPieces`
  * long, so a short passage goes out a sentence per piece and a long one in
- * about `maxPieces`. A
- * sentence is never split, however long: a piece that ends mid-sentence
- * would be read with a full stop's fall in the middle of it.
+ * about `maxPieces`. A sentence is not split, since a piece that ends
+ * mid-sentence is read with a full stop's fall in the middle of it, unless
+ * it is more than twice the target and longer than `CLAUSE_CUT_CHARS`: then it is cut at a comma or semicolon,
+ * because one connection for a whole unpunctuated stanza is the timeout the
+ * pieces exist to avoid.
  */
 export function splitPassage(text: string, maxPieces = MAX_PARALLEL_TURNS): PieceRange[] {
+  const end = text.trimEnd().length;
   const target = Math.ceil(text.length / maxPieces);
-  const pieces: PieceRange[] = [];
-  let start = 0;
-  for (const match of text.matchAll(SENTENCE_END)) {
-    const end = match.index + match[0].trimEnd().length;
-    const next = match.index + match[0].length;
-    if (end - start >= target && next < text.length && !shouldMerge(text.slice(start, end), text.slice(next))) {
-      pieces.push({ start, end });
-      start = next;
-    }
-  }
-  if (start < text.length) pieces.push({ start, end: text.trimEnd().length });
-  return pieces.filter((piece) => piece.end > piece.start);
+  return cutAt(text, 0, end, SENTENCE_END, target, true)
+    .flatMap((piece) =>
+      piece.end - piece.start > Math.max(target * 2, CLAUSE_CUT_CHARS)
+        ? cutAt(text, piece.start, piece.end, CLAUSE_END, target, false)
+        : [piece],
+    )
+    .filter((piece) => piece.end > piece.start);
 }
 
 /** Puts the pieces' audio end to end and moves each word onto the passage:
@@ -458,20 +500,36 @@ export function joinPieces(pieces: { range: PieceRange; synthesis: Synthesis }[]
 
 /** A piece that fails is tried once more on a new connection, since the
  *  usual cause is a pooled socket the far end had dropped. */
-async function synthesizePiece(text: string, voice: string, rate: number, deadline: number): Promise<Synthesis> {
+async function synthesizePiece(
+  text: string,
+  voice: string,
+  rate: number,
+  deadline: number,
+  signal: AbortSignal,
+): Promise<Synthesis> {
   try {
-    return await synthesizeTurn(text, voice, rate, deadline - Date.now(), false);
+    return await synthesizeTurn(text, voice, rate, deadline - Date.now(), false, signal);
   } catch (error) {
-    if (deadline - Date.now() < STALL_MS) throw error;
-    return synthesizeTurn(text, voice, rate, deadline - Date.now(), true);
+    if (signal.aborted || deadline - Date.now() < STALL_MS) throw error;
+    return synthesizeTurn(text, voice, rate, deadline - Date.now(), true, signal);
   }
 }
 
 export async function synthesize(text: string, voice: string, rate: number): Promise<Synthesis> {
   const deadline = Date.now() + TIMEOUT_MS;
   const ranges = splitPassage(text);
-  const results = await Promise.all(
-    ranges.map((range) => synthesizePiece(text.slice(range.start, range.end), voice, rate, deadline)),
-  );
-  return joinPieces(ranges.map((range, i) => ({ range, synthesis: results[i] })));
+  // The passage fails as a whole when one piece does, so the others are
+  // stopped rather than left holding their sockets until the deadline.
+  const controller = new AbortController();
+  try {
+    const results = await Promise.all(
+      ranges.map((range) =>
+        synthesizePiece(text.slice(range.start, range.end), voice, rate, deadline, controller.signal),
+      ),
+    );
+    return joinPieces(ranges.map((range, i) => ({ range, synthesis: results[i] })));
+  } catch (error) {
+    controller.abort();
+    throw error;
+  }
 }

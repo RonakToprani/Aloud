@@ -75,7 +75,9 @@ async function fetchVoiceList(): Promise<EdgeVoice[]> {
   for (const endpoint of edgeEndpoints()) {
     let response: Response;
     try {
-      response = await fetch(voicesUrl(endpoint), { headers: edgeHeaders() });
+      // A host that accepts and never answers would otherwise hold the
+      // route until the platform kills it, never trying the next one.
+      response = await fetch(voicesUrl(endpoint), { headers: edgeHeaders(), signal: AbortSignal.timeout(8000) });
     } catch (error) {
       lastStatus = error instanceof Error ? error.message : String(error);
       continue;

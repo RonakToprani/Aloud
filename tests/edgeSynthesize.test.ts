@@ -43,8 +43,8 @@ test("a title or an initial is not taken for the end of a sentence", () => {
   ]);
 });
 
-test("a sentence longer than any piece is kept whole", () => {
-  const text = "a, ".repeat(200) + "end.";
+test("a sentence longer than any piece is kept whole when it has nowhere to cut", () => {
+  const text = "and on ".repeat(80) + "end.";
   assert.deepEqual(splitPassage(text, 6), [{ start: 0, end: text.length }]);
 });
 
@@ -75,4 +75,20 @@ test("joined pieces shift words by the audio and the text before them", () => {
       [11, 300, 5],
     ],
   );
+});
+
+test("paragraphs are cut even when they end without a full stop", () => {
+  const text = "Once upon a midnight dreary, while I pondered\n\nOver many a quaint and curious volume\n\nWhile I nodded, nearly napping";
+  assert.deepEqual(pieceTexts(text, 6), [
+    "Once upon a midnight dreary, while I pondered",
+    "Over many a quaint and curious volume",
+    "While I nodded, nearly napping",
+  ]);
+});
+
+test("a run with no sentence end is cut at commas once it is far too long", () => {
+  const text = Array.from({ length: 40 }, (_, i) => `line ${i} of the stanza`).join(", ");
+  const pieces = splitPassage(text, 6);
+  assert.ok(pieces.length >= 5, `${pieces.length} pieces`);
+  for (const piece of pieces.slice(0, -1)) assert.ok(text.slice(piece.start, piece.end).endsWith(","));
 });
