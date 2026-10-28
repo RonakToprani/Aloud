@@ -380,7 +380,11 @@ function extractBlocks(root: Element, basePath: string): Extracted {
       if (BLOCK_TAGS.has(tag) || CONTAINER_TAGS.has(tag)) {
         flush();
         note(element);
-        if (element.querySelector(BLOCK_SELECTOR)) {
+        // An illustration inside a paragraph or div, the way Calibre and
+        // Gutenberg wrap them, is walked so it becomes an image block;
+        // flattened, the image was dropped as markup.
+        const holdsImage = !/^H[1-6]$/.test(tag) && findImage(element) !== null;
+        if (element.querySelector(BLOCK_SELECTOR) || holdsImage) {
           walk(element);
         } else if (
           CONTAINER_TAGS.has(tag) &&
@@ -390,6 +394,10 @@ function extractBlocks(root: Element, basePath: string): Extracted {
           // becomes its own block rather than one run of glued text.
           walk(element);
         } else {
+          // Gutenberg's contents link to an anchor inside the heading,
+          // <h2><a id="link2HCH0002"/>...</h2>; unregistered, every chapter
+          // after the first in that file vanished from Contents.
+          for (const inner of Array.from(element.querySelectorAll("[id],[name]"))) note(inner);
           const both = flatTextBoth(element);
           const text = clean(both.text);
           if (text) {
@@ -764,12 +772,25 @@ export async function parseEpub(
         ? pageTitle
         : null;
 
+    // The file's contents title belongs to its opening only when an entry
+    // points at the top of the file. When every entry points at an anchor
+    // further down, what comes before the first is the end of the previous
+    // chapter: titled with the next chapter's name, that title was read
+    // over the wrong text and then again where it belonged.
+    const titlesOpening = tocEntries.some(
+      (e) => e.path === entry.path && (!e.id || (extracted.anchors.get(e.id) ?? 0) === 0),
+    );
     const bounds = [0, ...points.map((p) => p.index), blocks.length];
     for (let seg = 0; seg + 1 < bounds.length; seg++) {
       let part = blocks.slice(bounds[seg], bounds[seg + 1]);
       if (!part.length) continue;
       const heading = /^h[1-3]$/.test(part[0].kind) ? part[0].text : null;
-      const named = seg === 0 ? (tocTitle ?? null) : points[seg - 1].title;
+      const tail = chapters[chapters.length - 1];
+      if (seg === 0 && points.length && !titlesOpening && !heading && tail) {
+        tail.blocks.push(...part);
+        continue;
+      }
+      const named = seg === 0 ? (titlesOpening ? (tocTitle ?? null) : null) : points[seg - 1].title;
       const chapterTitle = named ?? heading ?? (seg === 0 ? fallbackTitle : null) ?? `Chapter ${chapters.length + 1}`;
       // Not read twice when the title already names it. Its speakable form
       // (a roman numeral read as a word) moves with it to the synthesised
