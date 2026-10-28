@@ -41,11 +41,22 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL).then((cache) => cache.put(request, copy)).catch(() => {});
+          // Only a good page is kept: one 502 from the host would otherwise
+          // replace the shell and be what every offline open showed.
+          if (response.ok && response.type === "basic") {
+            const copy = response.clone();
+            caches.open(SHELL).then((cache) => cache.put(request, copy)).catch(() => {});
+          }
           return response;
         })
-        .catch(async () => (await caches.match(request)) ?? (await caches.match("/")) ?? Response.error()),
+        .catch(async () => {
+          const page = await caches.match(request);
+          if (page) return page;
+          // Another page's HTML would hydrate as that page, so a page never
+          // seen goes to the library instead of being served the library.
+          if (url.pathname !== "/" && (await caches.match("/"))) return Response.redirect("/", 302);
+          return (await caches.match("/")) ?? Response.error();
+        }),
     );
     return;
   }
