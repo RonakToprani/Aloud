@@ -14,6 +14,7 @@ import { Player, type PlayerState } from "@/lib/player/player";
 import { peekAutoplay, takeAutoplay } from "@/lib/library/autoplay";
 import { bookFraction } from "@/lib/library/progress";
 import { deleteBookmark, getBookBody, getBookMeta, listBookmarks, putBookmark } from "@/lib/storage/db";
+import { makeId } from "@/lib/library/import";
 import { hasChosenVoice, loadPosition, markVoiceChosen, savePosition } from "@/lib/storage/prefs";
 import { useListeningClock } from "@/lib/sync/listening";
 import {
@@ -166,6 +167,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
   const finishedRef = useRef<HTMLDivElement>(null);
   /** Where another device left off, if newer than this one. */
   const [remotePosition, setRemotePosition] = useState<Position | null>(null);
+  /** Counts returns to the tab, so the account is asked again on each. */
+  const [wake, setWake] = useState(0);
 
   const playerRef = useRef<Player | null>(null);
   const segmentCache = useRef(new Map<number, SegmentedChapter>());
@@ -289,7 +292,7 @@ export function ReaderView({ bookId }: { bookId: string }) {
     return () => {
       alive = false;
     };
-  }, [book, bookId, userId, authEpoch]);
+  }, [book, bookId, userId, authEpoch, wake]);
 
   // A newer place from another device moves the cursor — but only while
   // nothing is playing here, and never once the reader has started.
@@ -413,6 +416,24 @@ export function ReaderView({ bookId }: { bookId: string }) {
     const persist = () => {
       if (!loaded.current) return;
       const state = stateRef.current;
+      const stored = loadPosition(bookId);
+      // A place the reader has not moved from keeps the time it was reached.
+      // Restamping it made an idle device the newest on the account: a laptop
+      // left open at chapter 2 overwrote chapter 9 from the phone the moment
+      // its lid closed, and the phone then adopted chapter 2.
+      const unmoved =
+        stored?.chapterIndex === state.chapterIndex &&
+        stored.sentenceIndex === state.sentenceIndex &&
+        stored.wordIndex === state.wordIndex;
+      const pending = pushTimer.current !== null;
+      if (pushTimer.current) {
+        clearTimeout(pushTimer.current);
+        pushTimer.current = null;
+      }
+      if (unmoved && stored) {
+        if (pending) pushPositionNow(bookId, stored, userIdRef.current);
+        return;
+      }
       const position = {
         chapterIndex: state.chapterIndex,
         sentenceIndex: state.sentenceIndex,
@@ -420,18 +441,20 @@ export function ReaderView({ bookId }: { bookId: string }) {
         updatedAt: Date.now(),
       };
       savePosition(bookId, position);
-      if (pushTimer.current) {
-        clearTimeout(pushTimer.current);
-        pushTimer.current = null;
-      }
       pushPositionNow(bookId, position, userIdRef.current);
     };
+    // Coming back to the tab is the moment another device may have moved on,
+    // so the account is asked again; leaving it is the moment to save.
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") persist();
+      else setWake((count) => count + 1);
+    };
     window.addEventListener("pagehide", persist);
-    document.addEventListener("visibilitychange", persist);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       persist();
       window.removeEventListener("pagehide", persist);
-      document.removeEventListener("visibilitychange", persist);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [bookId]);
 
@@ -667,7 +690,8 @@ export function ReaderView({ bookId }: { bookId: string }) {
       }
 
       const mark: Bookmark = {
-        id: `${chapterIndex}-${sentenceIndex}-${Date.now()}`,
+        // Bookmark ids are unique across every account, not just this one.
+        id: makeId(),
         bookId,
         chapterIndex,
         sentenceIndex,
@@ -1008,7 +1032,14 @@ export function ReaderView({ bookId }: { bookId: string }) {
         bookmarks={bookmarks}
         onBookmark={(mark) => {
           setSheet(null);
-          playerRef.current?.seek(mark.chapterIndex, mark.sentenceIndex, 0);
+          // While playing, a seek alone moved the cursor under the sentence
+          // already sounding; when it ended the player advanced past the
+          // bookmark, so the bookmarked sentence was never read.
+          if (stateRef.current.status === "playing") {
+            playerRef.current?.playFrom(mark.chapterIndex, mark.sentenceIndex, 0);
+          } else {
+            playerRef.current?.seek(mark.chapterIndex, mark.sentenceIndex, 0);
+          }
         }}
         onDeleteBookmark={onDeleteBookmark}
       />

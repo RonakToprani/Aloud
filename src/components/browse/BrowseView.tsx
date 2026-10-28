@@ -17,7 +17,7 @@ import {
   type Genre,
 } from "@/lib/gutenberg/catalogue";
 import { requestAutoplay } from "@/lib/library/autoplay";
-import { addGutenbergBook } from "@/lib/library/gutenberg";
+import { addGutenbergBook, rememberedGutenbergBook } from "@/lib/library/gutenberg";
 import { describeImportError, type ImportProgress } from "@/lib/library/import";
 import { listBooks } from "@/lib/storage/db";
 import { pushBooks } from "@/lib/sync/remote";
@@ -225,7 +225,7 @@ export function BrowseView() {
       setAddError(null);
       setProgress({ stage: "reading", fraction: 0 });
       try {
-        const meta = await addGutenbergBook(book, setProgress);
+        const meta = await addGutenbergBook(book, setProgress, rememberedGutenbergBook(book.id));
         setShelf((current) => new Map(current).set(book.id, meta));
         await ensureAccount();
         void pushBooks([meta]).catch(() => {});

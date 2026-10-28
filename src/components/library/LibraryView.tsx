@@ -206,7 +206,16 @@ export function LibraryView() {
   // in each of them. The library never waits on this — it paints from local
   // storage first and adjusts when the answer comes back.
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      // Signed out: the account's books are not this person's to see. On a
+      // shared machine they were the last reader's titles, and importing a
+      // file that matched one adopted an id the next account cannot write.
+      if (authStatus === "signed-out") {
+        setRemoteBooks([]);
+        writeRemoteCache([]);
+      }
+      return;
+    }
     let alive = true;
     (async () => {
       const [remote, positions, local] = await Promise.all([
@@ -247,7 +256,7 @@ export function LibraryView() {
     return () => {
       alive = false;
     };
-  }, [userId, epoch]);
+  }, [userId, epoch, authStatus]);
 
   // Anything still pending when the page closes is committed for real.
   useEffect(() => {

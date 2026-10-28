@@ -32,6 +32,27 @@ export async function findGutenbergBook(id: number): Promise<BookMeta | undefine
  * anywhere. The account learns the title, as it does for every book, and
  * nothing else. Asking for a book already on the shelf hands back that copy.
  */
+/** The account's own entry for this Gutenberg book, from the shelf's cache
+ *  of books it knows and this device lacks (`aloud.remoteBooks.v1`). Adding
+ *  the book from Browse adopts it, so the saved place lines up and the shelf
+ *  does not show the book twice, once greyed out. */
+export function rememberedGutenbergBook(gutenbergId: number): Pick<ImportOptions, "id" | "addedAt"> | undefined {
+  try {
+    const cached = JSON.parse(localStorage.getItem("aloud.remoteBooks.v1") ?? "[]") as {
+      id?: unknown;
+      addedAt?: unknown;
+      gutenbergId?: unknown;
+    }[];
+    const match = Array.isArray(cached) ? cached.find((book) => book?.gutenbergId === gutenbergId) : undefined;
+    if (match && typeof match.id === "string" && typeof match.addedAt === "number") {
+      return { id: match.id, addedAt: match.addedAt };
+    }
+  } catch {
+    /* no cache, or private browsing: a new entry, as before */
+  }
+  return undefined;
+}
+
 export async function addGutenbergBook(
   book: GutenbergRef,
   onProgress?: (progress: ImportProgress) => void,

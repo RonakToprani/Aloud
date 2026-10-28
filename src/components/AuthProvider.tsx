@@ -45,6 +45,36 @@ export function signInRedirect(): string {
   return `${window.location.origin}/signin/done`;
 }
 
+/** The anonymous account's claim, held while the reader signs in. See
+ *  `20261028000000_claim_anonymous.sql`: without it everything done before
+ *  signing in stays on an account the reader can never reach again. */
+const CLAIM_KEY = "aloud.claim.v1";
+
+function readClaim(): string | null {
+  try {
+    return localStorage.getItem(CLAIM_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeClaim(claim: string | null): void {
+  try {
+    if (claim) localStorage.setItem(CLAIM_KEY, claim);
+    else localStorage.removeItem(CLAIM_KEY);
+  } catch {
+    /* private browsing: the books stay on the anonymous account */
+  }
+}
+
+/** Taken while still anonymous, before the session is replaced. */
+async function prepareClaim(session: Session | null): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !session?.user.is_anonymous) return;
+  const { data, error } = await supabase.rpc("issue_account_claim");
+  if (!error && typeof data === "string") writeClaim(data);
+}
+
 function describe(error: { message?: string } | null | undefined): string | null {
   if (!error) return null;
   const message = error.message ?? "";
@@ -75,6 +105,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (uid !== lastUserId.current) {
         lastUserId.current = uid;
         setEpoch((e) => e + 1);
+        const claim = readClaim();
+        if (claim && next && !next.user.is_anonymous) {
+          const supabase = getSupabase();
+          void Promise.resolve(supabase?.rpc("redeem_account_claim", { claim }))
+            .then((result) => {
+              // A network failure keeps the claim for the next load; an answer,
+              // even "nothing to move", spends it.
+              if (result && !result.error) writeClaim(null);
+              // The books now belong to this account, so sync runs again and
+              // finds them.
+              if (alive) setEpoch((e) => e + 1);
+            })
+            .catch(() => {});
+        }
       }
       if (!next) {
         setStatus("signed-out");
@@ -124,12 +168,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sendLink = useCallback(async (email: string) => {
     const supabase = getSupabase();
     if (!supabase) return { error: "Sign-in isn't available in this build." };
+    await prepareClaim(session).catch(() => {});
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: signInRedirect(), shouldCreateUser: true },
     });
     return { error: describe(error) };
-  }, []);
+  }, [session]);
 
   const verifyCode = useCallback(async (email: string, code: string) => {
     const supabase = getSupabase();
@@ -141,12 +186,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWith = useCallback(async (provider: OAuthProviderId) => {
     const supabase = getSupabase();
     if (!supabase) return { error: "Sign-in isn't available in this build." };
+    await prepareClaim(session).catch(() => {});
     const { error } = await supabase.auth.signInWithOAuth({
       provider: provider as Provider,
       options: { redirectTo: signInRedirect() },
     });
     return { error: describe(error) };
-  }, []);
+  }, [session]);
 
   const signOut = useCallback(async () => {
     const supabase = getSupabase();

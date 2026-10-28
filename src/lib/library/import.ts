@@ -20,7 +20,7 @@ export interface ImportProgress {
   fraction: number;
 }
 
-function makeId(): string {
+export function makeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `book-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -261,6 +261,11 @@ export async function importFile(
  *  and reading it as UTF-8 turns every accent into a replacement mark. */
 async function decodeText(file: File): Promise<string> {
   const bytes = await file.arrayBuffer();
+  // Notepad's "Unicode" is UTF-16 with a byte order mark; read as anything
+  // else it is every letter followed by a null.
+  const head = new Uint8Array(bytes, 0, Math.min(2, bytes.byteLength));
+  if (head[0] === 0xff && head[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (head[0] === 0xfe && head[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
@@ -285,7 +290,10 @@ function stripMarkdown(text: string): string {
 function extractText(body: HTMLElement | null): string {
   if (!body) return "";
   for (const el of Array.from(body.querySelectorAll("script,style,nav,header,footer,noscript"))) el.remove();
-  const blocks = Array.from(body.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li,blockquote,pre"));
+  const matched = Array.from(body.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li,blockquote,pre"));
+  // A quote or list item holding its own <p> matched twice, and was read
+  // twice; only the outermost of a nested pair is kept.
+  const blocks = matched.filter((el) => !matched.some((outer) => outer !== el && outer.contains(el)));
   const parts = (blocks.length ? blocks : [body]).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()).filter(Boolean);
   return parts.join("\n\n");
 }

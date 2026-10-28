@@ -121,6 +121,15 @@ abandoned and the piece retried on a fresh socket. Measure with a laptop
 that cannot sleep (`caffeinate -i`): timers stop in sleep and a request
 appears to take a quarter of an hour.
 
+**A held passage that does not contain the sentence being offered is
+stale.** The player offers from the sentence about to be read, so when no
+passage playing, ready or in flight holds it, the reader has moved (a tapped
+word, Contents, a bookmark) and `prepare()` abandons them all. Kept, they
+matched nothing again and the one-ahead guard refused every new passage:
+each sentence after a seek waited for its own request. Passages also carry
+the voice and rate they were made with, and a mismatch abandons them, or a
+change of either kept the old one playing for two passages.
+
 **The endpoint rejects SSML `<break>`.** Identical text returns 200 without it
 and 502 with it. Pauses come from punctuation and from where passages end,
 which is why passages end at paragraph breaks.
@@ -268,6 +277,16 @@ called "Selected Poems" apart. No length on either side is no evidence and so
 no match, and two candidates that fit equally well is a coin toss, so neither
 wins. Only books with no text on this device are candidates at all: adopting
 the id of one already here would replace text the reader is part way through.
+
+**Signing in moves the anonymous account's rows across.** The email code,
+magic link and OAuth all sign in as a new user, never converting the
+anonymous one, and because book ids are global the real account could not
+write those books at all. `AuthProvider` takes a claim
+(`issue_account_claim`, stored as `aloud.claim.v1`) while still anonymous
+and redeems it (`redeem_account_claim`) once the session is real, which
+moves books, places, bookmarks and sessions. Both functions are in
+`20261028000000_claim_anonymous.sql`; without the migration the calls fail
+quietly and the app behaves as before.
 
 **Book ids are global.** `books.id` and `reading_positions.book_id` are
 primary keys across all users, so two users sharing an id means the second is
