@@ -8,6 +8,7 @@ const good = {
   institution: "Example University",
   role: "Disability or accessibility services",
   size: "10,000 to 30,000",
+  current: "Kurzweil 3000",
   message: "  We use two tools today.\nNeither reads PDFs well.  ",
 };
 
@@ -41,6 +42,7 @@ test("each required answer is asked for by name", () => {
   assert.ok(!parseInterest({ ...good, email: "sam@localhost" }).ok);
   assert.ok(!parseInterest({ ...good, role: "Dean of everything" }).ok);
   assert.ok(!parseInterest({ ...good, size: "a million" }).ok);
+  assert.ok(!parseInterest({ ...good, current: "JAWS" }).ok);
   assert.ok(!parseInterest(null).ok);
 });
 
@@ -61,4 +63,5 @@ test("the notification escapes what was typed", () => {
   assert.equal(note.subject, "Education interest: <script>x</script> College");
   assert.ok(!note.html.includes("<script>"));
   assert.ok(note.text.includes("Role: Disability or accessibility services"));
+  assert.ok(note.text.includes("Uses today: Kurzweil 3000"));
 });

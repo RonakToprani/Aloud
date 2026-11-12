@@ -79,6 +79,38 @@ export function EducationView() {
           </div>
         </section>
 
+        <section className={styles.section} aria-labelledby="coming">
+          <h2 id="coming" className={styles.heading}>
+            What we build with our partner schools
+          </h2>
+          <p className={styles.sectionLede}>
+            Aloud for Education grows with the schools that join first. The first list comes with the pilot. The
+            second we build with you, on a timeline we agree together.
+          </p>
+          <div className={styles.columns}>
+            <div className={styles.column}>
+              <h3 className={styles.columnTitle}>Included in the pilot</h3>
+              <ul className={styles.checks}>
+                <li>Scanned PDFs and photos of pages read aloud, with text recognition</li>
+                <li>Any reading saved as an MP3 to listen to on the go</li>
+                <li>Definitions, pronunciation and translation for any word</li>
+                <li>Highlights and notes, gathered into study notes they can export</li>
+                <li>A reading ruler and screen mask for focus</li>
+              </ul>
+            </div>
+            <div className={styles.column}>
+              <h3 className={styles.columnTitle}>Built with you</h3>
+              <ul className={styles.checks}>
+                <li>Reading inside Google Docs, Word, Canvas, Brightspace and Moodle</li>
+                <li>Word, DAISY and e-textbook files, including your office&apos;s alternate formats</li>
+                <li>A test mode that limits the tools to the ones an exam allows</li>
+                <li>Dictation and word prediction for writing</li>
+                <li>Math read aloud from MathML and LaTeX</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
         <section className={styles.section} aria-labelledby="offices">
           <h2 id="offices" className={styles.heading}>
             For accessibility offices and IT
@@ -93,12 +125,22 @@ export function EducationView() {
               extension can be pushed to managed Chrome browsers from your admin console.
             </li>
             <li>
+              <strong>Campus sign-in and an admin console.</strong> Students sign in with their school account
+              through SAML, Google or Microsoft. Your office sees seats and usage, so a renewal is easy to make the
+              case for.
+            </li>
+            <li>
+              <strong>Ready for procurement.</strong> An accessibility conformance report (VPAT) and a signed data
+              agreement covering FERPA in the US, and PIPEDA and provincial privacy law in Canada. Canadian data
+              hosting is available on request.
+            </li>
+            <li>
               <strong>Narrow permissions.</strong> The extension can see a page only after the student presses its
               button on that page, and not before.
             </li>
             <li>
               <strong>Private by design.</strong> A student&apos;s files stay on their own device. Only the text
-              being spoken is sent to be voiced, and it is not kept. Reading works without an account.
+              being spoken is sent to be voiced, and it is not kept.
             </li>
             <li>
               <strong>A direct line to the people who build it.</strong> Help with rollout and training, and a say

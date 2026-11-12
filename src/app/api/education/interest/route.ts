@@ -42,6 +42,7 @@ async function store(interest: Interest, userAgent: string | null): Promise<bool
         p_institution: interest.institution,
         p_role: interest.role,
         p_size: interest.size,
+        p_current_tool: interest.current,
         p_message: interest.message,
         p_user_agent: userAgent?.slice(0, 300) ?? null,
       }),

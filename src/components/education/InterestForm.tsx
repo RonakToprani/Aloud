@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ROLES, SIZES } from "@/lib/education/interest";
+import { CURRENT, ROLES, SIZES } from "@/lib/education/interest";
 import styles from "./Education.module.css";
 
 type State = { kind: "idle" } | { kind: "sending" } | { kind: "sent" } | { kind: "error"; message: string };
@@ -78,13 +78,24 @@ export function InterestForm() {
       </div>
       <label className={styles.field}>
         <span>
+          What do students use today? <span className={styles.optional}>(optional)</span>
+        </span>
+        <select name="current" defaultValue="">
+          <option value="">Choose one</option>
+          {CURRENT.map((tool) => (
+            <option key={tool}>{tool}</option>
+          ))}
+        </select>
+      </label>
+      <label className={styles.field}>
+        <span>
           Anything we should know? <span className={styles.optional}>(optional)</span>
         </span>
         <textarea
           name="message"
           rows={4}
           maxLength={2000}
-          placeholder="What your students read, what you use today, when you'd want to start"
+          placeholder="What your students read, what is missing today, when you'd want to start"
         />
       </label>
       {/* Hidden from people and from screen readers; only a bot fills it. */}

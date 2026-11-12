@@ -392,3 +392,56 @@
     transition: none;
   }
 }
+
+.sectionLede {
+  margin: -8px 0 22px;
+  max-width: 40em;
+  color: var(--ink-dim);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.column {
+  padding: 20px 22px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--hairline-soft);
+}
+
+.columnTitle {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+
+.checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--ink-dim);
+}
+
+/* The reading pill again, small: each promise marked the way a word is lit. */
+.checks li {
+  position: relative;
+  padding-left: 22px;
+}
+
+.checks li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 12px;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--word);
+}

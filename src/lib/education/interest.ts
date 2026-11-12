@@ -15,12 +15,16 @@ export const ROLES = [
 
 export const SIZES = ["Under 1,000", "1,000 to 10,000", "10,000 to 30,000", "Over 30,000", "Not sure"] as const;
 
+/** What the school reads with today, so we know whose renewal we are up against. */
+export const CURRENT = ["Kurzweil 3000", "Read&Write", "Both", "Something else", "Nothing yet", "Not sure"] as const;
+
 export interface Interest {
   name: string;
   email: string;
   institution: string;
   role: (typeof ROLES)[number];
   size: (typeof SIZES)[number] | null;
+  current: (typeof CURRENT)[number] | null;
   message: string | null;
 }
 
@@ -49,6 +53,7 @@ export function parseInterest(body: unknown): Parsed {
   const institution = text(raw.institution);
   const role = text(raw.role);
   const size = text(raw.size);
+  const current = text(raw.current);
   // Line breaks are kept in a message; only its ends are trimmed.
   const message = typeof raw.message === "string" ? raw.message.trim() : "";
 
@@ -57,6 +62,7 @@ export function parseInterest(body: unknown): Parsed {
   if (!institution) return { ok: false, error: "Please add your school or institution." };
   if (!(ROLES as readonly string[]).includes(role)) return { ok: false, error: "Please choose your role." };
   if (size && !(SIZES as readonly string[]).includes(size)) return { ok: false, error: "Please choose a size from the list." };
+  if (current && !(CURRENT as readonly string[]).includes(current)) return { ok: false, error: "Please choose a tool from the list." };
   if (
     name.length > LIMITS.name ||
     email.length > LIMITS.email ||
@@ -74,6 +80,7 @@ export function parseInterest(body: unknown): Parsed {
       institution,
       role: role as Interest["role"],
       size: size ? (size as Interest["size"]) : null,
+      current: current ? (current as Interest["current"]) : null,
       message: message || null,
     },
   };
@@ -92,6 +99,7 @@ export function notification(interest: Interest): { subject: string; text: strin
     ["Institution", interest.institution],
     ["Role", interest.role],
     ["Students", interest.size ?? "Not given"],
+    ["Uses today", interest.current ?? "Not given"],
   ];
   const message = interest.message ?? "No message.";
   return {
