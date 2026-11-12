@@ -84,27 +84,32 @@ export function EducationView() {
             What we build with our partner schools
           </h2>
           <p className={styles.sectionLede}>
-            Aloud for Education grows with the schools that join first. The first list comes with the pilot. The
-            second we build with you, on a timeline we agree together.
+            We build what saves your office time and what your students use, not a toolbar of twenty buttons. The
+            first list comes with the pilot. The second we build with partner schools, on a timeline we agree
+            together.
           </p>
           <div className={styles.columns}>
             <div className={styles.column}>
               <h3 className={styles.columnTitle}>Included in the pilot</h3>
               <ul className={styles.checks}>
-                <li>Scanned PDFs and photos of pages read aloud, with text recognition</li>
+                <li>
+                  Scanned PDFs and photos of pages read aloud the moment a student opens them, with no wait for
+                  conversion
+                </li>
+                <li>Course folders your office fills with readings and shares with the students who need them</li>
+                <li>A test mode for exam centres that limits the tools to the ones an exam allows</li>
                 <li>Any reading saved as an MP3 to listen to on the go</li>
-                <li>Definitions, pronunciation and translation for any word</li>
-                <li>Highlights and notes, gathered into study notes they can export</li>
+                <li>Voices that keep working offline, so an accommodation never goes silent</li>
                 <li>A reading ruler and screen mask for focus</li>
               </ul>
             </div>
             <div className={styles.column}>
               <h3 className={styles.columnTitle}>Built with you</h3>
               <ul className={styles.checks}>
-                <li>Reading inside Google Docs, Word, Canvas, Brightspace and Moodle</li>
+                <li>Definitions, pronunciation and translation for any word</li>
+                <li>Highlights and notes, gathered into study notes students can export</li>
                 <li>Word, DAISY and e-textbook files, including your office&apos;s alternate formats</li>
-                <li>A test mode that limits the tools to the ones an exam allows</li>
-                <li>Dictation and word prediction for writing</li>
+                <li>Aloud inside Canvas, Brightspace and Moodle</li>
                 <li>Math read aloud from MathML and LaTeX</li>
               </ul>
             </div>
@@ -130,9 +135,14 @@ export function EducationView() {
               case for.
             </li>
             <li>
-              <strong>Ready for procurement.</strong> An accessibility conformance report (VPAT) and a signed data
-              agreement covering FERPA in the US, and PIPEDA and provincial privacy law in Canada. Canadian data
-              hosting is available on request.
+              <strong>Ready for procurement.</strong> A VPAT, a completed HECVAT and a signed data agreement
+              covering FERPA in the US, and PIPEDA and provincial privacy law in Canada, ready before your review
+              starts. Canadian data hosting is available on request.
+            </li>
+            <li>
+              <strong>We move you over.</strong> We bring your converted readings across into course folders, run
+              alongside your current tool for a term at no cost, and time the switch to your renewal. Your students
+              never lose an accommodation mid-term.
             </li>
             <li>
               <strong>Narrow permissions.</strong> The extension can see a page only after the student presses its
@@ -169,7 +179,8 @@ export function EducationView() {
             <li>
               <span className={styles.stepNumber}>3</span>
               <div>
-                <strong>Early partners go first.</strong> Access before launch, and founding terms when it opens.
+                <strong>A free pilot term.</strong> Aloud runs beside what you use today, and we measure the
+                staff hours it saves.
               </div>
             </li>
           </ol>
