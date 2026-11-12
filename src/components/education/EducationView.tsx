@@ -36,7 +36,8 @@ export function EducationView() {
           <h1 className={styles.title}>Every course reading, read aloud.</h1>
           <p className={styles.lede}>
             Aloud reads PDFs, ebooks and web pages to students in a natural voice, and lights up each word as it is
-            spoken. We are opening it to schools, starting with a small group of early partners.
+            spoken. It is for every student on campus, not only the ones with an accommodation letter. We are
+            opening it to schools, starting with a small group of early partners.
           </p>
           <div className={styles.heroActions}>
             <a className={styles.primary} href="#interest">
@@ -153,6 +154,10 @@ export function EducationView() {
               being spoken is sent to be voiced, and it is not kept.
             </li>
             <li>
+              <strong>Open source.</strong> Aloud&apos;s code is public under the MIT licence, so your students are
+              never stranded by a vendor, and your security team can read every line.
+            </li>
+            <li>
               <strong>A direct line to the people who build it.</strong> Help with rollout and training, and a say
               in what we build next.
             </li>
@@ -179,8 +184,8 @@ export function EducationView() {
             <li>
               <span className={styles.stepNumber}>3</span>
               <div>
-                <strong>A free pilot term.</strong> Aloud runs beside what you use today, and we measure the
-                staff hours it saves.
+                <strong>A free pilot term.</strong> Aloud runs beside what you use today. If more of your
+                students do not use it, you owe us nothing.
               </div>
             </li>
           </ol>
