@@ -18,6 +18,11 @@ export const SIZES = ["Under 1,000", "1,000 to 10,000", "10,000 to 30,000", "Ove
 /** What the school reads with today, so we know whose renewal we are up against. */
 export const CURRENT = ["Kurzweil 3000", "Read&Write", "Both", "Something else", "Nothing yet", "Not sure"] as const;
 
+/** Buying signals. An email address says someone is curious; a renewal date
+ *  and a yes to a pilot say a school is ready to be served. */
+export const RENEWALS = ["Within 6 months", "In 6 to 12 months", "In more than a year", "We have no licence", "Not sure"] as const;
+export const PILOT = ["Yes", "Maybe", "Just exploring"] as const;
+
 export interface Interest {
   name: string;
   email: string;
@@ -25,6 +30,8 @@ export interface Interest {
   role: (typeof ROLES)[number];
   size: (typeof SIZES)[number] | null;
   current: (typeof CURRENT)[number] | null;
+  renewal: (typeof RENEWALS)[number] | null;
+  pilot: (typeof PILOT)[number] | null;
   message: string | null;
 }
 
@@ -54,6 +61,8 @@ export function parseInterest(body: unknown): Parsed {
   const role = text(raw.role);
   const size = text(raw.size);
   const current = text(raw.current);
+  const renewal = text(raw.renewal);
+  const pilot = text(raw.pilot);
   // Line breaks are kept in a message; only its ends are trimmed.
   const message = typeof raw.message === "string" ? raw.message.trim() : "";
 
@@ -63,6 +72,8 @@ export function parseInterest(body: unknown): Parsed {
   if (!(ROLES as readonly string[]).includes(role)) return { ok: false, error: "Please choose your role." };
   if (size && !(SIZES as readonly string[]).includes(size)) return { ok: false, error: "Please choose a size from the list." };
   if (current && !(CURRENT as readonly string[]).includes(current)) return { ok: false, error: "Please choose a tool from the list." };
+  if (renewal && !(RENEWALS as readonly string[]).includes(renewal)) return { ok: false, error: "Please choose a renewal time from the list." };
+  if (pilot && !(PILOT as readonly string[]).includes(pilot)) return { ok: false, error: "Please choose an answer about a pilot." };
   if (
     name.length > LIMITS.name ||
     email.length > LIMITS.email ||
@@ -81,6 +92,8 @@ export function parseInterest(body: unknown): Parsed {
       role: role as Interest["role"],
       size: size ? (size as Interest["size"]) : null,
       current: current ? (current as Interest["current"]) : null,
+      renewal: renewal ? (renewal as Interest["renewal"]) : null,
+      pilot: pilot ? (pilot as Interest["pilot"]) : null,
       message: message || null,
     },
   };
@@ -100,10 +113,12 @@ export function notification(interest: Interest): { subject: string; text: strin
     ["Role", interest.role],
     ["Students", interest.size ?? "Not given"],
     ["Uses today", interest.current ?? "Not given"],
+    ["Renews", interest.renewal ?? "Not given"],
+    ["Would pilot next term", interest.pilot ?? "Not given"],
   ];
   const message = interest.message ?? "No message.";
   return {
-    subject: `Education interest: ${interest.institution}`,
+    subject: `${interest.pilot === "Yes" ? "Ready to pilot" : "Education interest"}: ${interest.institution}`,
     text: `${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${message}\n`,
     html:
       `<p>${rows.map(([k, v]) => `<strong>${k}:</strong> ${escapeHtml(v)}`).join("<br>")}</p>` +

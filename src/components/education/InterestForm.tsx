@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CURRENT, ROLES, SIZES } from "@/lib/education/interest";
+import { CURRENT, PILOT, RENEWALS, ROLES, SIZES } from "@/lib/education/interest";
 import styles from "./Education.module.css";
 
 type State = { kind: "idle" } | { kind: "sending" } | { kind: "sent" } | { kind: "error"; message: string };
@@ -76,14 +76,38 @@ export function InterestForm() {
           </select>
         </label>
       </div>
+      <div className={styles.row}>
+        <label className={styles.field}>
+          <span>
+            What do students use today? <span className={styles.optional}>(optional)</span>
+          </span>
+          <select name="current" defaultValue="">
+            <option value="">Choose one</option>
+            {CURRENT.map((tool) => (
+              <option key={tool}>{tool}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>
+            When does that licence renew? <span className={styles.optional}>(optional)</span>
+          </span>
+          <select name="renewal" defaultValue="">
+            <option value="">Choose one</option>
+            {RENEWALS.map((when) => (
+              <option key={when}>{when}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <label className={styles.field}>
         <span>
-          What do students use today? <span className={styles.optional}>(optional)</span>
+          Would your office pilot Aloud next term? <span className={styles.optional}>(optional)</span>
         </span>
-        <select name="current" defaultValue="">
+        <select name="pilot" defaultValue="">
           <option value="">Choose one</option>
-          {CURRENT.map((tool) => (
-            <option key={tool}>{tool}</option>
+          {PILOT.map((answer) => (
+            <option key={answer}>{answer}</option>
           ))}
         </select>
       </label>

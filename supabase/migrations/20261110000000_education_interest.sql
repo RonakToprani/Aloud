@@ -11,6 +11,8 @@ create table if not exists public.education_interest (
   role text not null check (char_length(role) <= 80),
   size text check (char_length(size) <= 40),
   current_tool text check (char_length(current_tool) <= 40),
+  renewal text check (char_length(renewal) <= 40),
+  pilot text check (char_length(pilot) <= 40),
   message text check (char_length(message) <= 2000),
   user_agent text check (char_length(user_agent) <= 300)
 );
@@ -24,6 +26,8 @@ create or replace function public.submit_education_interest(
   p_role text,
   p_size text default null,
   p_current_tool text default null,
+  p_renewal text default null,
+  p_pilot text default null,
   p_message text default null,
   p_user_agent text default null
 ) returns void
@@ -31,9 +35,9 @@ language sql
 security definer
 set search_path = ''
 as $$
-  insert into public.education_interest (name, email, institution, role, size, current_tool, message, user_agent)
-  values (p_name, lower(p_email), p_institution, p_role, p_size, p_current_tool, p_message, p_user_agent);
+  insert into public.education_interest (name, email, institution, role, size, current_tool, renewal, pilot, message, user_agent)
+  values (p_name, lower(p_email), p_institution, p_role, p_size, p_current_tool, p_renewal, p_pilot, p_message, p_user_agent);
 $$;
 
-revoke all on function public.submit_education_interest(text, text, text, text, text, text, text, text) from public;
-grant execute on function public.submit_education_interest(text, text, text, text, text, text, text, text) to anon, authenticated;
+revoke all on function public.submit_education_interest(text, text, text, text, text, text, text, text, text, text) from public;
+grant execute on function public.submit_education_interest(text, text, text, text, text, text, text, text, text, text) to anon, authenticated;

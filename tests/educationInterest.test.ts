@@ -9,6 +9,8 @@ const good = {
   role: "Disability or accessibility services",
   size: "10,000 to 30,000",
   current: "Kurzweil 3000",
+  renewal: "In 6 to 12 months",
+  pilot: "Yes",
   message: "  We use two tools today.\nNeither reads PDFs well.  ",
 };
 
@@ -43,6 +45,8 @@ test("each required answer is asked for by name", () => {
   assert.ok(!parseInterest({ ...good, role: "Dean of everything" }).ok);
   assert.ok(!parseInterest({ ...good, size: "a million" }).ok);
   assert.ok(!parseInterest({ ...good, current: "JAWS" }).ok);
+  assert.ok(!parseInterest({ ...good, renewal: "Tomorrow" }).ok);
+  assert.ok(!parseInterest({ ...good, pilot: "Definitely" }).ok);
   assert.ok(!parseInterest(null).ok);
 });
 
@@ -60,8 +64,10 @@ test("the notification escapes what was typed", () => {
   const parsed = parseInterest({ ...good, institution: "<script>x</script> College" });
   assert.ok(parsed.ok);
   const note = notification(parsed.interest);
-  assert.equal(note.subject, "Education interest: <script>x</script> College");
+  assert.equal(note.subject, "Ready to pilot: <script>x</script> College");
   assert.ok(!note.html.includes("<script>"));
   assert.ok(note.text.includes("Role: Disability or accessibility services"));
   assert.ok(note.text.includes("Uses today: Kurzweil 3000"));
+  assert.ok(note.text.includes("Renews: In 6 to 12 months"));
+  assert.equal(notification({ ...parsed.interest, pilot: "Maybe" }).subject.startsWith("Education interest:"), true);
 });

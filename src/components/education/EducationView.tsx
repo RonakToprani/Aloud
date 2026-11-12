@@ -97,6 +97,7 @@ export function EducationView() {
                   Scanned PDFs and photos of pages read aloud the moment a student opens them, with no wait for
                   conversion
                 </li>
+                <li>A Listen button beside every reading in Brightspace, so there is no new app for students to adopt</li>
                 <li>Course folders your office fills with readings and shares with the students who need them</li>
                 <li>A test mode for exam centres that limits the tools to the ones an exam allows</li>
                 <li>Any reading saved as an MP3 to listen to on the go</li>
@@ -110,7 +111,7 @@ export function EducationView() {
                 <li>Definitions, pronunciation and translation for any word</li>
                 <li>Highlights and notes, gathered into study notes students can export</li>
                 <li>Word, DAISY and e-textbook files, including your office&apos;s alternate formats</li>
-                <li>Aloud inside Canvas, Brightspace and Moodle</li>
+                <li>The same Listen button in Canvas and Moodle</li>
                 <li>Math read aloud from MathML and LaTeX</li>
               </ul>
             </div>
