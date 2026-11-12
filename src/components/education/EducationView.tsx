@@ -101,7 +101,10 @@ export function EducationView() {
                 <li>Course folders your office fills with readings and shares with the students who need them</li>
                 <li>A test mode for exam centres that limits the tools to the ones an exam allows</li>
                 <li>Any reading saved as an MP3 to listen to on the go</li>
-                <li>Voices that keep working offline, so an accommodation never goes silent</li>
+                <li>
+                  Natural voices that run on the student&apos;s own computer, so reading keeps working with no
+                  internet, exam rooms included
+                </li>
                 <li>A reading ruler and screen mask for focus</li>
               </ul>
             </div>
@@ -151,8 +154,8 @@ export function EducationView() {
               button on that page, and not before.
             </li>
             <li>
-              <strong>Private by design.</strong> A student&apos;s files stay on their own device. Only the text
-              being spoken is sent to be voiced, and it is not kept.
+              <strong>Private by design.</strong> A student&apos;s files stay on their own device, and so does the
+              voice: the text being read is never sent to a speech service.
             </li>
             <li>
               <strong>Open source.</strong> Aloud&apos;s code is public under the MIT licence, so your students are
