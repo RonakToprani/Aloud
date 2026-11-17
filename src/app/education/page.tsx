@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { EducationView } from "@/components/education/EducationView";
 
 const description =
-  "Course readings and web pages read aloud, with every word lit as it is spoken. Join the early list for universities and colleges.";
+  "Send us one course and get every reading back read aloud, scans included, within 24 hours. Free for five schools this winter term.";
 
 export const metadata: Metadata = {
   title: "Aloud for Education",

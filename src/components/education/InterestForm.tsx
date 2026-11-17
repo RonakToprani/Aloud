@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CURRENT, PILOT, RENEWALS, ROLES, SIZES } from "@/lib/education/interest";
+import { CURRENT, RENEWALS, ROLES } from "@/lib/education/interest";
 import styles from "./Education.module.css";
 
 type State = { kind: "idle" } | { kind: "sending" } | { kind: "sent" } | { kind: "error"; message: string };
@@ -30,8 +30,8 @@ export function InterestForm() {
   if (state.kind === "sent") {
     return (
       <div className={styles.thanks} role="status">
-        <p className={styles.thanksTitle}>Thank you. You are on the list.</p>
-        <p>We will write to you soon to hear more about your school.</p>
+        <p className={styles.thanksTitle}>Thank you. Your course is in line.</p>
+        <p>We will write within one business day to tell you where to send the readings.</p>
       </div>
     );
   }
@@ -66,19 +66,6 @@ export function InterestForm() {
         </label>
         <label className={styles.field}>
           <span>
-            Number of students <span className={styles.optional}>(optional)</span>
-          </span>
-          <select name="size" defaultValue="">
-            <option value="">Choose one</option>
-            {SIZES.map((size) => (
-              <option key={size}>{size}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className={styles.row}>
-        <label className={styles.field}>
-          <span>
             What do students use today? <span className={styles.optional}>(optional)</span>
           </span>
           <select name="current" defaultValue="">
@@ -88,38 +75,27 @@ export function InterestForm() {
             ))}
           </select>
         </label>
-        <label className={styles.field}>
-          <span>
-            When does that licence renew? <span className={styles.optional}>(optional)</span>
-          </span>
-          <select name="renewal" defaultValue="">
-            <option value="">Choose one</option>
-            {RENEWALS.map((when) => (
-              <option key={when}>{when}</option>
-            ))}
-          </select>
-        </label>
       </div>
       <label className={styles.field}>
         <span>
-          Would your office pilot Aloud next term? <span className={styles.optional}>(optional)</span>
+          When does that licence renew? <span className={styles.optional}>(optional)</span>
         </span>
-        <select name="pilot" defaultValue="">
+        <select name="renewal" defaultValue="">
           <option value="">Choose one</option>
-          {PILOT.map((answer) => (
-            <option key={answer}>{answer}</option>
+          {RENEWALS.map((when) => (
+            <option key={when}>{when}</option>
           ))}
         </select>
       </label>
       <label className={styles.field}>
         <span>
-          Anything we should know? <span className={styles.optional}>(optional)</span>
+          Which course should we do first? <span className={styles.optional}>(optional)</span>
         </span>
         <textarea
           name="message"
           rows={4}
           maxLength={2000}
-          placeholder="What your students read, what is missing today, when you'd want to start"
+          placeholder="The course, roughly how many readings, and whether any are scans"
         />
       </label>
       {/* Hidden from people and from screen readers; only a bot fills it. */}
@@ -129,9 +105,9 @@ export function InterestForm() {
       </label>
       <div className={styles.submitRow}>
         <button className={styles.primary} type="submit" disabled={state.kind === "sending"}>
-          {state.kind === "sending" ? "Sending" : "Join the early list"}
+          {state.kind === "sending" ? "Sending" : "Claim your free course"}
         </button>
-        <p className={styles.fine}>We will only use this to write to you about Aloud for Education.</p>
+        <p className={styles.fine}>We will only use this to write to you about your course and Aloud.</p>
       </div>
       {state.kind === "error" && (
         <p className={styles.error} role="alert">

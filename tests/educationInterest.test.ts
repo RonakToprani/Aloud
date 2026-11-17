@@ -69,5 +69,5 @@ test("the notification escapes what was typed", () => {
   assert.ok(note.text.includes("Role: Disability or accessibility services"));
   assert.ok(note.text.includes("Uses today: Kurzweil 3000"));
   assert.ok(note.text.includes("Renews: In 6 to 12 months"));
-  assert.equal(notification({ ...parsed.interest, pilot: "Maybe" }).subject.startsWith("Education interest:"), true);
+  assert.equal(notification({ ...parsed.interest, pilot: "Maybe" }).subject.startsWith("Free course request:"), true);
 });

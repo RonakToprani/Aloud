@@ -118,7 +118,7 @@ export function notification(interest: Interest): { subject: string; text: strin
   ];
   const message = interest.message ?? "No message.";
   return {
-    subject: `${interest.pilot === "Yes" ? "Ready to pilot" : "Education interest"}: ${interest.institution}`,
+    subject: `${interest.pilot === "Yes" ? "Ready to pilot" : "Free course request"}: ${interest.institution}`,
     text: `${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${message}\n`,
     html:
       `<p>${rows.map(([k, v]) => `<strong>${k}:</strong> ${escapeHtml(v)}`).join("<br>")}</p>` +
