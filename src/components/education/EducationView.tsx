@@ -16,6 +16,10 @@ const DEMO = "Students follow every word as it is spoken, at the pace that suits
  * looking for a book. It is always drawn in the light theme, whatever the
  * visitor's saved reader theme, since it is a page to be read once and
  * forwarded, not a place to read at night.
+ *
+ * It sells one offer to one reader, the accessibility office: a free course
+ * first, then a free term, then half their current price. Everything else on
+ * the page exists to make that offer easy to say yes to.
  */
 export function EducationView() {
   return (
@@ -26,182 +30,141 @@ export function EducationView() {
           <span className={styles.brandTag}>for Education</span>
         </span>
         <a className={styles.headerCta} href="#interest">
-          Join the early list
+          Claim your free course
         </a>
       </header>
 
       <main>
         <section className={styles.hero}>
-          <p className={styles.eyebrow}>Accessibility software for universities and colleges</p>
-          <h1 className={styles.title}>Every course reading, read aloud.</h1>
+          <p className={styles.eyebrow}>For disability and accessibility services</p>
+          <h1 className={styles.title}>Send us one course. Get it back read aloud by tomorrow.</h1>
           <p className={styles.lede}>
-            Aloud reads PDFs, ebooks and web pages to students in a natural voice, and lights up each word as it is
-            spoken. It is for every student on campus, not only the ones with an accommodation letter. We are
-            opening it to schools, starting with a small group of early partners.
+            Send us the readings for any course, scans included. Within 24 hours you get every one back as clean
+            text your students can listen to, with each word lit as it is read, plus an MP3 of each. Free, with
+            nothing to sign.
           </p>
           <div className={styles.heroActions}>
             <a className={styles.primary} href="#interest">
-              Register your interest
+              Claim your free course
             </a>
-            <span className={styles.note}>Free to join. No commitment.</span>
+            <span className={styles.note}>Five schools for the winter term.</span>
           </div>
           <Demo />
         </section>
 
-        <section className={styles.section} aria-labelledby="students">
-          <h2 id="students" className={styles.heading}>
-            What students get
+        <section className={styles.section} aria-labelledby="offer">
+          <h2 id="offer" className={styles.heading}>
+            The whole offer
           </h2>
-          <div className={styles.grid}>
-            <Feature title="Their own readings, aloud">
-              Course PDFs, EPUBs, text files, or anything pasted in. Aloud works out a PDF&apos;s paragraphs and
-              columns from its layout, so a two-column paper is read in order and a contents page is skipped.
-            </Feature>
-            <Feature title="The web, too">
-              The Aloud Chrome extension reads the page in front of them: an article, a course page, a library
-              database. One button, or Alt+A, and the highlight is drawn right over the page.
-            </Feature>
-            <Feature title="Follow along, word by word">
-              The sentence being read is shaded and the word being spoken is lit, so eyes and ears stay together.
-              Tap any word to start reading from there.
-            </Feature>
-            <Feature title="Voices worth listening to">
-              Dozens of natural voices across many languages, chosen to match the language of the page, plus any
-              voice already on the device.
-            </Feature>
-            <Feature title="Set up the way they read">
-              Speed from half to two and a half times, type size, line spacing, serif or sans, and four colour
-              themes, including a dark one for late nights.
-            </Feature>
-            <Feature title="On every device">
-              It runs in the browser on a laptop or a phone. Saved to a phone&apos;s home screen, it keeps reading
-              with the screen locked, and their place follows them from one device to the next.
-            </Feature>
+          <div className={styles.column}>
+            <ul className={styles.checks}>
+              <li>
+                <strong>One course, done for you, free.</strong> Every reading converted and read aloud within 24
+                hours. Done by hand, that is hours of staff time and about $4 to $5 a page.
+              </li>
+              <li>
+                <strong>A free term for your students.</strong> Aloud runs beside whatever you use now. Nothing to
+                install, and no student is ever without a tool.
+              </li>
+              <li>
+                <strong>We move your library over.</strong> Every reading your office has already converted, sorted
+                into course folders by us, not by your staff.
+              </li>
+              <li>
+                <strong>Then half what you pay today.</strong> When your current licence renews, Aloud costs half of
+                it. The first five schools keep that price for three years.
+              </li>
+            </ul>
           </div>
         </section>
 
-        <section className={styles.section} aria-labelledby="coming">
-          <h2 id="coming" className={styles.heading}>
-            What we build with our partner schools
+        <section className={styles.section} aria-labelledby="guarantee">
+          <h2 id="guarantee" className={styles.heading}>
+            The guarantee
           </h2>
-          <p className={styles.sectionLede}>
-            We build what saves your office time and what your students use, not a toolbar of twenty buttons. The
-            first list comes with the pilot. The second we build with partner schools, on a timeline we agree
-            together.
+          <p className={styles.lede}>
+            Run Aloud for a term. If your students do not use it more than what you have today, walk away and owe
+            us nothing. Not for the course, not for the term, not for the move.
           </p>
-          <div className={styles.columns}>
-            <div className={styles.column}>
-              <h3 className={styles.columnTitle}>Included in the pilot</h3>
-              <ul className={styles.checks}>
-                <li>
-                  Scanned PDFs and photos of pages read aloud the moment a student opens them, with no wait for
-                  conversion
-                </li>
-                <li>A Listen button beside every reading in Brightspace, so there is no new app for students to adopt</li>
-                <li>Course folders your office fills with readings and shares with the students who need them</li>
-                <li>A test mode for exam centres that limits the tools to the ones an exam allows</li>
-                <li>Any reading saved as an MP3 to listen to on the go</li>
-                <li>
-                  Natural voices that run on the student&apos;s own computer, so reading keeps working with no
-                  internet, exam rooms included
-                </li>
-                <li>A reading ruler and screen mask for focus</li>
-              </ul>
-            </div>
-            <div className={styles.column}>
-              <h3 className={styles.columnTitle}>Built with you</h3>
-              <ul className={styles.checks}>
-                <li>Definitions, pronunciation and translation for any word</li>
-                <li>Highlights and notes, gathered into study notes students can export</li>
-                <li>Word, DAISY and e-textbook files, including your office&apos;s alternate formats</li>
-                <li>The same Listen button in Canvas and Moodle</li>
-                <li>Math read aloud from MathML and LaTeX</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section className={styles.section} aria-labelledby="offices">
-          <h2 id="offices" className={styles.heading}>
-            For accessibility offices and IT
-          </h2>
-          <ul className={styles.list}>
-            <li>
-              <strong>Campus-wide access.</strong> One licence for the whole institution, so a student does not have
-              to wait for an accommodation letter to start listening.
-            </li>
-            <li>
-              <strong>Nothing to install for the reader.</strong> Aloud runs in any modern browser. The Chrome
-              extension can be pushed to managed Chrome browsers from your admin console.
-            </li>
-            <li>
-              <strong>Campus sign-in and an admin console.</strong> Students sign in with their school account
-              through SAML, Google or Microsoft. Your office sees seats and usage, so a renewal is easy to make the
-              case for.
-            </li>
-            <li>
-              <strong>Ready for procurement.</strong> A VPAT, a completed HECVAT and a signed data agreement
-              covering FERPA in the US, and PIPEDA and provincial privacy law in Canada, ready before your review
-              starts. Canadian data hosting is available on request.
-            </li>
-            <li>
-              <strong>We move you over.</strong> We bring your converted readings across into course folders, run
-              alongside your current tool for a term at no cost, and time the switch to your renewal. Your students
-              never lose an accommodation mid-term.
-            </li>
-            <li>
-              <strong>Narrow permissions.</strong> The extension can see a page only after the student presses its
-              button on that page, and not before.
-            </li>
-            <li>
-              <strong>Private by design.</strong> A student&apos;s files stay on their own device, and so does the
-              voice: the text being read is never sent to a speech service.
-            </li>
-            <li>
-              <strong>Open source.</strong> Aloud&apos;s code is public under the MIT licence, so your students are
-              never stranded by a vendor, and your security team can read every line.
-            </li>
-            <li>
-              <strong>A direct line to the people who build it.</strong> Help with rollout and training, and a say
-              in what we build next.
-            </li>
-          </ul>
         </section>
 
         <section className={styles.section} aria-labelledby="how">
           <h2 id="how" className={styles.heading}>
-            How the early list works
+            How it works
           </h2>
           <ol className={styles.steps}>
             <li>
               <span className={styles.stepNumber}>1</span>
               <div>
-                <strong>Tell us about your school.</strong> It takes a minute.
+                <strong>Tell us which course.</strong> We reply within one business day with where to send the
+                readings.
               </div>
             </li>
             <li>
               <span className={styles.stepNumber}>2</span>
               <div>
-                <strong>We get in touch.</strong> A short call about your students and what your office needs.
+                <strong>Get it back in 24 hours.</strong> Share it with your students and hear what they think.
               </div>
             </li>
             <li>
               <span className={styles.stepNumber}>3</span>
               <div>
-                <strong>A free pilot term.</strong> Aloud runs beside what you use today. If more of your
-                students do not use it, you owe us nothing.
+                <strong>Run a free term, then switch at renewal.</strong> We move your library. You pay half.
               </div>
             </li>
           </ol>
         </section>
 
+        <section className={styles.section} aria-labelledby="students">
+          <h2 id="students" className={styles.heading}>
+            What your students get
+          </h2>
+          <div className={styles.grid}>
+            <Feature title="Natural voices, word by word">
+              Every word is lit as it is spoken, so eyes and ears stay together. Speed from half to two and a half
+              times.
+            </Feature>
+            <Feature title="Every kind of reading">
+              Scans, PDFs, ebooks and web pages. Two-column papers are read in order and contents pages are
+              skipped.
+            </Feature>
+            <Feature title="Wherever they read">
+              Laptop or phone, online or off. A Listen button beside readings in Brightspace and Canvas, and the
+              Chrome extension on any web page.
+            </Feature>
+          </div>
+        </section>
+
+        <section className={styles.section} aria-labelledby="questions">
+          <h2 id="questions" className={styles.heading}>
+            Questions offices ask
+          </h2>
+          <ul className={styles.list}>
+            <li>
+              <strong>What is the catch?</strong> There isn&apos;t one. We are choosing five schools to build with,
+              and doing the work is the fastest way to show you.
+            </li>
+            <li>
+              <strong>We are partway through a contract.</strong> Good. Run the free term now and switch the day
+              your licence renews, so you never pay for two tools.
+            </li>
+            <li>
+              <strong>Will it pass our IT and privacy review?</strong> Files stay on the student&apos;s device and
+              the voice runs there too. You get a VPAT, a completed HECVAT and a signed data agreement before your
+              review starts, plus campus sign-in. The code is open source.
+            </li>
+            <li>
+              <strong>What do students have to install?</strong> Nothing. It runs in any browser, and your IT team
+              can push the Chrome extension to managed browsers.
+            </li>
+          </ul>
+        </section>
+
         <section className={`${styles.section} ${styles.formSection}`} id="interest" aria-labelledby="interest-title">
           <h2 id="interest-title" className={styles.heading}>
-            Register your interest
+            Claim your free course
           </h2>
-          <p className={styles.formLede}>
-            For disability services, faculty, libraries, IT, and students who want it at their school.
-          </p>
+          <p className={styles.formLede}>Five schools for the winter term. It takes a minute.</p>
           <InterestForm />
         </section>
       </main>

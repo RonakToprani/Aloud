@@ -435,6 +435,11 @@
   padding-left: 22px;
 }
 
+.checks strong {
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
 .checks li::before {
   content: "";
   position: absolute;
