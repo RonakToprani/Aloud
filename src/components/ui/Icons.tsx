@@ -216,3 +216,16 @@ export const FacebookIcon = ({ size = 16, className }: IconProps) => (
     <path d="M13.5 21v-7.2h2.4l.4-2.9h-2.8V9.1c0-.8.3-1.4 1.4-1.4h1.5V5.1c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2.1H8v2.9h2.5V21h3Z" />
   </svg>
 );
+
+export const CalendarIcon = ({ size = 18, className }: IconProps) => (
+  <svg {...base(size)} className={className} strokeWidth={1.7}>
+    <rect x="3.8" y="5.2" width="16.4" height="14.4" rx="3" />
+    <path d="M3.8 9.6h16.4M8.4 3.8v2.8M15.6 3.8v2.8" />
+  </svg>
+);
+
+export const NoteIcon = ({ size = 18, className }: IconProps) => (
+  <svg {...base(size)} className={className} strokeWidth={1.7}>
+    <path d="M6.8 4.8h10.4a3 3 0 0 1 3 3v5.6a3 3 0 0 1-3 3h-4.4l-4 3.2v-3.2h-2a3 3 0 0 1-3-3V7.8a3 3 0 0 1 3-3Z" />
+  </svg>
+);
